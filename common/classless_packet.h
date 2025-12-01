@@ -3,7 +3,7 @@
 
 #include "types.h"
 
-#define OP_EdgeStatLabel 0x1338
+//#define OP_EdgeStatLabel 0x1338
 
 
 enum eStatEntry

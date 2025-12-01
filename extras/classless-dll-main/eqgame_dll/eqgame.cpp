@@ -32,6 +32,9 @@ bool title_set = false;
 bool first_maximize = true;
 bool can_fullscreen = false;
 
+char link_format[] = "00%05X000000000000000000000000000000000000000000000000";
+BOOL ParseINIFile(PCHAR lpINIPath);
+
 bool is_digits(const std::string &str)
 {
 	return str.find_first_not_of("0123456789") == std::string::npos;
@@ -961,15 +964,30 @@ BOOL __stdcall SetDeviceGammaRamp_Hook(HDC hdc, LPVOID lpRamp)
 extern CRITICAL_SECTION gDetourCS;
 void InitHooks()
 {
+   gSpewToFile = 1;
+   DebugSpewAlways("====================================================");
+   DebugSpewAlways("DLL Loaded. InitHooks started.");
+   DebugSpewAlways("====================================================");
+
    rename("arena.eqg", "arena.eqg.bak");
    rename("highpasshold.eqg", "highpasshold.eqg.bak");
    rename("nektulos.eqg", "nektulos.eqg.bak");
    rename("lavastorm.eqg", "lavastorm.eqg.bak");
 
+   DebugSpewAlways("Calling InitOffsets...");
    InitOffsets();
+   DebugSpewAlways("InitOffsets finished.");
+
    GetEQPath(gszEQPath);
+   DebugSpewAlways("Calling ParseINIFile...");
+   ParseINIFile(".");
+   DebugSpewAlways("ParseINIFile finished.");
+
    InitializeCriticalSection(&gDetourCS);
+   DebugSpewAlways("Calling InitializeMQ2Detours...");
    InitializeMQ2Detours();
+   DebugSpewAlways("InitializeMQ2Detours finished.");
+
    InitializeDisplayHook();
    InitializeChatHook();
    InitializeMQ2Commands();
@@ -1058,7 +1076,13 @@ void InitHooks()
 	   PatchA((DWORD*)var, "\x90\x90\x90\x90",
 		   4); // Fix tradeskill containers
 
-	   DWORD varArray = (((DWORD)0x009BFF6D - 0x400000) + baseAddress);
+	   // Fix item links showing as hex garbage
+	   // The original patch used %08X which prints the Item ID in hex.
+	   // We use a format string that constructs a valid item link structure using the Item ID (arg 1) and hardcoded zeros for other fields.
+	   // RoF2 Link Format: 00000000000000000000000000000000000000000000000000000000
+	   // Structure: Action(0) ItemID(%05X) Aug1-6(0) Evolving(0) EvolveGroup(0) EvolveLevel(0) Ornament(0) Hash(0)
+	   const char* ItemLinkFormat = "0%05X000000000000000000000000000000000000000000000000";
+	   DWORD varArray = (DWORD)ItemLinkFormat;
 
 	   var = (((DWORD)0x004ED03B - 0x400000) + baseAddress);
 	   PatchA((DWORD*)var, "\x4C", 1); // Link stuff
@@ -1071,8 +1095,8 @@ void InitHooks()
 	   var = (((DWORD)0x007BBD77 - 0x400000) + baseAddress);
 	   PatchA((DWORD*)var, (DWORD*)&varArray, 4); // Link stuff
 
-	   var = (((DWORD)0x009BFF6D - 0x400000) + baseAddress);
-	   PatchA((DWORD*)var, "\x25\x64\x00\x00", 4); // Link stuff - Changed to %d from %08X to fix item links
+	   // var = (((DWORD)0x009BFF6D - 0x400000) + baseAddress);
+	   // PatchA((DWORD*)var, "\x25\x30\x38\x58", 4); // Link stuff - Reverted to %08X to ensure login works
 
 	   var = (((DWORD)0x00A1ACE0 - 0x400000) + baseAddress);
 	   PatchA((DWORD*)var, "\x4F", 1); // Link stuff
@@ -1353,6 +1377,8 @@ BOOL ParseINIFile(PCHAR lpINIPath)
    sprintf(Filename, "%s\\Edge.ini", lpINIPath);
    sprintf(ClientINI, "%s\\eqgame.ini", lpINIPath);
    strcpy(gszINIFilename, Filename);
+
+   gSpewToFile = GetPrivateProfileInt("MacroQuest", "DebugSpewToFile", 0, Filename);
 
    DebugSpew("Expected Client version: %s %s", __ExpectedVersionDate,
              __ExpectedVersionTime);

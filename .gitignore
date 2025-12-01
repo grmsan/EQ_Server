@@ -70,3 +70,5 @@ compile_flags.txt
 cmake-build-relwithdebinfo/*
 skill-caps.diff
 /Maps
+*.tlog
+shared/items

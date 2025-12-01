@@ -727,14 +727,14 @@ PLUGIN_API VOID InitializeMQ2ItemDisplay(VOID)
     g_Contents.Item2 = &g_Item;
     g_Item.ItemNumber = 0;
 
-    EzDetour(CItemDisplayWnd__SetSpell,&ItemDisplayHook::SetSpell_Detour,&ItemDisplayHook::SetSpell_Trampoline);
-    EzDetour(CItemDisplayWnd__UpdateStrings, &ItemDisplayHook::UpdateStrings_Detour, &ItemDisplayHook::UpdateStrings_Trampoline);
+    // EzDetour(CItemDisplayWnd__SetSpell,&ItemDisplayHook::SetSpell_Detour,&ItemDisplayHook::SetSpell_Trampoline);
+    // EzDetour(CItemDisplayWnd__UpdateStrings, &ItemDisplayHook::UpdateStrings_Detour, &ItemDisplayHook::UpdateStrings_Trampoline);
 }
 
 // Called once, when the plugin is to shutdown
 PLUGIN_API VOID ShutdownPlugin(VOID)
 {
-    RemoveDetour(CItemDisplayWnd__SetSpell);
-    RemoveDetour(CItemDisplayWnd__UpdateStrings);
+    // RemoveDetour(CItemDisplayWnd__SetSpell);
+    // RemoveDetour(CItemDisplayWnd__UpdateStrings);
 }
 #endif

@@ -23,17 +23,17 @@ GNU General Public License for more details.
 
 char *OurCaption = "Edge is loading...";
 
-class CDisplayHook 
-{ 
-public: 
-    VOID CleanUI_Trampoline(VOID); 
-    VOID CleanUI_Detour(VOID) 
-    { 
+class CDisplayHook
+{
+public:
+    VOID CleanUI_Trampoline(VOID);
+    VOID CleanUI_Detour(VOID)
+    {
 #ifdef DPSPLUGIN
 		OnDPSCleanUI();
 #endif
         DebugTry(CleanUI_Trampoline());
-    } 
+    }
 
     VOID ReloadUI_Trampoline(BOOL);
     VOID ReloadUI_Detour(BOOL UseINI)
@@ -44,7 +44,7 @@ public:
         DebugTry(ReloadUI_Trampoline(UseINI));
     }
 
-    /* This function is still in the client; however, it was phased out as of 
+    /* This function is still in the client; however, it was phased out as of
     the Omens of War Expansion
 
     bool GetWorldFilePath_Trampoline(char *, char *);
@@ -63,19 +63,19 @@ public:
         return Ret;
     }
     */
-}; 
+};
 
 #ifndef ISXEQ
 
-DWORD __cdecl DrawHUD_Trampoline(DWORD,DWORD,DWORD,DWORD); 
-DWORD __cdecl DrawHUD_Detour(DWORD a,DWORD b,DWORD c,DWORD d) 
-{ 
+DWORD __cdecl DrawHUD_Trampoline(DWORD,DWORD,DWORD,DWORD);
+DWORD __cdecl DrawHUD_Detour(DWORD a,DWORD b,DWORD c,DWORD d)
+{
     DrawHUDParams[0]=a;
     DrawHUDParams[1]=b;
     DrawHUDParams[2]=c;
     DrawHUDParams[3]=d;
-    if (gbHUDUnderUI || gbAlwaysDrawMQHUD)
-        return 0;
+    // if (gbHUDUnderUI || gbAlwaysDrawMQHUD)
+    //    return 0;
     int Ret= DrawHUD_Trampoline(a,b,c,d);
     //PluginsDrawHUD();
     if (HMODULE hmEQPlayNice=GetModuleHandle("EQPlayNice.dll"))
@@ -84,7 +84,7 @@ DWORD __cdecl DrawHUD_Detour(DWORD a,DWORD b,DWORD c,DWORD d)
             pEQPlayNicePulse();
     }
     return Ret;
-} 
+}
 
 void DrawHUD()
 {
@@ -140,23 +140,27 @@ public:
     }
 };
 
-//DETOUR_TRAMPOLINE_EMPTY(bool CDisplayHook::GetWorldFilePath_Trampoline(char *, char *)); 
-DETOUR_TRAMPOLINE_EMPTY(VOID EQ_LoadingSHook::SetProgressBar_Trampoline(int, char const *)); 
-DETOUR_TRAMPOLINE_EMPTY(DWORD DrawHUD_Trampoline(DWORD,DWORD,DWORD,DWORD)); 
-DETOUR_TRAMPOLINE_EMPTY(VOID CDisplayHook::CleanUI_Trampoline(VOID)); 
-DETOUR_TRAMPOLINE_EMPTY(VOID CDisplayHook::ReloadUI_Trampoline(BOOL)); 
+//DETOUR_TRAMPOLINE_EMPTY(bool CDisplayHook::GetWorldFilePath_Trampoline(char *, char *));
+DETOUR_TRAMPOLINE_EMPTY(VOID EQ_LoadingSHook::SetProgressBar_Trampoline(int, char const *));
+DETOUR_TRAMPOLINE_EMPTY(DWORD DrawHUD_Trampoline(DWORD,DWORD,DWORD,DWORD));
+DETOUR_TRAMPOLINE_EMPTY(VOID CDisplayHook::CleanUI_Trampoline(VOID));
+DETOUR_TRAMPOLINE_EMPTY(VOID CDisplayHook::ReloadUI_Trampoline(BOOL));
 
 VOID InitializeDisplayHook()
 {
     DebugSpew("Initializing Display Hooks");
 
+    DebugSpew("Detouring CDisplay__CleanGameUI...");
     EzDetour(CDisplay__CleanGameUI,&CDisplayHook::CleanUI_Detour,&CDisplayHook::CleanUI_Trampoline);
+    DebugSpew("Detouring CDisplay__ReloadUI...");
     EzDetour(CDisplay__ReloadUI,&CDisplayHook::ReloadUI_Detour,&CDisplayHook::ReloadUI_Trampoline);
     //EzDetour(CDisplay__GetWorldFilePath,&CDisplayHook::GetWorldFilePath_Detour,&CDisplayHook::GetWorldFilePath_Trampoline);
 #ifndef ISXEQ
-   // EzDetour(DrawNetStatus,DrawHUD_Detour,DrawHUD_Trampoline);
+    EzDetour(DrawNetStatus,DrawHUD_Detour,DrawHUD_Trampoline);
 #endif
+    DebugSpew("Detouring EQ_LoadingS__SetProgressBar...");
     EzDetour(EQ_LoadingS__SetProgressBar,&EQ_LoadingSHook::SetProgressBar_Detour,&EQ_LoadingSHook::SetProgressBar_Trampoline);
+    DebugSpew("Display Hooks Initialized");
 }
 
 VOID ShutdownDisplayHook()

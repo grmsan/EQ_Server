@@ -6441,7 +6441,7 @@ namespace RoF2
 
 	void SerializeItem(EQ::OutBuffer& ob, const EQ::ItemInstance *inst, int16 slot_id_in, uint8 depth, ItemPacketType packet_type)
 	{
-		const EQ::ItemData *item = inst->GetItem();
+		const EQ::ItemData *item = inst->GetUnscaledItem();
 
 		RoF2::structs::ItemSerializationHeader hdr;
 
@@ -6925,6 +6925,27 @@ namespace RoF2
 
 			if (subitem_count)
 				ob.overwrite(count_pos, (const char*)&subitem_count, sizeof(uint32));
+		}
+
+		// Custom Stats Injection (Post-SubItems to support recursion if DLL hooks DeSerialize)
+		const EQ::ItemData* scaled_item = inst->GetItem();
+		if (scaled_item != item) {
+			Log(Logs::General, Logs::Netcode, "RoF2::SerializeItem: Appending Custom Stats for ItemID %d Slot %d PacketType %d", item->ID, slot_id_in, packet_type);
+			uint32_t magic = 0x1337C0DE;
+			ob.write((const char*)&magic, sizeof(magic));
+
+			int32_t val;
+			val = scaled_item->HP; ob.write((const char*)&val, sizeof(val));
+			val = scaled_item->Mana; ob.write((const char*)&val, sizeof(val));
+			val = scaled_item->AC; ob.write((const char*)&val, sizeof(val));
+
+			val = scaled_item->AStr; ob.write((const char*)&val, sizeof(val));
+			val = scaled_item->ASta; ob.write((const char*)&val, sizeof(val));
+			val = scaled_item->ADex; ob.write((const char*)&val, sizeof(val));
+			val = scaled_item->AAgi; ob.write((const char*)&val, sizeof(val));
+			val = scaled_item->AInt; ob.write((const char*)&val, sizeof(val));
+			val = scaled_item->AWis; ob.write((const char*)&val, sizeof(val));
+			val = scaled_item->ACha; ob.write((const char*)&val, sizeof(val));
 		}
 	}
 

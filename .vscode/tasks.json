@@ -1,23 +1,73 @@
 {
-    "version": "2.0.0",
-    "tasks": [
-        {
-            "label": "Build EQ DLL (Release)",
-            "type": "shell",
-            "command": "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\MSBuild\\Current\\Bin\\MSBuild.exe",
-            "args": [
-                "extras\\classless-dll-main\\eqgame_dll.sln",
-                "/p:Configuration=Release",
-                "/p:Platform=Win32"
-            ],
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            },
-            "problemMatcher": "$msCompile",
-            "presentation": {
-                "reveal": "always"
-            }
-        }
-    ]
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Build EQ DLL (Release)",
+			"type": "shell",
+			"command": "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\MSBuild\\Current\\Bin\\MSBuild.exe",
+			"args": [
+				"extras\\classless-dll-main\\eqgame_dll.sln",
+				"/p:Configuration=Release",
+				"/p:Platform=Win32"
+			],
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			},
+			"problemMatcher": "$msCompile",
+			"presentation": {
+				"reveal": "always"
+			}
+		},
+		{
+			"label": "Build EQ Core DLL (Release)",
+			"type": "shell",
+			"command": "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\MSBuild\\Current\\Bin\\MSBuild.exe",
+			"args": [
+				"extras\\eq-core-dll-main\\eq-core-dll-visualstudio2022.sln",
+				"/p:Configuration=Release",
+				"/p:Platform=x86"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "Build EQ Core DLL (Release) Win32",
+			"type": "shell",
+			"command": "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\MSBuild\\Current\\Bin\\MSBuild.exe",
+			"args": [
+				"extras\\eq-core-dll-main\\eq-core-dll-visualstudio2022.sln",
+				"/p:Configuration=Release",
+				"/p:Platform=Win32"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "Build EQ Core DLL (Release) Win32 v143",
+			"type": "shell",
+			"command": "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\MSBuild\\Current\\Bin\\MSBuild.exe",
+			"args": [
+				"extras\\eq-core-dll-main\\eq-core-dll-visualstudio2022.sln",
+				"/p:Configuration=Release",
+				"/p:Platform=Win32",
+				"/p:PlatformToolset=v143"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "Build EQ Core DLL (Release) Win32 v143",
+			"type": "shell",
+			"command": "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\MSBuild\\Current\\Bin\\MSBuild.exe",
+			"args": [
+				"extras\\eq-core-dll-main\\eq-core-dll-visualstudio2022.sln",
+				"/p:Configuration=Release",
+				"/p:Platform=Win32",
+				"/p:PlatformToolset=v143"
+			],
+			"isBackground": false,
+			"group": "build"
+		}
+	]
 }

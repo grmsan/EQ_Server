@@ -8659,9 +8659,20 @@ void Client::TryItemTimer(int slot)
 
 void Client::SendItemScale(EQ::ItemInstance *inst) {
 	int slot = m_inv.GetSlotByItemInst(inst);
+	Log(Logs::General, Logs::None, "SendItemScale: Slot %d", slot);
 	if(slot != -1) {
-		inst->ScaleItem();
-		SendItemPacket(slot, inst, ItemPacketCharmUpdate);
+		inst->ApplyCustomStats();
+
+		// Force client to remove item first to ensure visual update
+		EQApplicationPacket* outapp = new EQApplicationPacket(OP_DeleteItem, sizeof(DeleteItem_Struct));
+		DeleteItem_Struct* delitem = (DeleteItem_Struct*)outapp->pBuffer;
+		delitem->from_slot = slot;
+		delitem->to_slot = 0xFFFFFFFF;
+		delitem->number_in_stack = 0xFFFFFFFF;
+		FastQueuePacket(&outapp);
+
+		SendItemPacket(slot, inst, ItemPacketLimbo);
+
 		CalcBonuses();
 	}
 }

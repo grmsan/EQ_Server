@@ -1,0 +1,47 @@
+{
+ "server": {
+  "database": {
+   "db": "peq",
+   "host": "127.0.0.1",
+   "password": "110987",
+   "port": 3308,
+   "username": "root"
+  },
+  "qsdatabase": {
+   "db": "peq",
+   "host": "127.0.0.1",
+   "password": "110987",
+   "port": 3308,
+   "username": "root"
+  },
+  "ucs": {
+   "host": "127.0.0.1",
+   "port": "7778"
+  },
+  "world": {
+   "key": "yuYGI6iKu76rkhoi9&bFyEIrHcMu65dont",
+   "loginserver1": {
+    "account": "",
+    "host": "127.0.0.1",
+    "password": "",
+    "port": 5998
+   },
+   "longname": "My EQEmu Server",
+   "shortname": "my_server",
+   "tcp": {
+    "ip": "127.0.0.1",
+    "port": 9000
+   }
+  },
+  "launcher": {
+   "exe": "build\\bin\\RelWithDebInfo\\zone.exe"
+  },
+  "zones": {
+   "defaultstatus": 20,
+   "ports": {
+    "high": 7100,
+    "low": 7000
+   }
+  }
+ }
+}

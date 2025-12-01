@@ -39,20 +39,23 @@ int Mob::GetBaseSkillDamage(EQ::skills::SkillType skill, Mob *target)
 		case EQ::skills::SkillDragonPunch:
 		case EQ::skills::SkillEagleStrike:
 		case EQ::skills::SkillTigerClaw:
-			if (skill_level >= 25) {
-				base++;
-			}
+			if (IsClient()) {
+				// Weapon Scaling for Monk Special Attacks
+				auto primary = CastToClient()->GetInv().GetItem(EQ::invslot::slotPrimary);
+				if (primary && primary->GetItem()) {
+					base = primary->GetItem()->Damage;
+				} else {
+					base = GetHandToHandDamage();
+				}
 
-			if (skill_level >= 75) {
-				base++;
-			}
-
-			if (skill_level >= 125) {
-				base++;
-			}
-
-			if (skill_level >= 175) {
-				base++;
+				// Skill Bonus
+				base += (skill_level / 15);
+			} else {
+				// NPC Logic
+				if (skill_level >= 25) base++;
+				if (skill_level >= 75) base++;
+				if (skill_level >= 125) base++;
+				if (skill_level >= 175) base++;
 			}
 
 			if (RuleB(Character, ItemExtraSkillDamageCalcAsPercent) && GetSkillDmgAmt(skill) > 0) {
@@ -61,26 +64,31 @@ int Mob::GetBaseSkillDamage(EQ::skills::SkillType skill, Mob *target)
 
 			return base;
 		case EQ::skills::SkillFrenzy:
-			if (IsClient() && CastToClient()->GetInv().GetItem(EQ::invslot::slotPrimary)) {
-				if (GetLevel() > 15) {
-					base += GetLevel() - 15;
-				}
+			if (IsClient()) {
+				// Option A: Weapon Scaling for Solo/High-Power Server
+				// If we have a weapon, use its damage as the base.
+				// This allows Frenzy to scale with the Damage Table (~3x) and Crits (~2x) naturally.
+				// A 150 DMG weapon -> 150 Base -> ~450 Hit -> ~900 Crit -> ~1800 Crippling Blow.
+				auto primary = CastToClient()->GetInv().GetItem(EQ::invslot::slotPrimary);
+				if (primary && primary->GetItem()) {
+					// Use the weapon's damage logic (handles banes, magic, etc if we used the full function,
+					// but here we just want the raw base for the skill calc)
+					base = primary->GetItem()->Damage;
 
-				if (base > 23) {
-					base = 23;
+					// Add a small bonus for level/skill so it's better than a normal auto-attack
+					base += (GetLevel() / 10);
+				} else {
+					// Fallback for unarmed/no-weapon (Original Logic)
+					if (GetLevel() > 15) base += GetLevel() - 15;
+					if (base > 23) base = 23;
+					if (GetLevel() > 50) base += 2;
+					if (GetLevel() > 54) base++;
+					if (GetLevel() > 59) base++;
 				}
-
-				if (GetLevel() > 50) {
-					base += 2;
-				}
-
-				if (GetLevel() > 54) {
-					base++;
-				}
-
-				if (GetLevel() > 59) {
-					base++;
-				}
+			} else {
+				// NPCs use old logic
+				if (GetLevel() > 15) base += GetLevel() - 15;
+				if (base > 23) base = 23;
 			}
 
 			if (RuleB(Character, ItemExtraSkillDamageCalcAsPercent) && GetSkillDmgAmt(skill) > 0) {
@@ -89,43 +97,72 @@ int Mob::GetBaseSkillDamage(EQ::skills::SkillType skill, Mob *target)
 
 			return base;
 		case EQ::skills::SkillFlyingKick: {
-			float skill_bonus = skill_level / 9.0f;
-			float ac_bonus    = 0.0f;
+			// Modified to scale with Weapon or H2H damage
+			float skill_bonus = skill_level / 9.0f; // Existing bonus
+
 			if (IsClient()) {
+				// Check for weapon (Monks/Beastlords can use 1H/2H blunt/staff)
+				auto primary = CastToClient()->GetInv().GetItem(EQ::invslot::slotPrimary);
+				if (primary && primary->GetItem()) {
+					base = primary->GetItem()->Damage;
+				} else {
+					// Unarmed: Use Hand to Hand damage
+					base = GetHandToHandDamage();
+				}
+
+				// Add the skill bonus (approx +25 dmg at max skill)
+				base += (int)skill_bonus;
+
+				// Add Boot AC bonus (Original Logic)
 				auto inst = CastToClient()->GetInv().GetItem(EQ::invslot::slotFeet);
 				if (inst) {
-					ac_bonus = inst->GetItemArmorClass(true) / 25.0f;
+					base += (int)(inst->GetItemArmorClass(true) / 25.0f);
 				}
-			}
-
-			if (ac_bonus > skill_bonus) {
-				ac_bonus = skill_bonus;
+			} else {
+				// NPC Logic
+				base = (int)(skill_bonus);
+				if (ac_bonus > skill_bonus) {
+					ac_bonus = skill_bonus;
+				}
+				base += (int)ac_bonus;
 			}
 
 			if (RuleB(Character, ItemExtraSkillDamageCalcAsPercent) && GetSkillDmgAmt(skill) > 0) {
-				return static_cast<int>(ac_bonus + skill_bonus) * std::abs(GetSkillDmgAmt(skill) / 100);
+				base *= std::abs(GetSkillDmgAmt(skill) / 100);
 			}
 
-			return static_cast<int>(ac_bonus + skill_bonus);
+			return base;
 		}
 		case EQ::skills::SkillKick:
 		case EQ::skills::SkillRoundKick: {
-			// there is some base *= 4 case in here?
-			float skill_bonus = skill_level / 10.0f;
-			float ac_bonus    = 0.0f;
+			// Modified to scale with Weapon/Boots
 			if (IsClient()) {
+				// Weapon Scaling
+				auto primary = CastToClient()->GetInv().GetItem(EQ::invslot::slotPrimary);
+				if (primary && primary->GetItem()) {
+					base = primary->GetItem()->Damage;
+				} else {
+					base = GetHandToHandDamage();
+				}
+
+				// Boot AC Bonus
 				auto inst = CastToClient()->GetInv().GetItem(EQ::invslot::slotFeet);
 				if (inst) {
-					ac_bonus = inst->GetItemArmorClass(true) / 25.0f;
+					base += (int)(inst->GetItemArmorClass(true) / 10.0f);
 				}
-			}
 
-			if (skill_level >= 75) {
-				base++;
-			}
+				base += (skill_level / 10);
+			} else {
+				// NPC Logic
+				float skill_bonus = skill_level / 10.0f;
+				float ac_bonus    = 0.0f;
 
-			if (skill_level >= 175) {
-				base++;
+				if (skill_level >= 75) base++;
+				if (skill_level >= 175) base++;
+
+				if (ac_bonus > skill_bonus) ac_bonus = skill_bonus;
+				base += (int)(skill_bonus + ac_bonus);
+			}
 			}
 
 			if (RuleB(Character, ItemExtraSkillDamageCalcAsPercent) && GetSkillDmgAmt(skill) > 0) {
@@ -138,16 +175,29 @@ int Mob::GetBaseSkillDamage(EQ::skills::SkillType skill, Mob *target)
 			float                  skill_bonus = skill_level / 10.0f;
 			float                  ac_bonus    = 0.0f;
 			const EQ::ItemInstance *inst       = nullptr;
+			int                    weapon_dmg  = 0;
+
 			if (IsClient()) {
 				if (HasShieldEquipped()) {
 					inst = CastToClient()->GetInv().GetItem(EQ::invslot::slotSecondary);
 				} else if (HasTwoHanderEquipped()) {
+					// 2H Bash: Use Weapon Damage instead of AC
+					auto weapon = CastToClient()->GetInv().GetItem(EQ::invslot::slotPrimary);
+					if (weapon && weapon->GetItem()) {
+						weapon_dmg = weapon->GetItem()->Damage;
+					}
+
+					// Fallback to shoulder AC if configured (Original Logic preserved but secondary)
 					if (RuleB(Combat, BashTwoHanderUseShoulderAC)) {
 						inst = CastToClient()->GetInv().GetItem(EQ::invslot::slotShoulders);
-					} else {
-						inst = CastToClient()->GetInv().GetItem(EQ::invslot::slotPrimary);
 					}
 				}
+			}
+
+			if (weapon_dmg > 0) {
+				// 2H Bash uses weapon damage
+				base = weapon_dmg + (int)skill_bonus;
+				return base;
 			}
 
 			if (inst) {

@@ -1,0 +1,48 @@
+{
+    "server": {
+        "zones": {
+            "defaultstatus": 20,
+            "ports": {
+                "low": 7000,
+                "high": 7100
+            }
+        },
+        "qsdatabase": {
+            "host": "127.0.0.1",
+            "port": 3306,
+            "username": "eqemu",
+            "password": "password",
+            "db": "eqemu"
+        },
+        "chatserver": {
+            "port": 7778,
+            "host": "127.0.0.1"
+        },
+        "mailserver": {
+            "host": "127.0.0.1",
+            "port": 7778
+        },
+        "world": {
+            "loginserver1": {
+                "port": 5998,
+                "account": "",
+                "password": "",
+                "host": "127.0.0.1"
+            },
+            "tcp": {
+                "ip": "127.0.0.1",
+                "port": 9000
+            },
+            "key": "some_random_key_string",
+            "shortname": "my_server",
+            "longname": "My EQEmu Server"
+        },
+        "database": {
+            "host": "127.0.0.1",
+            "port": 3306,
+            "username": "eqemu",
+            "password": "password",
+            "db": "eqemu"
+        }
+    }
+}

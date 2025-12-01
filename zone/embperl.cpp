@@ -68,6 +68,7 @@ Embperl::Embperl()
 
 void Embperl::DoInit()
 {
+	LogQuests("Embperl::DoInit() - Starting Perl Initialization");
 	char** argv = (char**) argv_eqemu;
 	my_perl = perl_alloc();
 	//setup perl...
@@ -80,6 +81,7 @@ void Embperl::DoInit()
 	perl_construct(my_perl);
 	perl_parse(my_perl, xs_init, argc, argv, nullptr);
 	perl_run(my_perl);
+	LogQuests("Embperl::DoInit() - Perl Initialized");
 
 	//a little routine we use a lot.
 	eval_pv("sub my_eval { eval $_[0];}", TRUE);    //dies on error
@@ -124,6 +126,7 @@ void Embperl::DoInit()
 #endif //EMBPERL_IO_CAPTURE
 
 #ifdef EMBPERL_PLUGIN
+	LogQuests("Embperl::DoInit() - Loading Plugins...");
 	eval_pv(
 		"package plugin; ", FALSE
 	);
@@ -192,9 +195,8 @@ void Embperl::Reinit()
 void Embperl::init_eval_file(void)
 {
 	eval_pv(
+		"package main;"
 		"our %Cache;"
-		"no warnings 'all';"
-		"use Symbol qw(delete_package);"
 		"sub eval_file {"
 		"my($package, $filename) = @_;"
 		"$filename=~s/\'//g;"
@@ -208,6 +210,11 @@ void Embperl::init_eval_file(void)
 		" print $@ if $@;"
 		"}"
 		"}", FALSE);
+
+	if (SvTRUE(ERRSV)) {
+		std::string error = SvPV_nolen(ERRSV);
+		LogQuests("Error initializing eval_file: [{}]", error);
+	}
 }
 
 int Embperl::eval_file(const char* package_name, const char* filename)

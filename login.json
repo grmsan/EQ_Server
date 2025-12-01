@@ -1,0 +1,15 @@
+{
+    "database": {
+        "host": "127.0.0.1",
+        "port": 3308,
+        "db": "peq",
+        "user": "root",
+        "password": "110987"
+    },
+    "options": {
+        "auto_create_accounts": true
+    },
+    "security": {
+        "mode": 13
+    }
+}

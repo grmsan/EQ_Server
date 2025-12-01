@@ -1,0 +1,13 @@
+Launch |    Info    | Init Loading server paths 
+Launch |    Info    | Init ---------------------------------------------------------------------- 
+Launch |    Info    | Init          server > [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server] 
+Launch |    Info    | Init            logs > [logs] 
+Launch |    Info    | Init            maps > [Maps/] 
+Launch |    Info    | Init        lua mods > [mods] 
+Launch |    Info    | Init         patches > [.] 
+Launch |    Info    | Init          opcode > [.] 
+Launch |    Info    | Init   shared_memory > [shared] 
+Launch |    Info    | operator ()         quests > [quests] 
+Launch |    Info    | operator ()        plugins > [plugins] 
+Launch |    Info    | operator ()    lua_modules > [lua_modules] 
+Launch |    Info    | Init ---------------------------------------------------------------------- 

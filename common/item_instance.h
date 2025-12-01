@@ -337,6 +337,8 @@ namespace EQ
 		bool             TransferOwnership(Database& db, const uint32 to_char_id) const;
 		void             CalculateEvolveProgression() const { m_evolving_details.progression = EvolvingItemsManager::Instance()->CalculateProgression(GetEvolveCurrentAmount(), GetID()); }
 
+		void ApplyCustomStats();
+
 	protected:
 		//////////////////////////
 		// Protected Members

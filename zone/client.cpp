@@ -2513,6 +2513,7 @@ void Client::SendManaUpdate()
 	mana_update->spawn_id = GetID();
 	QueuePacket(mana_app);
 	safe_delete(mana_app);
+	SendEdgeStats();
 }
 
 // sends endurance update to self
@@ -2525,6 +2526,7 @@ void Client::SendEnduranceUpdate()
 	endurance_update->spawn_id = GetID();
 	QueuePacket(end_app);
 	safe_delete(end_app);
+	SendEdgeStats();
 }
 
 void Client::FillSpawnStruct(NewSpawn_Struct* ns, Mob* ForWho)
@@ -13281,4 +13283,63 @@ bool Client::UncompleteTask(int task_id)
 	);
 
 	return task_state->UncompleteTask(task_id);
+}
+
+void Client::SendEdgeStats()
+{
+	// Count how many stats we are sending
+	const int max_stats = 100; // ample buffer
+	size_t packet_size = sizeof(EdgeStat_Struct) + (max_stats * sizeof(EdgeStatEntry_Struct));
+
+	auto out = (EdgeStat_Struct*)new uint8_t[packet_size];
+	memset(out, 0, packet_size);
+	out->count = 0;
+
+	auto AddStat = [&](uint32_t key, uint64_t value) {
+		if (out->count < max_stats) {
+			out->entries[out->count].statKey = key;
+			out->entries[out->count].statValue = value;
+			out->count++;
+		}
+	};
+
+	AddStat(eStatCurHP, GetHP());
+	AddStat(eStatCurMana, GetMana());
+	AddStat(eStatCurEndur, GetEndurance());
+	AddStat(eStatMaxHP, GetMaxHP());
+	AddStat(eStatMaxMana, GetMaxMana());
+	AddStat(eStatMaxEndur, GetMaxEndurance());
+
+	AddStat(eStatAC, GetAC());
+	AddStat(eStatATK, GetATK());
+	AddStat(eStatSTR, GetSTR());
+	AddStat(eStatSTA, GetSTA());
+	AddStat(eStatDEX, GetDEX());
+	AddStat(eStatAGI, GetAGI());
+	AddStat(eStatINT, GetINT());
+	AddStat(eStatWIS, GetWIS());
+	AddStat(eStatCHA, GetCHA());
+
+	AddStat(eStatMR, GetMR());
+	AddStat(eStatFR, GetFR());
+	AddStat(eStatCR, GetCR());
+	AddStat(eStatPR, GetPR());
+	AddStat(eStatDR, GetDR());
+
+	AddStat(eStatMeleeHaste, itembonuses.haste + spellbonuses.haste + aabonuses.haste);
+
+	AddStat(eStatMeleeCrit, itembonuses.CriticalHitChance[0]);
+	AddStat(eStatSpellCrit, itembonuses.CriticalSpellChance);
+	AddStat(eStatHealingCrit, itembonuses.CriticalHealChance);
+
+	AddStat(eStatMitigation, itembonuses.MeleeMitigation);
+	AddStat(eStatAAPoints, GetAAPoints());
+
+	// Send packet
+	size_t actual_size = sizeof(EdgeStat_Struct) + (out->count * sizeof(EdgeStatEntry_Struct));
+	EQApplicationPacket* app = new EQApplicationPacket((EmuOpcode)OP_EdgeStatLabel, actual_size);
+	memcpy(app->pBuffer, out, actual_size);
+	FastQueuePacket(&app);
+
+	delete[] (uint8_t*)out;
 }

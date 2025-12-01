@@ -51,6 +51,7 @@ namespace EQ
 #include "../common/seperator.h"
 #include "../common/inventory_profile.h"
 #include "../common/guilds.h"
+#include "../common/classless_packet.h"
 //#include "../common/item_data.h"
 #include "xtargetautohaters.h"
 #include "aggromanager.h"
@@ -1061,6 +1062,7 @@ public:
 	void SendAlternateAdvancementRank(int aa_id, int level);
 	void SendAlternateAdvancementTable();
 	void SendAlternateAdvancementStats();
+	void SendEdgeStats();
 	void PurchaseAlternateAdvancementRank(int rank_id);
 	bool GrantAlternateAdvancementAbility(int aa_id, int points, bool ignore_cost = false);
 	void IncrementAlternateAdvancementRank(int rank_id);

@@ -533,6 +533,7 @@ void Client::CompleteConnect()
 	UpdateWho();
 	client_state = CLIENT_CONNECTED;
 	SendAllPackets();
+	SendEdgeStats();
 	hpupdate_timer.Start();
 	autosave_timer.Start();
 	SetDuelTarget(0);

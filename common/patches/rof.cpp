@@ -5182,7 +5182,7 @@ namespace RoF
 
 	void SerializeItem(EQ::OutBuffer& ob, const EQ::ItemInstance *inst, int16 slot_id_in, uint8 depth, ItemPacketType packet_type)
 	{
-		const EQ::ItemData *item = inst->GetUnscaledItem();
+		const EQ::ItemData *item = inst->GetItem();
 
 		RoF::structs::ItemSerializationHeader hdr;
 

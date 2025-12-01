@@ -21,42 +21,42 @@ GNU General Public License for more details.
 
 #include "MQ2Main.h"
 
-class CChatHook 
-{ 
-public: 
-    VOID Trampoline(PCHAR szMsg, DWORD dwColor, bool EqLog, bool dopercentsubst); 
-    VOID Detour(PCHAR szMsg, DWORD dwColor, bool EqLog, bool dopercentsubst) 
-    { 
-        //DebugSpew("CChatHook::Detour(%s)",szMsg); 
-        gbInChat = TRUE; 
+class CChatHook
+{
+public:
+    VOID Trampoline(PCHAR szMsg, DWORD dwColor, bool EqLog, bool dopercentsubst);
+    VOID Detour(PCHAR szMsg, DWORD dwColor, bool EqLog, bool dopercentsubst)
+    {
+        //DebugSpew("CChatHook::Detour(%s)",szMsg);
+        gbInChat = TRUE;
 
 
         //CheckChatForEvent(szMsg);
 
-        BOOL Filtered=FALSE; 
-        PFILTER Filter = gpFilters; 
-        while (Filter && !Filtered) { 
-            if (!Filter->pEnabled || (*Filter->pEnabled)) { 
+        BOOL Filtered=FALSE;
+        PFILTER Filter = gpFilters;
+        while (Filter && !Filtered) {
+            if (!Filter->pEnabled || (*Filter->pEnabled)) {
                 if (*Filter->FilterText == '*') {
-                    if (strstr(szMsg,Filter->FilterText+1)) 
+                    if (strstr(szMsg,Filter->FilterText+1))
                         Filtered = TRUE;
-                } else { 
-                    if (!strnicmp(szMsg,Filter->FilterText,Filter->Length)) 
-                        Filtered = TRUE; 
+                } else {
+                    if (!strnicmp(szMsg,Filter->FilterText,Filter->Length))
+                        Filtered = TRUE;
                 }
-            } 
-            Filter = Filter->pNext; 
-        } 
+            }
+            Filter = Filter->pNext;
+        }
 
-        if (!Filtered) { 
-            //if (gTelnetServer && gTelnetConnection && !gPauseTelnetOutput) TelnetServer_Write(szMsg); 
+        if (!Filtered) {
+            //if (gTelnetServer && gTelnetConnection && !gPauseTelnetOutput) TelnetServer_Write(szMsg);
             BOOL SkipTrampoline;
 			//OnDPSIncomingChat(szMsg, dwColor);
             //Benchmark(bmPluginsIncomingChat,SkipTrampoline=PluginsIncomingChat(szMsg,dwColor));
-			Trampoline(szMsg, dwColor, EqLog, dopercentsubst); 
-        } 
-        gbInChat = FALSE; 
-    } 
+			Trampoline(szMsg, dwColor, EqLog, dopercentsubst);
+        }
+        gbInChat = FALSE;
+    }
 
     VOID TellWnd_Trampoline(char *message,char *name,char *name2,void *unknown,int color,bool b);
     VOID TellWnd_Detour(char *message,char *name,char *name2,void *unknown,int color,bool b)
@@ -113,10 +113,10 @@ public:
 
         UPCNotificationFlush_Trampoline();
     }
-}; 
+};
 
-DETOUR_TRAMPOLINE_EMPTY(VOID CChatHook::Trampoline(PCHAR szMsg, DWORD dwColor, bool EqLog, bool dopercentsubst)); 
-DETOUR_TRAMPOLINE_EMPTY(VOID CChatHook::TellWnd_Trampoline(char *message,char *name,char *name2,void *unknown,int color,bool b)); 
+DETOUR_TRAMPOLINE_EMPTY(VOID CChatHook::Trampoline(PCHAR szMsg, DWORD dwColor, bool EqLog, bool dopercentsubst));
+DETOUR_TRAMPOLINE_EMPTY(VOID CChatHook::TellWnd_Trampoline(char *message,char *name,char *name2,void *unknown,int color,bool b));
 DETOUR_TRAMPOLINE_EMPTY(VOID CChatHook::UPCNotificationFlush_Trampoline());
 
 VOID dsp_chat_no_events(const char *Text,int Color,bool EqLog, bool dopercentsubst)

@@ -2992,7 +2992,7 @@ namespace SoF
 
 	void SerializeItem(EQ::OutBuffer& ob, const EQ::ItemInstance *inst, int16 slot_id_in, uint8 depth)
 	{
-		const EQ::ItemData *item = inst->GetUnscaledItem();
+		const EQ::ItemData *item = inst->GetItem();
 
 		SoF::structs::ItemSerializationHeader hdr;
 

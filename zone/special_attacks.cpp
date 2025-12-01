@@ -120,6 +120,7 @@ int Mob::GetBaseSkillDamage(EQ::skills::SkillType skill, Mob *target)
 				}
 			} else {
 				// NPC Logic
+				float ac_bonus = 0.0f;
 				base = (int)(skill_bonus);
 				if (ac_bonus > skill_bonus) {
 					ac_bonus = skill_bonus;
@@ -163,13 +164,12 @@ int Mob::GetBaseSkillDamage(EQ::skills::SkillType skill, Mob *target)
 				if (ac_bonus > skill_bonus) ac_bonus = skill_bonus;
 				base += (int)(skill_bonus + ac_bonus);
 			}
-			}
 
 			if (RuleB(Character, ItemExtraSkillDamageCalcAsPercent) && GetSkillDmgAmt(skill) > 0) {
-				return static_cast<int>(ac_bonus + skill_bonus) * std::abs(GetSkillDmgAmt(skill) / 100);
+				base *= std::abs(GetSkillDmgAmt(skill) / 100);
 			}
 
-			return static_cast<int>(ac_bonus + skill_bonus);
+			return base;
 		}
 		case EQ::skills::SkillBash: {
 			float                  skill_bonus = skill_level / 10.0f;

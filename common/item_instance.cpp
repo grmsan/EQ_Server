@@ -857,6 +857,7 @@ std::string EQ::ItemInstance::GetCustomData(const std::string& identifier) {
 void EQ::ItemInstance::SetCustomData(const std::string& identifier, const std::string& value) {
 	DeleteCustomData(identifier);
 	m_custom_data[identifier] = value;
+	ApplyCustomStats();
 }
 
 void EQ::ItemInstance::SetCustomData(const std::string& identifier, int value) {
@@ -864,6 +865,7 @@ void EQ::ItemInstance::SetCustomData(const std::string& identifier, int value) {
 	std::stringstream ss;
 	ss << value;
 	m_custom_data[identifier] = ss.str();
+	ApplyCustomStats();
 }
 
 void EQ::ItemInstance::SetCustomData(const std::string& identifier, float value) {
@@ -871,6 +873,7 @@ void EQ::ItemInstance::SetCustomData(const std::string& identifier, float value)
 	std::stringstream ss;
 	ss << value;
 	m_custom_data[identifier] = ss.str();
+	ApplyCustomStats();
 }
 
 void EQ::ItemInstance::SetCustomData(const std::string& identifier, bool value) {
@@ -878,6 +881,7 @@ void EQ::ItemInstance::SetCustomData(const std::string& identifier, bool value) 
 	std::stringstream ss;
 	ss << value;
 	m_custom_data[identifier] = ss.str();
+	ApplyCustomStats();
 }
 
 void EQ::ItemInstance::DeleteCustomData(const std::string& identifier) {
@@ -948,6 +952,10 @@ void EQ::ItemInstance::Initialize(SharedDatabase *db) {
 	if (m_item->CharmFileID != 0) {
 		m_scaling = true;
 		ScaleItem();
+	}
+
+	if (!m_custom_data.empty()) {
+		ApplyCustomStats();
 	}
 
 	// initialize evolving items
@@ -1038,6 +1046,83 @@ void EQ::ItemInstance::ScaleItem() {
 	m_scaledItem->Clairvoyance = (uint32)((float)m_item->Clairvoyance*Mult);
 
 	m_scaledItem->CharmFileID = 0;	// this stops the client from trying to scale the item itself.
+}
+
+void EQ::ItemInstance::ApplyCustomStats() {
+	if (!m_item) return;
+
+	// If we have no custom data and no scaling, we don't need m_scaledItem
+	if (m_custom_data.empty() && !m_scaling) {
+		if (m_scaledItem) {
+			delete m_scaledItem;
+			m_scaledItem = nullptr;
+		}
+		return;
+	}
+
+	// Ensure m_scaledItem exists
+	if (!m_scaledItem) {
+		m_scaledItem = new ItemData(*m_item);
+	}
+
+	if (m_scaling) {
+		ScaleItem(); // This resets m_scaledItem from m_item and applies scaling
+	}
+	else {
+		// Reset to base if not scaling (so we don't accumulate custom stats)
+		memcpy(m_scaledItem, m_item, sizeof(ItemData));
+	}
+
+	// Now apply custom stats
+	for (auto const& [key, val] : m_custom_data) {
+		try {
+			int iVal = std::stoi(val);
+			if (key == "STR") { int32 v = (int32)m_scaledItem->AStr + iVal; m_scaledItem->AStr = (int8)(v > 127 ? 127 : (v < -128 ? -128 : v)); }
+			else if (key == "STA") { int32 v = (int32)m_scaledItem->ASta + iVal; m_scaledItem->ASta = (int8)(v > 127 ? 127 : (v < -128 ? -128 : v)); }
+			else if (key == "DEX") { int32 v = (int32)m_scaledItem->ADex + iVal; m_scaledItem->ADex = (int8)(v > 127 ? 127 : (v < -128 ? -128 : v)); }
+			else if (key == "AGI") { int32 v = (int32)m_scaledItem->AAgi + iVal; m_scaledItem->AAgi = (int8)(v > 127 ? 127 : (v < -128 ? -128 : v)); }
+			else if (key == "INT") { int32 v = (int32)m_scaledItem->AInt + iVal; m_scaledItem->AInt = (int8)(v > 127 ? 127 : (v < -128 ? -128 : v)); }
+			else if (key == "WIS") { int32 v = (int32)m_scaledItem->AWis + iVal; m_scaledItem->AWis = (int8)(v > 127 ? 127 : (v < -128 ? -128 : v)); }
+			else if (key == "CHA") { int32 v = (int32)m_scaledItem->ACha + iVal; m_scaledItem->ACha = (int8)(v > 127 ? 127 : (v < -128 ? -128 : v)); }
+			else if (key == "HP") m_scaledItem->HP += iVal;
+			else if (key == "MANA") m_scaledItem->Mana += iVal;
+			else if (key == "AC") m_scaledItem->AC += iVal;
+
+			// Heroic Stats
+			else if (key == "HEROIC_STR") m_scaledItem->HeroicStr += iVal;
+			else if (key == "HEROIC_STA") m_scaledItem->HeroicSta += iVal;
+			else if (key == "HEROIC_DEX") m_scaledItem->HeroicDex += iVal;
+			else if (key == "HEROIC_AGI") m_scaledItem->HeroicAgi += iVal;
+			else if (key == "HEROIC_INT") m_scaledItem->HeroicInt += iVal;
+			else if (key == "HEROIC_WIS") m_scaledItem->HeroicWis += iVal;
+			else if (key == "HEROIC_CHA") m_scaledItem->HeroicCha += iVal;
+			else if (key == "HEROIC_MR") m_scaledItem->HeroicMR += iVal;
+			else if (key == "HEROIC_FR") m_scaledItem->HeroicFR += iVal;
+			else if (key == "HEROIC_CR") m_scaledItem->HeroicCR += iVal;
+			else if (key == "HEROIC_DR") m_scaledItem->HeroicDR += iVal;
+			else if (key == "HEROIC_PR") m_scaledItem->HeroicPR += iVal;
+			else if (key == "HEROIC_SV_CORRUP") m_scaledItem->HeroicSVCorrup += iVal;
+
+			// Mod2 / Other Stats
+			else if (key == "ATTACK") m_scaledItem->Attack += iVal;
+			else if (key == "HASTE") m_scaledItem->Haste += iVal;
+			else if (key == "HP_REGEN") m_scaledItem->Regen += iVal;
+			else if (key == "MANA_REGEN") m_scaledItem->ManaRegen += iVal;
+			else if (key == "END_REGEN") m_scaledItem->EnduranceRegen += iVal;
+			else if (key == "DAMAGE_SHIELD") m_scaledItem->DamageShield += iVal;
+			else if (key == "DS_MITIGATION") m_scaledItem->DSMitigation += iVal;
+			else if (key == "SPELL_SHIELD") { int32 v = (int32)m_scaledItem->SpellShield + iVal; m_scaledItem->SpellShield = (int8)(v > 127 ? 127 : (v < -128 ? -128 : v)); }
+			else if (key == "SHIELDING") { int32 v = (int32)m_scaledItem->Shielding + iVal; m_scaledItem->Shielding = (int8)(v > 127 ? 127 : (v < -128 ? -128 : v)); }
+			else if (key == "AVOIDANCE") { int32 v = (int32)m_scaledItem->Avoidance + iVal; m_scaledItem->Avoidance = (int8)(v > 127 ? 127 : (v < -128 ? -128 : v)); }
+			else if (key == "ACCURACY") { int32 v = (int32)m_scaledItem->Accuracy + iVal; m_scaledItem->Accuracy = (int8)(v > 127 ? 127 : (v < -128 ? -128 : v)); }
+			else if (key == "STUN_RESIST") { int32 v = (int32)m_scaledItem->StunResist + iVal; m_scaledItem->StunResist = (int8)(v > 127 ? 127 : (v < -128 ? -128 : v)); }
+			else if (key == "STRIKETHROUGH") { int32 v = (int32)m_scaledItem->StrikeThrough + iVal; m_scaledItem->StrikeThrough = (int8)(v > 127 ? 127 : (v < -128 ? -128 : v)); }
+			else if (key == "HEAL_AMT") m_scaledItem->HealAmt += iVal;
+			else if (key == "SPELL_DMG") m_scaledItem->SpellDmg += iVal;
+			else if (key == "CLAIRVOYANCE") m_scaledItem->Clairvoyance += iVal;
+		}
+		catch (...) {}
+	}
 }
 
 void EQ::ItemInstance::SetTimer(std::string name, uint32 time) {

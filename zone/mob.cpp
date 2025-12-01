@@ -1542,6 +1542,7 @@ void Mob::SendHPUpdate(bool force_update_all)
 			b->spawn_id = GetID();
 			b->max_hp   = CastToClient()->GetMaxHP() - itembonuses.HP;
 			CastToClient()->QueuePacket(&p);
+			CastToClient()->SendEdgeStats();
 
 			ResetHPUpdateTimer();
 

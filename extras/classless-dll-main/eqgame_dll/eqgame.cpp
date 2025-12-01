@@ -64,7 +64,7 @@ ProcessGameEvents_t return_SetMouseCenter;
 DWORD d3ddev = 0;
 DWORD eqgfxMod = 0;
 BOOL bWindowedMode = true;
- 
+
 #define DLL_VERSION_NUMBER (uint64_t)140
 
 typedef struct _detourinfo
@@ -848,7 +848,7 @@ void SkipSplash()
 	//const char test2[] = { 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90 };
 	//PatchA((DWORD*)0x0048276F, &test2, sizeof(test2));
 
-	////PVP Attack 
+	////PVP Attack
 	//const char test3[] = { 0xEB, 0x39, 0x90, 0x90, 0x90, 0x90 };
 	//PatchA((DWORD*)0x0047EC22, &test3, sizeof(test3));
 
@@ -926,7 +926,7 @@ void SkipSplash()
 	//return_SelectCharacterDet = (SelectCharacter_t)DetourFunction((PBYTE)SelectCharacterAddr, (PBYTE)SelectCharacterHook); // Character Selection screen hook for position based on class/race/deity.
 	//PatchA((void*)0x004AAA15, "\xB8", 1); //For Character Selection. Tells client to load "load.s3d" instead of "clz.eqg".
 	//PatchA((void*)0x0063EF73, "pickchar.xmi", 12); //Writes "pickchar.xmi" to unused memory in eqgame.exe
-	//PatchA((void*)0x009C8C2C, "load\x00", 5); // Use load instead of "CLZ" 
+	//PatchA((void*)0x009C8C2C, "load\x00", 5); // Use load instead of "CLZ"
 	//PatchA((void*)0x0044B7D8, "\x68\x73\xEF\x63", 4); //Makes a PUSH load the above into memory instead of "eqtheme.mp3" for future use.
 	//PatchA((void*)0x0044B83D, "\xEB", 1); //Force-loads "opener4.xmi" when opening the character selection screen into theme position 1.
 	//PatchA((void*)0x0044B895, "\x14", 1); //Instead of assigning "opener4.xmi" to both positions which Titanium does by default, we overwrite position 4 (char select) with the pickchar.xmi asset
@@ -1072,7 +1072,7 @@ void InitHooks()
 	   PatchA((DWORD*)var, (DWORD*)&varArray, 4); // Link stuff
 
 	   var = (((DWORD)0x009BFF6D - 0x400000) + baseAddress);
-	   PatchA((DWORD*)var, "\x25\x30\x38\x58", 4); // Link stuff
+	   PatchA((DWORD*)var, "\x25\x64\x00\x00", 4); // Link stuff - Changed to %d from %08X to fix item links
 
 	   var = (((DWORD)0x00A1ACE0 - 0x400000) + baseAddress);
 	   PatchA((DWORD*)var, "\x4F", 1); // Link stuff
@@ -1267,11 +1267,11 @@ void InitHooks()
 
 	//eqgfxMod = *(DWORD*)(0x007F9C50);
 	//d3ddev = (DWORD)(eqgfxMod + 0x00A4F92C);
-	//	
+	//
 	//EzDetour(0x0055A4F4, WndProc_Detour, WndProc_Trampoline);
 	//// This detours key press down handler, so we can capture alt-enter to switch video modes
 	//EzDetour(0x00525B04, ProcessKeyDown_Detour, ProcessKeyDown_Trampoline);
-	//	
+	//
 	//EzDetour(0x00538CE6, CEverQuest__DisplayScreen_Detour, CEverQuest__DisplayScreen_Trampoline);
 
 	//// Add MGB for Beastlords

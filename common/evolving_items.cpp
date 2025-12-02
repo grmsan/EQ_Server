@@ -54,7 +54,8 @@ double EvolvingItemsManager::CalculateProgression(const uint64 current_amount, c
 
 void EvolvingItemsManager::DoLootChecks(const uint32 char_id, const uint16 slot_id, const EQ::ItemInstance &inst) const
 {
-	if (!inst) {
+	// Skip dynamic items (infinite progression system) - they don't use evolving item system
+	if (!inst.GetItem()) {
 		return;
 	}
 

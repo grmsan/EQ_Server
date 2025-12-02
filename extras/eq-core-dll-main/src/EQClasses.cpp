@@ -152,15 +152,15 @@ FUNCTION_AT_ADDRESS(int  EQ_Character1::Max_Endurance(int),EQ_Character__Max_End
 //fuck virtual
 #ifdef EQ_Character__Max_Mana_x
 FUNCTION_AT_ADDRESS(int EQ_Character1::Max_Mana(int), EQ_Character__Max_Mana);
-#endif 
+#endif
 #ifdef EQ_Character__Max_HP_x
 FUNCTION_AT_ADDRESS(int  EQ_Character1::Max_HP(int,int),EQ_Character__Max_HP);
 #endif
 /////////////////////////////////////////////////////////////////////
 
 #ifdef EQ_Character__doCombatAbility_x
-FUNCTION_AT_ADDRESS(bool EQ_Character::DoCombatAbility(int spellID, int dummy), EQ_Character__doCombatAbility); 
-#endif 
+FUNCTION_AT_ADDRESS(bool EQ_Character::DoCombatAbility(int spellID, int dummy), EQ_Character__doCombatAbility);
+#endif
 
 
 FUNCTION_AT_VIRTUAL_ADDRESS(void CChatWindow::operator delete[](void*),0x04);
@@ -4287,7 +4287,7 @@ FUNCTION_AT_ADDRESS(unsigned int EQ_Character::GetEffectId(int),EQ_Character__Ge
 FUNCTION_AT_ADDRESS(void  EQ_Character1::SetEffectId(unsigned char,unsigned int),EQ_Character__SetEffectId);
 #endif
 #ifdef EQ_Character__CastSpell_x
-FUNCTION_AT_ADDRESS(unsigned char EQ_Character1::CastSpell(unsigned char gemid,int spellid,class EQ_Item * *ppItem,int,int slot,int,int,int,int,bool,int),EQ_Character__CastSpell); 
+FUNCTION_AT_ADDRESS(unsigned char EQ_Character1::CastSpell(unsigned char gemid,int spellid,class EQ_Item * *ppItem,int,int slot,int,int,int,int,bool,int),EQ_Character__CastSpell);
 #endif
 #ifdef EQ_Character__GetBardInstrumentMod_x
 FUNCTION_AT_ADDRESS(int  EQ_Character::GetBardInstrumentMod(int),EQ_Character__GetBardInstrumentMod);
@@ -4461,8 +4461,8 @@ FUNCTION_AT_ADDRESS(char *  EQ_Item::ValueSRent(void),EQ_Item__ValueSRent);
 FUNCTION_AT_ADDRESS(bool  EQ_Item::IsSpecialNoDrop(void),EQ_Item__IsSpecialNoDrop);
 #endif
 #ifdef EQ_Item__IsStackable_x
-FUNCTION_AT_ADDRESS(bool  EQ_Item::IsStackable(void),EQ_Item__IsStackable); 
-#endif 
+FUNCTION_AT_ADDRESS(bool  EQ_Item::IsStackable(void),EQ_Item__IsStackable);
+#endif
 #ifdef EQ_LoadingS__EQ_LoadingS_x
 FUNCTION_AT_ADDRESS( EQ_LoadingS::EQ_LoadingS(void),EQ_LoadingS__EQ_LoadingS);
 #endif
@@ -7609,7 +7609,7 @@ FUNCTION_AT_ADDRESS(class CTextureAnimation const *  CListWnd::GetColumnAnimatio
 FUNCTION_AT_ADDRESS(int  CListWnd::AddLine(class SListWndLine const *),CListWnd__AddLine);
 #endif
 #ifdef CListWnd__AddString_x
-FUNCTION_AT_ADDRESS(int CListWnd::AddString(const CXStr &Str, COLORREF Color, uint32_t Data, const CTextureAnimation *pTa, const char*TooltipStr), CListWnd__AddString); 
+FUNCTION_AT_ADDRESS(int CListWnd::AddString(const CXStr &Str, COLORREF Color, uint32_t Data, const CTextureAnimation *pTa, const char*TooltipStr), CListWnd__AddString);
 #endif
 #ifdef CListWnd__RemoveString_x
 FUNCTION_AT_ADDRESS(void  CListWnd::RemoveString(int),CListWnd__RemoveString);
@@ -9632,12 +9632,14 @@ FUNCTION_AT_ADDRESS(char *CChatService::GetFriendName(int),CChatService__GetFrie
 FUNCTION_AT_ADDRESS(unsigned long PlayerPointManager::GetAltCurrency(unsigned long,unsigned long),PlayerPointManager__GetAltCurrency);
 #endif
 #ifdef CharacterZoneClient__HasSkill_x
-FUNCTION_AT_ADDRESS(bool CharacterZoneClient::HasSkill(int), CharacterZoneClient__HasSkill);
+// FUNCTION_AT_ADDRESS(bool CharacterZoneClient::HasSkill(int), CharacterZoneClient__HasSkill);
+bool CharacterZoneClient::HasSkill(int) { return false; }
 #endif
 
 
 #ifdef PcZoneClient__GetPcSkillLimit_x
-FUNCTION_AT_ADDRESS(int PcZoneClient::GetPcSkillLimit(int), PcZoneClient__GetPcSkillLimit);
+// FUNCTION_AT_ADDRESS(int PcZoneClient::GetPcSkillLimit(int), PcZoneClient__GetPcSkillLimit);
+int PcZoneClient::GetPcSkillLimit(int) { return 0; }
 #endif
 
 #ifdef CXWnd__SetFont_x

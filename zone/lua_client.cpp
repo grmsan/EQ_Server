@@ -1568,6 +1568,9 @@ bool Lua_Client::PutItemInInventory(int slot_id, Lua_ItemInst inst) {
 bool Lua_Client::PushItemOnCursor(Lua_ItemInst inst) {
 	Lua_Safe_Call_Bool();
 	EQ::ItemInstance *rinst = inst;
+	if (!rinst) {
+		return false;
+	}
 	return self->PushItemOnCursor(*rinst, true);
 }
 

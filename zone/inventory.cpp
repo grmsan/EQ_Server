@@ -18,6 +18,8 @@
 
 #include "../common/global_define.h"
 #include "../common/eqemu_logsys.h"
+#include "dynamic_item_integration.h"
+#include <fstream>
 
 #include "../common/strings.h"
 #include "quest_parser_collection.h"
@@ -183,7 +185,12 @@ bool Client::CheckLoreConflict(const EQ::ItemData* item)
 }
 
 bool Client::SummonItem(uint32 item_id, int16 charges, uint32 aug1, uint32 aug2, uint32 aug3, uint32 aug4, uint32 aug5, uint32 aug6, bool attuned, uint16 to_slot, uint32 ornament_icon, uint32 ornament_idfile, uint32 ornament_hero_model) {
-	const EQ::ItemData* item = database.GetItem(item_id);
+	Log(Logs::General, Logs::Quests, "Client::SummonItem called for item_id=%u", item_id);
+
+	// Use dynamic item integration for both static and dynamic items
+	const EQ::ItemData* item = EQ::GetItemWithDynamic(item_id);
+
+	Log(Logs::General, Logs::Quests, "Client::SummonItem: item pointer=%p", (void*)item);
 
 	// make sure the item exists
 	if(item == nullptr) {
@@ -1035,7 +1042,11 @@ void Client::DeleteItemInInventory(int16 slot_id, int16 quantity, bool client_up
 
 bool Client::PushItemOnCursor(const EQ::ItemInstance& inst, bool client_update)
 {
-	LogInventory("Putting item [{}] ([{}]) on the cursor", inst.GetItem()->Name, inst.GetItem()->ID);
+	if (inst.GetItem()) {
+		LogInventory("Putting item [{}] ([{}]) on the cursor", inst.GetItem()->Name, inst.GetItem()->ID);
+	} else {
+		LogInventory("Putting dynamic item [{}] on the cursor", inst.GetID());
+	}
 
 	EvolvingItemsManager::Instance()->DoLootChecks(CharacterID(), EQ::invslot::slotCursor, inst);
 	m_inv.PushCursor(inst);
@@ -1053,7 +1064,11 @@ bool Client::PushItemOnCursor(const EQ::ItemInstance& inst, bool client_update)
 // (Also saves changes back to the database: this may be optimized in the future)
 // client_update: Sends packet to client
 bool Client::PutItemInInventory(int16 slot_id, const EQ::ItemInstance& inst, bool client_update) {
-	LogInventory("Putting item [{}] ([{}]) into slot [{}]", inst.GetItem()->Name, inst.GetItem()->ID, slot_id);
+	if (inst.GetItem()) {
+		LogInventory("Putting item [{}] ([{}]) into slot [{}]", inst.GetItem()->Name, inst.GetItem()->ID, slot_id);
+	} else {
+		LogInventory("Putting dynamic item [{}] into slot [{}]", inst.GetID(), slot_id);
+	}
 
 	if (slot_id == EQ::invslot::slotCursor) { // don't trust macros before conditional statements...
 		return PushItemOnCursor(inst, client_update);
@@ -2970,6 +2985,30 @@ uint32 Client::GetEquipmentColor(uint8 material_slot) const
 // Send an item packet (including all subitems of the item)
 void Client::SendItemPacket(int16 slot_id, const EQ::ItemInstance* inst, ItemPacketType packet_type)
 {
+	// Explicit debug to disk - writing to root to avoid path issues
+	// Log unconditionally at start of function with timestamp
+	static int packet_count = 0;
+	packet_count++;
+	{
+		std::ofstream debugFile("debug_item_packet.txt", std::ios::app);
+		if (debugFile.is_open()) {
+			std::time_t now = std::time(nullptr);
+			char buf[20];
+			std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
+			debugFile << "[" << buf << "] [TX #" << packet_count << "] SendItemPacket: Slot " << slot_id;
+			if (inst) {
+				debugFile << ", InstPtr: " << (void*)inst;
+				if (inst->GetItem()) {
+					debugFile << ", ItemID: " << inst->GetItem()->ID << ", Name: " << inst->GetItem()->Name;
+				}
+			} else {
+				debugFile << ", InstPtr: NULL";
+			}
+			debugFile << std::endl;
+			debugFile.close();
+		}
+	}
+
 	if (!inst) {
 		return;
 	}
@@ -2978,6 +3017,11 @@ void Client::SendItemPacket(int16 slot_id, const EQ::ItemInstance* inst, ItemPac
 		return;
 	}
 
+	// Debug logging for Item Packet
+	if (inst->GetItem()) {
+		LogError("Sending ItemPacket: Slot {}, ItemID {}, Name {}, Scaled: {}",
+			slot_id, inst->GetItem()->ID, inst->GetItem()->Name, inst->IsScaling() ? "Yes" : "No");
+	}
 	if (packet_type != ItemPacketMerchant) {
 		if (slot_id <= EQ::invslot::POSSESSIONS_END && slot_id >= EQ::invslot::POSSESSIONS_BEGIN) {
 			if ((((uint64)1 << slot_id) & GetInv().GetLookup()->PossessionsBitmask) == 0) {

@@ -530,6 +530,15 @@ int Client::HandlePacket(const EQApplicationPacket *app)
 // Finish client connecting state
 void Client::CompleteConnect()
 {
+	std::ofstream debugFile("debug_item_packet.txt", std::ios::app);
+	if (debugFile.is_open()) {
+		std::time_t now = std::time(nullptr);
+		char buf[20];
+		std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
+		debugFile << "[" << buf << "] Client::CompleteConnect ENTRY for " << GetName() << std::endl;
+		debugFile.close();
+	}
+
 	UpdateWho();
 	client_state = CLIENT_CONNECTED;
 	SendAllPackets();

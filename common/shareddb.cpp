@@ -18,7 +18,9 @@
 
 #include <iostream>
 #include <cstring>
+#include <sstream>
 #include <fmt/format.h>
+#include "json/json.h"
 
 #if defined(_MSC_VER) && _MSC_VER >= 1800
 	#include <algorithm>
@@ -259,7 +261,16 @@ bool SharedDatabase::SaveInventory(uint32 char_id, const EQ::ItemInstance* inst,
 
 bool SharedDatabase::UpdateInventorySlot(uint32 char_id, const EQ::ItemInstance* inst, int16 slot_id)
 {
-	if (!inst || !inst->GetItem()) {
+	if (!inst) {
+		return false;
+	}
+
+	// Dynamic items have unique IDs in the database, no need for custom_data
+	uint32 save_item_id = inst->GetID();
+	std::string custom_data_str = inst->GetCustomDataString();
+
+	// Now check if base item exists
+	if (!GetItem(save_item_id)) {
 		return false;
 	}
 
@@ -271,7 +282,7 @@ bool SharedDatabase::UpdateInventorySlot(uint32 char_id, const EQ::ItemInstance*
 
 	e.character_id        = char_id;
 	e.slot_id             = slot_id;
-	e.item_id             = inst->GetID();
+	e.item_id             = save_item_id;  // Use base ID for dynamic items
 	e.charges             = charges;
 	e.color               = inst->GetColor();
 	e.augment_one         = augment_ids[0];
@@ -281,7 +292,7 @@ bool SharedDatabase::UpdateInventorySlot(uint32 char_id, const EQ::ItemInstance*
 	e.augment_five        = augment_ids[4];
 	e.augment_six         = augment_ids[5];
 	e.instnodrop          = inst->IsAttuned() ? 1 : 0;
-	e.custom_data         = inst->GetCustomDataString();
+	e.custom_data         = custom_data_str;  // Use modified custom_data with level
 	e.ornament_icon       = inst->GetOrnamentationIcon();
 	e.ornament_idfile     = inst->GetOrnamentationIDFile();
 	e.ornament_hero_model = inst->GetOrnamentHeroModel();
@@ -290,12 +301,14 @@ bool SharedDatabase::UpdateInventorySlot(uint32 char_id, const EQ::ItemInstance*
 	const int replaced = InventoryRepository::ReplaceOne(*this, e);
 
 	// Save bag contents, if slot supports bag contents
-	if (inst->IsClassBag() && EQ::InventoryProfile::SupportsContainers(slot_id)) {
+	// Note: Dynamic items won't have GetItem(), so check first
+	const EQ::ItemData* item_data = inst->GetItem();
+	if (inst->IsClassBag() && item_data && EQ::InventoryProfile::SupportsContainers(slot_id)) {
 		// Limiting to bag slot count will get rid of 'hidden' duplicated items and 'Invalid Slot ID'
 		// messages through attrition (and the modded code in SaveInventory)
 		for (
 			uint8 i = EQ::invbag::SLOT_BEGIN;
-			i < inst->GetItem()->BagSlots && i <= EQ::invbag::SLOT_END;
+			i < item_data->BagSlots && i <= EQ::invbag::SLOT_END;
 			i++
 		) {
 			const EQ::ItemInstance* bag_inst = inst->GetItem(i);
@@ -308,7 +321,7 @@ bool SharedDatabase::UpdateInventorySlot(uint32 char_id, const EQ::ItemInstance*
 
 bool SharedDatabase::UpdateSharedBankSlot(uint32 char_id, const EQ::ItemInstance* inst, int16 slot_id)
 {
-	if (!inst || !inst->GetItem()) {
+	if (!inst) {
 		return false;
 	}
 
@@ -322,7 +335,7 @@ bool SharedDatabase::UpdateSharedBankSlot(uint32 char_id, const EQ::ItemInstance
 
 	e.account_id          = account_id;
 	e.slot_id             = slot_id;
-	e.item_id             = inst->GetID();
+	e.item_id             = inst->GetID();  // Store dynamic ID directly
 	e.charges             = charges;
 	e.color               = inst->GetColor();
 	e.augment_one         = augment_ids[0];
@@ -340,12 +353,14 @@ bool SharedDatabase::UpdateSharedBankSlot(uint32 char_id, const EQ::ItemInstance
 	const int replaced = SharedbankRepository::ReplaceOne(*this, e);
 
 	// Save bag contents, if slot supports bag contents
-	if (inst->IsClassBag() && EQ::InventoryProfile::SupportsContainers(slot_id)) {
+	// Note: Dynamic items won't have GetItem(), so check first
+	const EQ::ItemData* item_data = inst->GetItem();
+	if (inst->IsClassBag() && item_data && EQ::InventoryProfile::SupportsContainers(slot_id)) {
 		// Limiting to bag slot count will get rid of 'hidden' duplicated items and 'Invalid Slot ID'
 		// messages through attrition (and the modded code in SaveInventory)
 		for (
 			uint8 i = EQ::invbag::SLOT_BEGIN;
-			i < inst->GetItem()->BagSlots && i <= EQ::invbag::SLOT_END;
+			i < item_data->BagSlots && i <= EQ::invbag::SLOT_END;
 			i++
 		) {
 			const EQ::ItemInstance* bag_inst = inst->GetItem(i);
@@ -557,42 +572,64 @@ bool SharedDatabase::GetSharedBank(uint32 id, EQ::InventoryProfile *inv, bool is
 	}
 
 	for (const auto& e : l) {
-		uint32 augment_ids[EQ::invaug::SOCKET_COUNT] = {
-			e.augment_one,
-			e.augment_two,
-			e.augment_three,
-			e.augment_four,
-			e.augment_five,
-			e.augment_six
-		};
+		uint32 item_id = e.item_id;  // Made non-const for dynamic item reconstruction
 
-		const EQ::ItemData* item = GetItem(e.item_id);
+		// Check for dynamic item level in custom_data
+		if (!e.custom_data.empty()) {
+			Json::Value root;
+			Json::CharReaderBuilder reader_builder;
+			std::istringstream ss(e.custom_data);
+			std::string errs;
 
-		if (!item) {
-			LogError(
-				"Warning: {} [{}] has an invalid item_id [{}] in slot_id [{}]",
-				is_charid ? "character_id" : "account_id",
-				id,
-				e.item_id,
-				e.slot_id
-			);
-			continue;
-		}
-
-		EQ::ItemInstance* inst = CreateBaseItem(item, e.charges);
-		if (!inst) {
-			continue;
-		}
-
-		if (item->IsClassCommon()) {
-			for (int i = EQ::invaug::SOCKET_BEGIN; i <= EQ::invaug::SOCKET_END; i++) {
-				if (augment_ids[i]) {
-					inst->PutAugment(this, i, augment_ids[i]);
+			if (Json::parseFromStream(reader_builder, ss, &root, &errs)) {
+				if (root.isMember("dynamic_level") && root["dynamic_level"].isInt()) {
+					int level = root["dynamic_level"].asInt();
+					// Reconstruct dynamic item ID: (100 + level) * 1000000 + base_id
+					item_id = ((100 + level) * 1000000) + item_id;
 				}
 			}
-		}
+	}
 
-		if (!e.custom_data.empty()) {
+	uint32 augment_ids[EQ::invaug::SOCKET_COUNT] = {
+		e.augment_one,
+		e.augment_two,
+		e.augment_three,
+		e.augment_four,
+		e.augment_five,
+		e.augment_six
+	};
+
+	// Use the ItemInstance constructor that accepts item_id
+	// GetItem is called internally and handles dynamic IDs
+	EQ::ItemInstance* inst = new EQ::ItemInstance(this, item_id, e.charges);
+	if (!inst || !inst->GetItem()) {
+		if (inst) {
+			delete inst;
+		}
+		LogError(
+			"Warning: {} [{}] has an invalid item_id [{}] in slot_id [{}]",
+			is_charid ? "character_id" : "account_id",
+			id,
+			item_id,
+			e.slot_id
+		);
+		continue;
+	}
+
+	// For dynamic items, set the dynamic ID on the instance
+	uint32 level_part = item_id / 1000000;
+	if (level_part > 100 && level_part <= 250) {
+		// This is a dynamic item - set the full dynamic ID
+		inst->SetItemID(item_id);
+	}
+
+	if (inst->GetItem()->IsClassCommon()) {
+		for (int i = EQ::invaug::SOCKET_BEGIN; i <= EQ::invaug::SOCKET_END; i++) {
+			if (augment_ids[i]) {
+				inst->PutAugment(this, i, augment_ids[i]);
+			}
+		}
+	}		if (!e.custom_data.empty()) {
 			inst->SetCustomDataString(e.custom_data);
 		}
 
@@ -607,7 +644,7 @@ bool SharedDatabase::GetSharedBank(uint32 id, EQ::InventoryProfile *inv, bool is
 			"Warning: Invalid slot_id for item in shared bank inventory for {} [{}] item_id [{}] slot_id [{}]",
 			is_charid ? "character_id" : "account_id",
 			id,
-			e.item_id,
+			item_id,
 			e.slot_id
 		);
 
@@ -654,7 +691,7 @@ bool SharedDatabase::GetInventory(Client *c)
 	std::vector<InventoryRepository::Inventory> queue{ };
 	for (auto& row: results) {
 		const int16  slot_id             = row.slot_id;
-		const uint32 item_id             = row.item_id;
+		const uint32 item_id             = row.item_id;  // Now stores full dynamic ID directly
 		const uint16 charges             = row.charges;
 		const uint32 color               = row.color;
 		const bool   instnodrop          = row.instnodrop;
@@ -697,66 +734,71 @@ bool SharedDatabase::GetInventory(Client *c)
 				cv_conflict = true;
 				continue;
 			}
+	}
+
+	// Use the ItemInstance constructor that accepts item_id
+	// GetItem is called internally and handles dynamic IDs
+	auto* inst = new EQ::ItemInstance(this, item_id, charges);
+	if (!inst || !inst->GetItem()) {
+		if (inst) {
+			delete inst;
 		}
+		LogError(
+			"Warning: charid [{}] has an invalid item_id [{}] in inventory slot [{}]",
+			char_id,
+			item_id,
+			slot_id
+		);
+		continue;
+	}
 
-		auto* item = GetItem(item_id);
-		if (!item) {
-			LogError(
-				"Warning: charid [{}] has an invalid item_id [{}] in inventory slot [{}]",
-				char_id,
-				item_id,
-				slot_id
-			);
-			continue;
-		}
+	// For dynamic items (ID >= 1B), override the ID since constructor uses base item
+	if (item_id >= 1000000000U) {
+		inst->SetItemID(item_id);
+	}
 
-		auto* inst = CreateBaseItem(item, charges);
-		if (!inst) {
-			continue;
-		}
+	if (!row.custom_data.empty()) {
+		inst->SetCustomDataString(row.custom_data);
+	}
 
-		if (!row.custom_data.empty()) {
-			inst->SetCustomDataString(row.custom_data);
-		}
+	inst->SetOrnamentIcon(ornament_icon);
+	inst->SetOrnamentationIDFile(ornament_idfile);
+	inst->SetOrnamentHeroModel(inst->GetItem()->HerosForgeModel);
 
-		inst->SetOrnamentIcon(ornament_icon);
-		inst->SetOrnamentationIDFile(ornament_idfile);
-		inst->SetOrnamentHeroModel(item->HerosForgeModel);
+	if (
+		instnodrop ||
+		(
+			inst->GetItem()->Attuneable &&
+			EQ::ValueWithin(slot_id, EQ::invslot::EQUIPMENT_BEGIN, EQ::invslot::EQUIPMENT_END)
+		)
+	) {
+		inst->SetAttuned(true);
+	}
 
-		if (
-			instnodrop ||
-			(
-				inst->GetItem()->Attuneable &&
-				EQ::ValueWithin(slot_id, EQ::invslot::EQUIPMENT_BEGIN, EQ::invslot::EQUIPMENT_END)
-			)
-		) {
-			inst->SetAttuned(true);
-		}
+	if (color > 0) {
+		inst->SetColor(color);
+	}
 
-		if (color > 0) {
-			inst->SetColor(color);
-		}
+	if (charges == std::numeric_limits<int16>::max()) {
+		inst->SetCharges(-1);
+	} else if (charges == 0 && inst->IsStackable()) {
+		// Stackable items need a minimum charge of 1 remain moveable.
+		inst->SetCharges(1);
+	} else {
+		inst->SetCharges(charges);
+	}
 
-		if (charges == std::numeric_limits<int16>::max()) {
-			inst->SetCharges(-1);
-		} else if (charges == 0 && inst->IsStackable()) {
-			// Stackable items need a minimum charge of 1 remain moveable.
-			inst->SetCharges(1);
+	if (inst->GetItem()->RecastDelay) {
+		if (inst->GetItem()->RecastType != RECAST_TYPE_UNLINKED_ITEM && timestamps.count(inst->GetItem()->RecastType)) {
+			inst->SetRecastTimestamp(timestamps.at(inst->GetItem()->RecastType));
+		} else if (inst->GetItem()->RecastType == RECAST_TYPE_UNLINKED_ITEM && timestamps.count(inst->GetItem()->ID)) {
+			inst->SetRecastTimestamp(timestamps.at(inst->GetItem()->ID));
 		} else {
-			inst->SetCharges(charges);
+			inst->SetRecastTimestamp(0);
 		}
+	}
 
-		if (item->RecastDelay) {
-			if (item->RecastType != RECAST_TYPE_UNLINKED_ITEM && timestamps.count(item->RecastType)) {
-				inst->SetRecastTimestamp(timestamps.at(item->RecastType));
-			} else if (item->RecastType == RECAST_TYPE_UNLINKED_ITEM && timestamps.count(item->ID)) {
-				inst->SetRecastTimestamp(timestamps.at(item->ID));
-			} else {
-				inst->SetRecastTimestamp(0);
-			}
-		}
-
-		if (item->IsClassCommon()) {
+		if (inst->GetItem()->IsClassCommon()) {
 			for (int i = EQ::invaug::SOCKET_BEGIN; i <= EQ::invaug::SOCKET_END; i++) {
 				if (augment_ids[i]) {
 					inst->PutAugment(this, i, augment_ids[i]);
@@ -764,7 +806,7 @@ bool SharedDatabase::GetInventory(Client *c)
 			}
 		}
 
-		if (item->EvolvingItem) {
+		if (inst->GetItem()->EvolvingItem) {
 			if (slot_id >= EQ::invslot::EQUIPMENT_BEGIN && slot_id <= EQ::invslot::EQUIPMENT_END) {
 				inst->SetEvolveEquipped(true);
 			}
@@ -974,7 +1016,10 @@ void SharedDatabase::LoadItems(void *data, uint32 size, int32 items, uint32 max_
 
 	EQ::ItemData item;
 
-	const auto& l = ItemsRepository::All(*this);
+	// Load only base items, exclude dynamic items (ID >= 1 billion)
+	// Dynamic items are created on-demand and stored in player inventory with custom_data
+	const uint32 DYNAMIC_ID_PREFIX = 1000000000U;
+	const auto& l = ItemsRepository::GetWhere(*this, fmt::format("id < {}", DYNAMIC_ID_PREFIX));
 
 	if (l.empty()) {
 		return;
@@ -1268,6 +1313,24 @@ const EQ::ItemData *SharedDatabase::GetItem(uint32 id) const
 		return nullptr;
 	}
 
+	// Check if this is a dynamic item (ID >= 1 billion)
+	// Dynamic items are stored in the database with their full scaled stats
+	// They are NOT in shared memory to avoid hash size issues
+	if (id >= 1000000000U) {
+		// For dynamic items, we need to load from database
+		// However, this method returns a const pointer from shared memory
+		// So for now, return the base item and let the caller handle scaling
+		uint32 base_id = id % 1000000;
+		if (!items_hash || base_id > items_hash->max_key()) {
+			return nullptr;
+		}
+		if (items_hash->exists(base_id)) {
+			return &(items_hash->at(base_id));
+		}
+		return nullptr;
+	}
+
+	// Regular item lookup from shared memory
 	if (!items_hash || id > items_hash->max_key()) {
 		return nullptr;
 	}
@@ -1342,27 +1405,31 @@ EQ::ItemInstance* SharedDatabase::CreateItem(
 ) {
 	EQ::ItemInstance* inst = nullptr;
 
+	// Check if this is a dynamic item (ID >= 1 billion)
+	// For now, just use the base item - full database loading TODO
+	// This prevents crashes when old dynamic items are in inventory
 	const EQ::ItemData* item = GetItem(item_id);
 	if (item) {
 		inst = CreateBaseItem(item, charges);
 
-		if (!inst) {
-			LogError("Error: valid item data returned a null reference for EQ::ItemInstance creation in SharedDatabase::CreateItem()");
-			LogError("Item Data = ID: {}, Name: {}, Charges: {}", item->ID, item->Name, charges);
-			return nullptr;
-		}
+		if (inst) {
+			// Preserve the dynamic ID if this is a scaled item
+			if (item_id >= 1000000000U) {
+				inst->SetItemID(item_id);
+			}
 
-		inst->PutAugment(this, 0, aug1);
-		inst->PutAugment(this, 1, aug2);
-		inst->PutAugment(this, 2, aug3);
-		inst->PutAugment(this, 3, aug4);
-		inst->PutAugment(this, 4, aug5);
-		inst->PutAugment(this, 5, aug6);
-		inst->SetAttuned(attuned);
-		inst->SetCustomDataString(custom_data);
-		inst->SetOrnamentIcon(ornamenticon);
-		inst->SetOrnamentationIDFile(ornamentidfile);
-		inst->SetOrnamentHeroModel(ornament_hero_model);
+			inst->PutAugment(this, 0, aug1);
+			inst->PutAugment(this, 1, aug2);
+			inst->PutAugment(this, 2, aug3);
+			inst->PutAugment(this, 3, aug4);
+			inst->PutAugment(this, 4, aug5);
+			inst->PutAugment(this, 5, aug6);
+			inst->SetAttuned(attuned);
+			inst->SetCustomDataString(custom_data);
+			inst->SetOrnamentIcon(ornamenticon);
+			inst->SetOrnamentationIDFile(ornamentidfile);
+			inst->SetOrnamentHeroModel(ornament_hero_model);
+		}
 	}
 
 	return inst;

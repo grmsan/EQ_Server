@@ -3,10 +3,14 @@
 local commands_path = "lua_modules/commands/";
 local commands      = { };
 
-commands["endurance"] = { 50,  require(commands_path .. "endurance") };
-commands["lockouts"]  = { 0,   require(commands_path .. "lockouts") };
-commands["timeleft"]  = { 0,   require(commands_path .. "time_left") };
-commands["testscaling"] = { 250, require(commands_path .. "test_scaling") }; -- GM only
+commands["endurance"]    = { 50,  require(commands_path .. "endurance") };
+commands["lockouts"]     = { 0,   require(commands_path .. "lockouts") };
+commands["timeleft"]     = { 0,   require(commands_path .. "time_left") };
+commands["testscaling"]  = { 250, require(commands_path .. "test_scaling") }; -- GM only
+commands["upgrade"]      = { 0,   require(commands_path .. "upgrade") };      -- Infinite Progression
+commands["fuse"]         = { 0,   require(commands_path .. "fuse") };         -- Infinite Progression
+commands["iteminfo"]     = { 0,   require(commands_path .. "iteminfo") };     -- Infinite Progression
+commands["createscaled"] = { 250, require(commands_path .. "createscaled") }; -- GM only
 
 
 function eq.DispatchCommands(e)

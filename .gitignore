@@ -72,3 +72,4 @@ skill-caps.diff
 /Maps
 *.tlog
 shared/items
+debug_item_packet.txt

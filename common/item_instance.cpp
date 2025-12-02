@@ -30,6 +30,9 @@
 //#include "../common/light_source.h"
 
 #include <limits.h>
+#include <fstream>
+#include <chrono>
+#include <ctime>
 
 //#include <iostream>
 
@@ -106,7 +109,6 @@ EQ::ItemInstance::ItemInstance(SharedDatabase *db, uint32 item_id, int16 charges
 
 	m_SerialNumber  = GetNextItemInstSerialNumber();
 }
-
 EQ::ItemInstance::ItemInstance(ItemInstTypes use_type) {
 	m_use_type     = use_type;
 }
@@ -169,6 +171,9 @@ EQ::ItemInstance::ItemInstance(const ItemInstance& copy)
 	m_ornament_hero_model = copy.m_ornament_hero_model;
 	m_recast_timestamp    = copy.m_recast_timestamp;
 	m_new_id_file         = copy.m_new_id_file;
+
+	// Reapply custom stats after copying (custom_data is already populated)
+	ApplyCustomStats();
 }
 
 // Clean up container contents
@@ -834,6 +839,24 @@ std::string EQ::ItemInstance::GetCustomDataString() const {
 
 void EQ::ItemInstance::SetCustomDataString(const std::string& str)
 {
+	if (str.empty()) return;
+
+	// TEMPORARILY DISABLED - JSON parsing causing crashes
+	// Just log and skip for now
+	if (str[0] == '{') {
+		std::ofstream logfile("logs/inf/json_skipped.log", std::ios::app);
+		if (logfile.is_open()) {
+			auto now = std::chrono::system_clock::now();
+			auto time = std::chrono::system_clock::to_time_t(now);
+			char timebuf[32];
+			std::strftime(timebuf, sizeof(timebuf), "%Y-%m-%d %H:%M:%S", std::localtime(&time));
+			logfile << "[" << timebuf << "] Skipped JSON: '" << str << "'" << std::endl;
+			logfile.close();
+		}
+		return;
+	}
+
+	// Original format: "key^value^key^value"
 	auto components = Strings::Split(str, "^");
 	auto value_count = components.size() / 2;
 
@@ -843,9 +866,7 @@ void EQ::ItemInstance::SetCustomDataString(const std::string& str)
 
 		SetCustomData(identifier, value);
 	}
-}
-
-std::string EQ::ItemInstance::GetCustomData(const std::string& identifier) {
+}std::string EQ::ItemInstance::GetCustomData(const std::string& identifier) {
 	std::map<std::string, std::string>::const_iterator iter = m_custom_data.find(identifier);
 	if (iter != m_custom_data.end()) {
 		return iter->second;
@@ -1048,11 +1069,327 @@ void EQ::ItemInstance::ScaleItem() {
 	m_scaledItem->CharmFileID = 0;	// this stops the client from trying to scale the item itself.
 }
 
+// Scale a dynamic item based on level
+// This is a standalone version of the DynamicItemManager scaling logic that works in common code
+void EQ::ItemInstance::ScaleDynamicItem(int level) {
+	if (!m_item || level <= 0) return;
+
+	// Safety check - validate m_item has required fields
+	if (m_item->ID == 0 || !m_item->Name[0]) {
+		std::ofstream logfile("logs/inf/scaling_error.log", std::ios::app);
+		if (logfile.is_open()) {
+			logfile << "ERROR: ScaleDynamicItem called with invalid base item (ID=" << m_item->ID << ")" << std::endl;
+			logfile.close();
+		}
+		return;
+	}
+
+	// Create or reset m_scaledItem
+	if (m_scaledItem) {
+		memcpy(m_scaledItem, m_item, sizeof(ItemData));
+	}
+	else {
+		m_scaledItem = new ItemData(*m_item);
+	}
+
+	// Verify m_scaledItem was created successfully
+	if (!m_scaledItem) {
+		std::ofstream logfile("logs/inf/scaling_error.log", std::ios::app);
+		if (logfile.is_open()) {
+			logfile << "ERROR: Failed to allocate m_scaledItem for item " << m_item->ID << std::endl;
+			logfile.close();
+		}
+		return;
+	}
+
+	// Helper lambda for tiered stat calculation
+	auto CalculateTieredStat = [](int base_value, int level, int base_increment, int tier_bonus, int tier_size = 10) -> int {
+		if (level <= 0) return base_value;
+		int total = base_value;
+		int tier = level / tier_size;
+		// Add full tiers
+		for (int t = 0; t < tier; t++) {
+			int increment = base_increment + (t * tier_bonus);
+			total += tier_size * increment;
+		}
+		// Add remaining levels
+		int remaining_levels = level % tier_size;
+		int current_tier_increment = base_increment + (tier * tier_bonus);
+		total += remaining_levels * current_tier_increment;
+		return total;
+	};
+
+	// Helper lambda for stat capping (127 base + heroic overflow)
+	auto ApplyStatCap = [](int8& base_stat, int32& heroic_stat, int raw_value) {
+		const int CAP = 127;
+		if (raw_value > CAP) {
+			base_stat = CAP;
+			heroic_stat += (raw_value - CAP);
+		} else {
+			base_stat = static_cast<int8>(raw_value);
+		}
+	};
+
+	// Primary stats with tiered scaling
+	m_scaledItem->AC = CalculateTieredStat(m_item->AC, level, 2, 2);  // ac_base_increment=2, ac_tier_bonus=2
+	m_scaledItem->HP = CalculateTieredStat(m_item->HP, level, 4, 4);  // hp_base_increment=4, hp_tier_bonus=4
+	m_scaledItem->Mana = CalculateTieredStat(m_item->Mana, level, 4, 4);  // Same as HP
+	m_scaledItem->Endur = CalculateTieredStat(m_item->Endur, level, 4, 4);  // Same as HP
+
+	// Attribute stats with 127 cap + heroic overflow
+	if (m_item->AStr > 0) {
+		int raw_str = CalculateTieredStat(m_item->AStr, level, 1, 1);
+		ApplyStatCap(m_scaledItem->AStr, m_scaledItem->HeroicStr, raw_str);
+	}
+	if (m_item->ASta > 0) {
+		int raw_sta = CalculateTieredStat(m_item->ASta, level, 1, 1);
+		ApplyStatCap(m_scaledItem->ASta, m_scaledItem->HeroicSta, raw_sta);
+	}
+	if (m_item->AAgi > 0) {
+		int raw_agi = CalculateTieredStat(m_item->AAgi, level, 1, 1);
+		ApplyStatCap(m_scaledItem->AAgi, m_scaledItem->HeroicAgi, raw_agi);
+	}
+	if (m_item->ADex > 0) {
+		int raw_dex = CalculateTieredStat(m_item->ADex, level, 1, 1);
+		ApplyStatCap(m_scaledItem->ADex, m_scaledItem->HeroicDex, raw_dex);
+	}
+	if (m_item->AInt > 0) {
+		int raw_int = CalculateTieredStat(m_item->AInt, level, 1, 1);
+		ApplyStatCap(m_scaledItem->AInt, m_scaledItem->HeroicInt, raw_int);
+	}
+	if (m_item->AWis > 0) {
+		int raw_wis = CalculateTieredStat(m_item->AWis, level, 1, 1);
+		ApplyStatCap(m_scaledItem->AWis, m_scaledItem->HeroicWis, raw_wis);
+	}
+	if (m_item->ACha > 0) {
+		int raw_cha = CalculateTieredStat(m_item->ACha, level, 1, 1);
+		ApplyStatCap(m_scaledItem->ACha, m_scaledItem->HeroicCha, raw_cha);
+	}
+
+	// === Weapon Stats ===
+	// Check if this is a weapon (has Damage and Delay, or is an arrow/throwing weapon)
+	bool is_weapon = (m_item->Damage > 0 && m_item->Delay > 0) ||
+	                 (m_item->ItemType == EQ::item::ItemTypeArrow ||
+	                  m_item->ItemType == EQ::item::ItemTypeLargeThrowing ||
+	                  m_item->ItemType == EQ::item::ItemTypeSmallThrowing);
+
+	if (is_weapon) {
+		// Scale weapon damage using RATIO-BASED scaling
+		// This ensures fast 1H weapons and slow 2H weapons scale proportionally
+		// We scale based on damage-per-delay ratio to maintain balance
+		if (m_item->Damage > 0 && m_item->Delay > 0) {
+			// Calculate base ratio (damage per delay tick)
+			float base_ratio = static_cast<float>(m_item->Damage) / static_cast<float>(m_item->Delay);
+
+			// Aggressive scaling: each level multiplies damage significantly
+			// At level 100: ~8x multiplier (30dmg -> 240dmg)
+			// At level 250: ~65x multiplier (30dmg -> 1950dmg)
+			// Formula: 1 + (level * 0.26) gives us the scaling curve we want
+			float ratio_multiplier = 1.0f + (level * 0.26f);  // 26% per level
+
+			// Calculate new damage based on scaled ratio
+			float new_damage = base_ratio * ratio_multiplier * m_item->Delay;
+
+			// Round to nearest integer (important for low-damage weapons)
+			m_scaledItem->Damage = static_cast<uint32>(new_damage + 0.5f);
+
+			// Ensure minimum of 1 damage
+			if (m_scaledItem->Damage < 1) m_scaledItem->Damage = 1;
+		}
+
+		// Scale Attack stat (ATK bonus) - modest scaling
+		if (m_item->Attack > 0) {
+			m_scaledItem->Attack = CalculateTieredStat(m_item->Attack, level, 1, 1);
+		}
+
+		// DON'T scale elemental/bane damage - these have specific types/targets
+		// The base item defines the element/bane type, and scaling would need
+		// to preserve those relationships. Better to leave these as-is.
+
+		// Scale Backstab Damage (rogue weapons) - ratio-based like normal damage
+		if (m_item->BackstabDmg > 0) {
+			float backstab_mult = 1.0f + (level * 0.26f);  // Same 26% as weapon damage
+			m_scaledItem->BackstabDmg = static_cast<uint32>((m_item->BackstabDmg * backstab_mult) + 0.5f);
+		}
+
+		// Scale Proc Rate (if item has a proc)
+		// ProcRate is a percentage modifier, we scale it slowly
+		// A weapon with ProcRate 100 at level 100 should be around 150 (50% increase)
+		if (m_item->ProcRate > 0) {
+			// Add 0.5% per level (level 100 = +50%, level 250 = +125%)
+			int proc_increase = (level * m_item->ProcRate) / 200;  // 0.5% per level
+			m_scaledItem->ProcRate = m_item->ProcRate + proc_increase;
+		}
+
+		// Note: We do NOT scale Delay - keeping weapon speed constant is important for balance
+		// Note: We do NOT scale ElemDmg, BaneDmg, or ExtraDmg - these are specialized
+		// and scaling them could cause balance issues with their specific mechanics
+	}
+
+	// === Bard Instrument Modifiers (can be on ANY item type) ===
+	// Scale Bard instruments (BardValue) - appears on weapons, armor, jewelry, etc.
+	// BardValue is in 10ths (38 = 3.8 modifier), so we scale aggressively for bard progression
+	// Tiered scaling: 5% per level to 200%, then 2% to 400%, then 1% after
+	if (m_item->BardValue > 0) {
+		float bard_mult = 1.0f;
+
+		if (level <= 40) {
+			// Levels 1-40: 5% per level (40 levels = 200% total = 3x multiplier)
+			bard_mult = 1.0f + (level * 0.05f);
+		} else if (level <= 140) {
+			// Levels 41-140: Start at 3x, add 2% per level for 100 levels (200% more = 5x total)
+			bard_mult = 3.0f + ((level - 40) * 0.02f);
+		} else {
+			// Levels 141+: Start at 5x, add 1% per level (110 more levels = 6.1x at 250)
+			bard_mult = 5.0f + ((level - 140) * 0.01f);
+		}
+
+		m_scaledItem->BardValue = static_cast<int32>((m_item->BardValue * bard_mult) + 0.5f);
+	}
+
+	// Resistances with cap
+	const int resist_cap = 500;
+	if (m_item->FR > 0) {
+		m_scaledItem->FR = std::min(CalculateTieredStat(m_item->FR, level, 1, 1), resist_cap);
+	}
+	if (m_item->CR > 0) {
+		m_scaledItem->CR = std::min(CalculateTieredStat(m_item->CR, level, 1, 1), resist_cap);
+	}
+	if (m_item->MR > 0) {
+		m_scaledItem->MR = std::min(CalculateTieredStat(m_item->MR, level, 1, 1), resist_cap);
+	}
+	if (m_item->PR > 0) {
+		m_scaledItem->PR = std::min(CalculateTieredStat(m_item->PR, level, 1, 1), resist_cap);
+	}
+	if (m_item->DR > 0) {
+		m_scaledItem->DR = std::min(CalculateTieredStat(m_item->DR, level, 1, 1), resist_cap);
+	}
+
+	// Caster stats (aggressive scaling ~5 per level)
+	if (m_item->HealAmt > 0) {
+		m_scaledItem->HealAmt = CalculateTieredStat(m_item->HealAmt, level, 5, 5);
+	}
+	if (m_item->SpellDmg > 0) {
+		m_scaledItem->SpellDmg = CalculateTieredStat(m_item->SpellDmg, level, 5, 5);
+	}
+
+	// Damage Shield and Dot Shielding (moderate scaling)
+	if (m_item->DamageShield > 0) {
+		m_scaledItem->DamageShield = CalculateTieredStat(m_item->DamageShield, level, 2, 2);
+	}
+	if (m_item->DotShielding > 0) {
+		m_scaledItem->DotShielding = CalculateTieredStat(m_item->DotShielding, level, 2, 2);
+	}
+
+	// Regen stats (moderate scaling ~1 per level)
+	if (m_item->ManaRegen > 0) {
+		m_scaledItem->ManaRegen = CalculateTieredStat(m_item->ManaRegen, level, 1, 1);
+	}
+	if (m_item->EnduranceRegen > 0) {
+		m_scaledItem->EnduranceRegen = CalculateTieredStat(m_item->EnduranceRegen, level, 1, 1);
+	}
+
+	// Heroic Resistances (moderate scaling)
+	if (m_item->HeroicMR > 0) {
+		m_scaledItem->HeroicMR = CalculateTieredStat(m_item->HeroicMR, level, 1, 1);
+	}
+	if (m_item->HeroicFR > 0) {
+		m_scaledItem->HeroicFR = CalculateTieredStat(m_item->HeroicFR, level, 1, 1);
+	}
+	if (m_item->HeroicCR > 0) {
+		m_scaledItem->HeroicCR = CalculateTieredStat(m_item->HeroicCR, level, 1, 1);
+	}
+	if (m_item->HeroicDR > 0) {
+		m_scaledItem->HeroicDR = CalculateTieredStat(m_item->HeroicDR, level, 1, 1);
+	}
+	if (m_item->HeroicPR > 0) {
+		m_scaledItem->HeroicPR = CalculateTieredStat(m_item->HeroicPR, level, 1, 1);
+	}
+	if (m_item->HeroicSVCorrup > 0) {
+		m_scaledItem->HeroicSVCorrup = CalculateTieredStat(m_item->HeroicSVCorrup, level, 1, 1);
+	}
+
+	// === Milestone Bonuses ===
+
+	// Haste (only on waist, back, range slots - linear 1:1 scaling)
+	bool is_haste_slot = false;
+	if (m_item->Slots) {
+		is_haste_slot = (m_item->Slots & (1 << EQ::invslot::slotWaist)) ||
+		                (m_item->Slots & (1 << EQ::invslot::slotBack)) ||
+		                (m_item->Slots & (1 << EQ::invslot::slotRange));
+	}
+	if (is_haste_slot && level >= 1) {
+		int haste = 0;
+		if (level <= 100) {
+			haste = level;  // Linear 1:1 scaling
+		} else {
+			haste = 100 + (level - 100) / 10;  // Slow increase beyond 100
+		}
+		m_scaledItem->Haste = std::min(haste, 150);  // Cap at 150
+	}
+
+	// Heroic stats from milestones (bonus beyond overflow)
+	if (level >= 10) {  // Start at level 10
+		int milestone_heroic = (level - 10) / 10;  // +1 per 10 levels
+		if (m_item->AStr > 0 || m_scaledItem->HeroicStr > 0) m_scaledItem->HeroicStr += milestone_heroic;
+		if (m_item->ASta > 0 || m_scaledItem->HeroicSta > 0) m_scaledItem->HeroicSta += milestone_heroic;
+		if (m_item->AAgi > 0 || m_scaledItem->HeroicAgi > 0) m_scaledItem->HeroicAgi += milestone_heroic;
+		if (m_item->ADex > 0 || m_scaledItem->HeroicDex > 0) m_scaledItem->HeroicDex += milestone_heroic;
+		if (m_item->AInt > 0 || m_scaledItem->HeroicInt > 0) m_scaledItem->HeroicInt += milestone_heroic;
+		if (m_item->AWis > 0 || m_scaledItem->HeroicWis > 0) m_scaledItem->HeroicWis += milestone_heroic;
+		if (m_item->ACha > 0 || m_scaledItem->HeroicCha > 0) m_scaledItem->HeroicCha += milestone_heroic;
+	}
+
+	// HP Regeneration (unlocks at level 50)
+	if (level >= 50) {
+		m_scaledItem->Regen = (level - 50) / 5;  // +1 per 5 levels
+	}
+
+	// Combat stats (slow scaling ~10 at level 100, cap at 127)
+	if (level >= 10) {
+		int combat_bonus = level / 10;  // +1 per 10 levels
+		if (m_item->Shielding > 0) m_scaledItem->Shielding = std::min(m_scaledItem->Shielding + combat_bonus, 127);
+		if (m_item->StrikeThrough > 0) m_scaledItem->StrikeThrough = std::min(m_scaledItem->StrikeThrough + combat_bonus, 127);
+		if (m_item->StunResist > 0) m_scaledItem->StunResist = std::min(m_scaledItem->StunResist + combat_bonus, 127);
+		if (m_item->SpellShield > 0) m_scaledItem->SpellShield = std::min(m_scaledItem->SpellShield + combat_bonus, 127);
+		if (m_item->Avoidance > 0) m_scaledItem->Avoidance = std::min(m_scaledItem->Avoidance + combat_bonus, 127);
+		if (m_item->Accuracy > 0) m_scaledItem->Accuracy = std::min(m_scaledItem->Accuracy + combat_bonus, 127);
+		if (m_item->CombatEffects > 0) m_scaledItem->CombatEffects = std::min(m_scaledItem->CombatEffects + combat_bonus, 127);
+	}
+}
+
 void EQ::ItemInstance::ApplyCustomStats() {
 	if (!m_item) return;
 
-	// If we have no custom data and no scaling, we don't need m_scaledItem
-	if (m_custom_data.empty() && !m_scaling) {
+	// Helper to write to logs/inf/item_scaling.log
+	auto LogInf = [this](const std::string& msg) {
+		std::ofstream logfile("logs/inf/item_scaling.log", std::ios::app);
+		if (logfile.is_open()) {
+			auto now = std::chrono::system_clock::now();
+			auto time = std::chrono::system_clock::to_time_t(now);
+			char timebuf[32];
+			std::strftime(timebuf, sizeof(timebuf), "%Y-%m-%d %H:%M:%S", std::localtime(&time));
+			logfile << "[" << timebuf << "] " << msg << std::endl;
+			logfile.close();
+		}
+	};
+
+	// Check for dynamic_level in custom data
+	bool has_dynamic_level = false;
+	int dynamic_level = 0;
+	auto it = m_custom_data.find("dynamic_level");
+	if (it != m_custom_data.end()) {
+		try {
+			dynamic_level = std::stoi(it->second);
+			has_dynamic_level = (dynamic_level > 0);
+			LogInf("ApplyCustomStats: Found dynamic_level=" + std::to_string(dynamic_level) + " for item " + std::to_string(m_item->ID) + " (" + m_item->Name + ")");
+		} catch (...) {
+			has_dynamic_level = false;
+		}
+	}
+
+	// If we have no custom data and no scaling and no dynamic level, we don't need m_scaledItem
+	if (m_custom_data.empty() && !m_scaling && !has_dynamic_level) {
 		if (m_scaledItem) {
 			delete m_scaledItem;
 			m_scaledItem = nullptr;
@@ -1065,7 +1402,13 @@ void EQ::ItemInstance::ApplyCustomStats() {
 		m_scaledItem = new ItemData(*m_item);
 	}
 
-	if (m_scaling) {
+	// Apply dynamic item scaling FIRST (if applicable)
+	if (has_dynamic_level) {
+		LogInf("ApplyCustomStats: Calling ScaleDynamicItem(" + std::to_string(dynamic_level) + ") for item " + std::to_string(m_item->ID));
+		ScaleDynamicItem(dynamic_level);
+		LogInf("ApplyCustomStats: After scaling - Damage=" + std::to_string(m_scaledItem->Damage) + ", HP=" + std::to_string(m_scaledItem->HP) + ", AC=" + std::to_string(m_scaledItem->AC));
+	}
+	else if (m_scaling) {
 		ScaleItem(); // This resets m_scaledItem from m_item and applies scaling
 	}
 	else {
@@ -1073,8 +1416,10 @@ void EQ::ItemInstance::ApplyCustomStats() {
 		memcpy(m_scaledItem, m_item, sizeof(ItemData));
 	}
 
-	// Now apply custom stats
+	// Now apply custom stat modifiers (but skip dynamic_level as it's already processed)
 	for (auto const& [key, val] : m_custom_data) {
+		if (key == "dynamic_level") continue;  // Skip - already handled above
+
 		try {
 			int iVal = std::stoi(val);
 			if (key == "STR") { int32 v = (int32)m_scaledItem->AStr + iVal; m_scaledItem->AStr = (int8)(v > 127 ? 127 : (v < -128 ? -128 : v)); }

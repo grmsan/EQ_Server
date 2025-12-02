@@ -3,6 +3,7 @@
 #include "MQ2Main.h"
 #include "EQData.h"
 #include "EQClasses.h"
+#include "eqgame.h"
 #include <stdio.h>
 #include <map>
 #include "dinput8.h"
@@ -25,12 +26,18 @@
 #include <intrin.h>
 
 #include "core_init.h"
+#include <ctime>
 
 //#pragma comment(lib, "Iphlpapi.lib")
 
 void LogDebug(const char* format, ...) {
 	FILE* file;
 	if (fopen_s(&file, "dinput8_debug.log", "a") == 0) {
+		std::time_t now = std::time(nullptr);
+		char buf[20];
+		std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
+		fprintf(file, "[%s] ", buf);
+
 		va_list args;
 		va_start(args, format);
 		vfprintf(file, format, args);
@@ -569,87 +576,76 @@ struct ItemSerializationHeader
 
 typedef CHARINFO2* (__thiscall* EQ_Character_GetCharInfo2_t)(EQ_Character*);
 
-unsigned char __fastcall HandleWorldMessage_Trampoline(DWORD *con, DWORD edx, unsigned __int32 unk, unsigned __int16 opcode, char* buf, size_t size);
-unsigned char __fastcall HandleWorldMessage_Detour(DWORD *con, DWORD edx, unsigned __int32 unk, unsigned __int16 opcode, char* buf, size_t size)
+unsigned char __fastcall HandleWorldMessage_Trampoline(DWORD *con, DWORD edx, unsigned __int32 unk, unsigned __int32 opcode, char* buf, size_t size);
+unsigned char __fastcall HandleWorldMessage_Detour(DWORD *con, DWORD edx, unsigned __int32 unk, unsigned __int32 opcode, char* buf, size_t size)
 {
-    return HandleWorldMessage_Trampoline(con, edx, unk, opcode, buf, size);
-    /*
-    unsigned char result = HandleWorldMessage_Trampoline(con, edx, unk, opcode, buf, size);
-
-    if (opcode == 0x368e) { // OP_ItemPacket
-        // WriteChatf("\ar[DEBUG] OP_ItemPacket received. Size: %d", size);
-
-        if (!pinstCharData_x) return result;
-        EQ_Character* player = *(EQ_Character**)pinstCharData_x;
-        if (!player) return result;
-
-        CHARINFO2* ci2 = nullptr;
-        try {
-            ci2 = ((EQ_Character_GetCharInfo2_t)0x7DB210)(player);
-        } catch (...) {
-            return result;
+    static int packetCount = 0;
+    try {
+        packetCount++;
+        // Log first 100 packets to capture login sequence
+        if (packetCount <= 100) {
+            LogDebug("[RX #%d] Opcode: 0x%04x Size: %d", packetCount, opcode & 0xFFFF, size);
         }
-
-        if (!ci2 || !ci2->pInventoryArray) return result;
-
-        ItemSerializationHeader* hdr = (ItemSerializationHeader*)buf;
-        uint16_t slot = hdr->main_slot;
-        uint16_t bag_slot = hdr->sub_slot;
-        // WriteChatf("\ar[DEBUG] ItemPacket Slot: %d, BagSlot: %d", slot, bag_slot);
-
-        _CONTENTS* item = nullptr;
-        if (slot <= 33) {
-             item = ci2->pInventoryArray->InventoryArray[slot];
-             if (item && bag_slot != 0xFFFF) {
-                if (item->pContentsArray && bag_slot < 10) {
-                     item = item->pContentsArray->Contents[bag_slot];
-                } else {
-                    item = nullptr;
-                }
-             }
+        // After first 100, only log time of day as heartbeat
+        else if ((opcode & 0xFFFF) == 0x3200) {
+             LogDebug("[RX HEARTBEAT] 0x3200");
         }
-
-        if (item && item->Item1) {
-            if (size < 4) return result;
-            bool found = false;
-            for (size_t i = 0; i <= size - 4; i++) {
-                if (*(uint32_t*)(buf + i) == 0x1337C0DE) {
-                    found = true;
-                    if (i + 4 + 10 * 4 > size) break;
-
-                    int32_t* stats = (int32_t*)(buf + i + 4);
-                    // WriteChatf("\ar[DEBUG] Magic found at offset %d. HP: %d", i, stats[0]);
-
-                    ITEMINFO* newInfo = new ITEMINFO;
-                    if (!newInfo) break;
-
-                    memcpy(newInfo, item->Item1, sizeof(ITEMINFO));
-                    item->Item1 = newInfo;
-
-                    newInfo->HP = stats[0];
-                    newInfo->Mana = stats[1];
-                    newInfo->AC = stats[2];
-                    newInfo->STR = (int8_t)stats[3];
-                    newInfo->STA = (int8_t)stats[4];
-                    newInfo->DEX = (int8_t)stats[5];
-                    newInfo->AGI = (int8_t)stats[6];
-                    newInfo->INT = (int8_t)stats[7];
-                    newInfo->WIS = (int8_t)stats[8];
-                    newInfo->CHA = (int8_t)stats[9];
-                    break;
-                }
-            }
-            if (!found) {
-                // WriteChatf("\ar[DEBUG] Magic NOT found in packet.");
-            }
-        } else {
-            // WriteChatf("\ar[DEBUG] Item not found in memory.");
-        }
-        return result;
+    } catch (...) {
     }
+
+    // Intercept OP_ItemPacket and OP_CharInventory to apply custom stats per-instance
+    // Server sends: base stats in ItemBodyStruct + appended custom data (magic marker + key-value pairs)
+    // We strip the appended custom data and apply it to the local item instance without modifying global cache
+    if ((opcode & 0xFFFF) == 0x368e || (opcode & 0xFFFF) == 0x5ca6) { // OP_ItemPacket (0x368e) or OP_CharInventory (0x5ca6) RoF2
+        try {
+            // Check for magic marker (0x1337C0DE) near end of packet
+            if (size >= 6) { // At least marker + count
+                // Scan backwards for magic marker (ItemBodyStruct size varies)
+                for (int offset = (int)size - 6; offset >= 0; offset--) {
+                    DWORD marker = *(DWORD*)(buf + offset);
+                    if (marker == 0x1337C0DE) {
+                        // Found custom stat data!
+                        WORD pair_count = *(WORD*)(buf + offset + 4);
+
+                        // Calculate custom data size: marker(4) + count(2) + (key(32) + val(4)) * pair_count
+                        size_t custom_data_size = 6 + (pair_count * 36);
+                        size_t base_packet_size = offset;
+
+                        LogDebug("[CUSTOM_STATS] Found %d custom stat pairs, stripping %d bytes (packet was %d, now %d)",
+                                 pair_count, custom_data_size, size, base_packet_size);
+
+                        // Parse custom stat pairs
+                        int dynamic_level = 0;
+                        for (WORD i = 0; i < pair_count; i++) {
+                            size_t pair_offset = offset + 6 + (i * 36);
+                            if (pair_offset + 36 > size) break; // Safety check
+
+                            char key_buf[33] = {0};
+                            memcpy(key_buf, buf + pair_offset, 32);
+                            int32 value = *(int32*)(buf + pair_offset + 32);
+
+                            if (strcmp(key_buf, "dynamic_level") == 0) {
+                                dynamic_level = value;
+                                LogDebug("[CUSTOM_STATS] Parsed dynamic_level=%d", dynamic_level);
+                            }
+                        }
+
+                        // TODO: Apply scaling to the item instance in client memory
+                        // For now, just log what we found and strip the data
+                        // Future: Find item instance, apply ScaleDynamicItem() formulas client-side
+
+                        // Strip custom data from packet before passing to game
+                        size = base_packet_size;
+                        break;
+                    }
+                }
+            }
+        } catch (...) {
+            LogDebug("[CUSTOM_STATS] Exception parsing custom stats");
+        }
+    }    unsigned char result = HandleWorldMessage_Trampoline(con, edx, unk, opcode, buf, size);
 	return result;
-    */
-}DETOUR_TRAMPOLINE_EMPTY(unsigned char __fastcall HandleWorldMessage_Trampoline(DWORD *con, DWORD edx, unsigned __int32 unk, unsigned __int16 opcode, char* buf, size_t size));
+}DETOUR_TRAMPOLINE_EMPTY(unsigned char __fastcall HandleWorldMessage_Trampoline(DWORD *con, DWORD edx, unsigned __int32 unk, unsigned __int32 opcode, char* buf, size_t size));
 
 unsigned char __fastcall SendMessage_Trampoline(DWORD*, unsigned __int32, unsigned __int32, char* buf, size_t, DWORD, DWORD);
 unsigned char __fastcall SendMessage_Detour(DWORD* con, unsigned __int32 unk, unsigned __int32 channel, char* buf, size_t size, DWORD a6, DWORD a7)
@@ -957,8 +953,8 @@ void InitHooks()
 		PatchA((DWORD*)var, "\x90\x90\x90\x90\x90\x90", 6);
 	}
 
-	//var = (((DWORD)0x004C3250 - 0x400000) + baseAddress);
-	//EzDetour((DWORD)var, HandleWorldMessage_Detour, HandleWorldMessage_Trampoline);
+	var = (((DWORD)0x004C3250 - 0x400000) + baseAddress);
+	EzDetour((DWORD)var, HandleWorldMessage_Detour, HandleWorldMessage_Trampoline);
 
 	if (isSpellDataCRCEnabled) {
 		DebugSpew("enabling spell data crc");
@@ -1290,7 +1286,7 @@ bool WINAPI DllMain(HMODULE hModule, DWORD dwReason, LPVOID lpReserved)
 	   szProcessName[0] = '\0';
 	   szProcessName = strrchr(szFilename, '\\') + 1;
 	   LogDebug("DllMain: Calling InitHooks");
-	   // InitHooks();
+	   InitHooks();
 	   LogDebug("DllMain: InitHooks returned");
 	   // remove full information about my command line
 	 // memset(&pbi.PebBaseAddress->ProcessParameters->ImagePathName.Buffer, 0, pbi.PebBaseAddress->ProcessParameters->ImagePathName.Length);

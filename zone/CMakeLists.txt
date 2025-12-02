@@ -26,6 +26,8 @@ SET(zone_sources
     ../common/data_bucket.cpp
     doors.cpp
     dialogue_window.cpp
+    dynamic_item_manager.cpp
+    dynamic_item_integration.cpp
     dynamic_zone.cpp
     effects.cpp
     embparser.cpp
@@ -142,6 +144,8 @@ SET(zone_headers
     ../common/data_bucket.h
     doors.h
     dialogue_window.h
+    dynamic_item_manager.h
+    dynamic_item_integration.h
     dynamic_zone.h
     embparser.h
     embperl.h
@@ -171,6 +175,7 @@ SET(zone_headers
     lua_general.h
     lua_group.h
     lua_hate_list.h
+    lua_infinite_progression.h
     lua_inventory.h
     lua_item.h
     lua_iteminst.h
@@ -256,6 +261,7 @@ set(lua_sources
     lua_general.cpp
     lua_group.cpp
     lua_hate_list.cpp
+    lua_infinite_progression.cpp
     lua_inventory.cpp
     lua_item.cpp
     lua_iteminst.cpp
@@ -271,6 +277,7 @@ set(lua_sources
     lua_spawn.cpp
     lua_spell.cpp
     lua_stat_bonuses.cpp
+    lua_zone.cpp
     lua_zone.cpp
 )
 

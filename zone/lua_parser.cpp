@@ -29,6 +29,7 @@
 #include "lua_general.h"
 #include "lua_group.h"
 #include "lua_hate_list.h"
+#include "lua_infinite_progression.h"
 #include "lua_inventory.h"
 #include "lua_item.h"
 #include "lua_iteminst.h"
@@ -1342,6 +1343,7 @@ void LuaParser::MapFunctions(lua_State *L) {
 			lua_register_message_types(),
 			lua_register_zone_types(),
 			lua_register_languages(),
+			lua_register_infinite_progression(),
 			lua_register_entity(),
 			lua_register_encounter(),
 			lua_register_mob(),

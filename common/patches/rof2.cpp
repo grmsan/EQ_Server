@@ -6441,7 +6441,8 @@ namespace RoF2
 
 	void SerializeItem(EQ::OutBuffer& ob, const EQ::ItemInstance *inst, int16 slot_id_in, uint8 depth, ItemPacketType packet_type)
 	{
-		const EQ::ItemData *item = inst->GetUnscaledItem();
+		// Send scaled item stats - the DLL will prevent cache pollution
+		const EQ::ItemData *item = inst->GetItem();
 
 		RoF2::structs::ItemSerializationHeader hdr;
 
@@ -6927,25 +6928,42 @@ namespace RoF2
 				ob.overwrite(count_pos, (const char*)&subitem_count, sizeof(uint32));
 		}
 
-		// Custom Stats Injection (Post-SubItems to support recursion if DLL hooks DeSerialize)
-		const EQ::ItemData* scaled_item = inst->GetItem();
-		if (scaled_item != item) {
-			Log(Logs::General, Logs::Netcode, "RoF2::SerializeItem: Appending Custom Stats for ItemID %d Slot %d PacketType %d", item->ID, slot_id_in, packet_type);
-			uint32_t magic = 0x1337C0DE;
-			ob.write((const char*)&magic, sizeof(magic));
+		// Append custom stat data for client DLL to apply per-instance
+		// Format: magic marker (4 bytes) + count (2 bytes) + key-value pairs
+		// This prevents the client from polluting the global Item Definition cache
+		if (!inst->GetCustomDataString().empty()) {
+			uint32 magic = 0x1337C0DE; // Magic marker for custom stats
+			ob.write((const char*)&magic, sizeof(uint32));
 
-			int32_t val;
-			val = scaled_item->HP; ob.write((const char*)&val, sizeof(val));
-			val = scaled_item->Mana; ob.write((const char*)&val, sizeof(val));
-			val = scaled_item->AC; ob.write((const char*)&val, sizeof(val));
+			// Parse custom data string (format: "KEY1^VAL1^KEY2^VAL2^...")
+			std::string custom_str = inst->GetCustomDataString();
+			auto components = Strings::Split(custom_str, "^");
+			uint16 pair_count = (uint16)(components.size() / 2);
+			ob.write((const char*)&pair_count, sizeof(uint16));
 
-			val = scaled_item->AStr; ob.write((const char*)&val, sizeof(val));
-			val = scaled_item->ASta; ob.write((const char*)&val, sizeof(val));
-			val = scaled_item->ADex; ob.write((const char*)&val, sizeof(val));
-			val = scaled_item->AAgi; ob.write((const char*)&val, sizeof(val));
-			val = scaled_item->AInt; ob.write((const char*)&val, sizeof(val));
-			val = scaled_item->AWis; ob.write((const char*)&val, sizeof(val));
-			val = scaled_item->ACha; ob.write((const char*)&val, sizeof(val));
+			// Write each key-value pair
+			for (uint16 i = 0; i < pair_count; i++) {
+				if ((i * 2 + 1) >= components.size()) break; // Safety check
+
+				std::string key = components[i * 2];
+				std::string val = components[(i * 2) + 1];
+
+				if (key.empty() || val.empty()) continue; // Skip empty entries
+
+				// Write key (max 32 chars, null-terminated)
+				char key_buf[32] = {0};
+				strncpy(key_buf, key.c_str(), 31);
+				ob.write(key_buf, 32);
+
+				// Write value as int32 (with error handling)
+				int32 value = 0;
+				try {
+					value = std::stoi(val);
+				} catch (...) {
+					value = 0; // Default to 0 on parse error
+				}
+				ob.write((const char*)&value, sizeof(int32));
+			}
 		}
 	}
 

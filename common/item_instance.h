@@ -153,10 +153,11 @@ namespace EQ
 		bool IsWeapon() const;
 		bool IsAmmo() const;
 
-		// Accessors
-		const uint32 GetID() const { return ((m_item) ? m_item->ID : 0); }
-		const uint32 GetItemScriptID() const { return ((m_item) ? m_item->ScriptFileID : 0); }
-		const ItemData* GetItem() const;
+	// Accessors
+	const uint32 GetID() const { return ((m_item) ? m_item->ID : 0); }
+	void SetItemID(uint32 item_id) { if (m_item) { const_cast<ItemData*>(m_item)->ID = item_id; } }
+	const uint32 GetItemScriptID() const { return ((m_item) ? m_item->ScriptFileID : 0); }
+	const ItemData* GetItem() const;
 		const ItemData* GetUnscaledItem() const;
 
 		const uint8 GetItemType() const { return m_item ? m_item->ItemType : 255; } // Return 255 so you know there's no valid item
@@ -224,6 +225,7 @@ namespace EQ
 
 		void Initialize(SharedDatabase *db = nullptr);
 		void ScaleItem();
+		void ScaleDynamicItem(int level);
 
 		std::string Serialize(int16 slot_id) const { InternalSerializedItem_Struct s; s.slot_id = slot_id; s.inst = (const void*)this; std::string ser; ser.assign((char*)&s, sizeof(InternalSerializedItem_Struct)); return ser; }
 		void Serialize(OutBuffer& ob, int16 slot_id) const { InternalSerializedItem_Struct isi; isi.slot_id = slot_id; isi.inst = (const void*)this; ob.write((const char*)&isi, sizeof(isi)); }

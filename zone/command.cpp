@@ -235,6 +235,7 @@ int command_init(void)
 		command_add("unscribespells", "Clear out your or your player target's spell book.", AccountStatus::GMCoder, command_unscribespells) ||
 		command_add("untraindisc", "[Spell ID] - Untrain your or your target's discipline by Spell ID", AccountStatus::GMCoder, command_untraindisc) ||
 		command_add("untraindiscs", "Untrains all disciplines from your target.", AccountStatus::GMCoder, command_untraindiscs) ||
+		command_add("upgrade", "[slot_id] [levels] - Upgrade an equipped item using dynamic item scaling (default: cursor, 1 level)", AccountStatus::Guide, command_upgrade) ||
 		command_add("wc", "[Slot ID] [Material] [Hero Forge Model] [Elite Material] - Sets the specified slot for you or your target to a material, Hero Forge Model and Elite Material are optional", AccountStatus::GMMgmt, command_wc) ||
 		command_add("worldshutdown", "Shut down world and all zones", AccountStatus::GMMgmt, command_worldshutdown) ||
 		command_add("wp", "[add|delete] [grid_id] [pause] [waypoint_id] [-h] - Add or delete a waypoint by grid ID. (-h to use current heading)", AccountStatus::GMAreas, command_wp) ||

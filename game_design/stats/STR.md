@@ -1,5 +1,8 @@
 # Strength (STR) - Design Document
 
+> **⚙️ BALANCE CONFIGURATION**: All tunable values for this system are centralized in `zone/combat_balance_config.h`.  
+> **📊 IMPLEMENTATION**: Technical details in `game_design/STR_IMPLEMENTATION_PLAN.md`.
+
 ## Core Philosophy
 Strength is the measure of physical force and stability. In our Solo Server environment, it serves two distinct purposes:
 1.  **The Engine of Damage:** For martial classes, Strength is the primary multiplier that drives DPS from "Classic" levels to "God Tier" (100k+ DPS).
@@ -13,9 +16,30 @@ To achieve the target DPS curve (5 DPS at Level 1 -> 100,000 DPS at Level 70), a
 
 ### The Formula
 ```cpp
-StrengthDamageBonus = Strength * (Level / 10);
+StrengthDamageBonus = Strength * (Level / STR_LEVEL_DIVISOR);
+// Where STR_LEVEL_DIVISOR = 10.0f (from combat_balance_config.h)
+// Minimum Multiplier: STR_MIN_LEVEL_MULTIPLIER = 0.1f
 ```
-*Minimum Multiplier: 0.1*
+
+**Tunable Constants** (see `zone/combat_balance_config.h`):
+- `STR_LEVEL_DIVISOR = 10.0f` - Controls level-based scaling (higher = less damage at low levels)
+- `STR_MIN_LEVEL_MULTIPLIER = 0.1f` - Minimum effectiveness (prevents zero damage)
+- `OFFHAND_STR_PENALTY = 0.5f` - Offhand gets 50% STR damage (balances dual-wield)
+
+### Weapon Delay Bonuses
+
+**In addition to STR scaling, slower weapons get a delay-based bonus** (controlled by `ENABLE_WEAPON_DELAY_BONUS = true`):
+
+- **1H Weapons**: `(delay - 40) / 3` bonus damage (for delay > 40)
+- **2H Weapons**: `(delay - 30) / 2.5` bonus damage (for delay > 30)
+
+**Rationale**: Slow weapons should hit harder to balance their lower attack speed. This makes weapon choice meaningful beyond just DPS calculations.
+
+**Tunable Constants**:
+- `DELAY_BONUS_DIVISOR_1H = 3.0f` - Adjusts 1H scaling strength
+- `DELAY_THRESHOLD_1H = 40` - Minimum delay for 1H bonus
+- `DELAY_BONUS_DIVISOR_2H = 2.5f` - Adjusts 2H scaling (slightly better than 1H)
+- `DELAY_THRESHOLD_2H = 30` - Minimum delay for 2H bonus
 
 ### DPS Progression Analysis (Melee/Martial Focus)
 *Note: This progression targets martial classes (Warrior, Rogue, Monk, Berserker, Ranger). Casters and Summoners achieve similar DPS targets via Spells and Pets (INT/WIS/CHA scaling), with Strength providing supplemental physical damage or utility.*
@@ -83,10 +107,11 @@ StrengthDamageBonus = Strength * (Level / 10);
 
 ### C. The Summoners (Magician, Necromancer, Beastlord)
 *   **Feature: "Sympathetic Might"**
-    *   **Mechanic:** Pets inherit **50%** of the Owner's Strength.
+    *   **Mechanic:** Pets inherit owner's Strength at `PET_STR_INHERITANCE` rate (currently **50%**).
     *   **Scenario:** You find a Ring of the Giant (+50 STR).
-    *   **Benefit:** Your Pet gains +25 STR. At Level 70 (x7 multiplier), that is **+175 Base Damage** per swing for the pet.
+    *   **Benefit:** Your Pet gains +25 STR (50% of 50). At Level 70 (x7 multiplier), that is **+175 Base Damage** per swing for the pet.
     *   *Result:* STR is a top-tier DPS stat for Summoners.
+    *   **Tunable**: Adjust `PET_STR_INHERITANCE` in `combat_balance_config.h` if pets are too strong/weak.
 
 ### D. The Priests (Cleric, Druid, Shaman)
 *   **Feature: "The Battle Priest"**
@@ -121,3 +146,24 @@ To support this curve, gear must provide STR in increasing density:
 *   **Level 70:** Items have +50 to +100 STR. (Total ~1000+).
 
 This gear curve aligns perfectly with the `STR * (Level/10)` formula to produce the desired DPS explosion at the end game.
+
+---
+
+## 4. System Applicability
+
+**Who Gets STR Scaling?** (Controlled by `combat_balance_config.h`)
+
+✅ **Players**: All player characters get full STR scaling (`IsClient()`)  
+✅ **Player Pets**: Inherit owner STR at `PET_STR_INHERITANCE` rate (currently 50%)  
+❌ **NPCs**: Do NOT get STR scaling (`NPCS_USE_STR_SCALING = false`)  
+❌ **Charmed NPCs**: Do NOT get STR scaling (`CHARMED_NPCS_USE_STR_SCALING = false`)  
+
+**Rationale**:
+- Player power fantasy: Players scale infinitely, NPCs have fixed power
+- Balance: Prevents NPCs from one-shotting players with high STR
+- Charm: Already powerful, doesn't need STR scaling on top
+
+**Damage Mitigation**:
+- STR damage **IS affected by armor class** (`STR_DAMAGE_AFFECTED_BY_AC = true`)
+- This is raw physical damage, not armor-penetrating
+- Future: DEX may get AC penetration for "skilled attacks"

@@ -464,6 +464,7 @@ set(gm_command_sources
     gm_commands/unscribespells.cpp
     gm_commands/untraindisc.cpp
     gm_commands/untraindiscs.cpp
+    gm_commands/upgrade.cpp
     gm_commands/wc.cpp
     gm_commands/worldshutdown.cpp
     gm_commands/worldwide.cpp

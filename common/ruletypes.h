@@ -628,6 +628,7 @@ RULE_BOOL(Combat, AssassinateOnlyHumanoids, true, "Enable or disable Assassinate
 RULE_INT(Combat, AssassinateLevelRequirement, 60, "Level requirement to enable assassinate attempts on backstabs. The default is 60.")
 RULE_BOOL(Combat, HeadshotOnlyHumanoids, true, "Enable or disable Headshot only being allowed on Humanoids, true by default.")
 RULE_BOOL(Combat, EnableWarriorShielding, true, "Enable or disable Warrior Shielding Ability (/shield), true by default.")
+RULE_BOOL(Combat, UseNewStrDamageFormula, false, "Enable new STR-based damage system (Option B - Additive Base Damage). FALSE = use legacy formulas, TRUE = use new STR scaling from combat_balance_config.h. Toggle for A/B testing during development.")
 RULE_BOOL(Combat, BackstabIgnoresElemental, false, "Enable or disable Elemental weapon damage affecting backstab damage, false by default.")
 RULE_BOOL(Combat, BackstabIgnoresBane, false, "Enable or disable Bane weapon damage affecting backstab damage, false by default.")
 RULE_INT(Combat, DoubleBackstabLevelRequirement, 55, "Level requirement to enable double backstab attempts. The default is 55.")

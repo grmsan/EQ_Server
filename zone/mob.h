@@ -613,7 +613,7 @@ public:
 	inline int32 GetAC() const { return AC; }
 	inline virtual int32 GetATK() const { return ATK + itembonuses.ATK + spellbonuses.ATK; }
 	inline virtual int32 GetATKBonus() const { return itembonuses.ATK + spellbonuses.ATK; }
-	inline virtual int32 GetSTR() const { return STR + itembonuses.STR + spellbonuses.STR; }
+	virtual int32 GetSTR() const; // Moved to .cpp for pet STR inheritance logic
 	inline virtual int32 GetSTA() const { return STA + itembonuses.STA + spellbonuses.STA; }
 	inline virtual int32 GetDEX() const { return DEX + itembonuses.DEX + spellbonuses.DEX; }
 	inline virtual int32 GetAGI() const { return AGI + itembonuses.AGI + spellbonuses.AGI; }
@@ -1116,6 +1116,7 @@ public:
 	int GetPetAvoidanceBonusFromOwner();
 	int GetPetACBonusFromOwner();
 	int GetPetATKBonusFromOwner();
+	int GetPetSTRBonusFromOwner();
 
 	inline const uint8 GetBodyType() const { return bodytype; }
 	inline const uint8 GetOrigBodyType() const { return orig_bodytype; }
@@ -1138,6 +1139,7 @@ public:
 	int32 GetMeleeMitigation();
 
 	uint8 GetWeaponDamageBonus(const EQ::ItemData* weapon, bool offhand = false);
+	int GetStrengthDamageBonus(bool offhand = false);
 	const DamageTable &GetDamageTable() const;
 	int GetMobFixedOffenseSkill();
 	int GetMobFixedWeaponSkill();

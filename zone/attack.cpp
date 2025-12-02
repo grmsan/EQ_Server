@@ -35,6 +35,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 #include "fastmath.h"
 #include "mob.h"
 #include "npc.h"
+#include "combat_balance_config.h"
+
+#include <cmath>
 
 #include "bot.h"
 
@@ -1681,6 +1684,22 @@ bool Mob::Attack(Mob* other, int Hand, bool bRiposte, bool IsStrikethrough, bool
 
 		int ucDamageBonus = 0;
 
+		// NEW STR DAMAGE SYSTEM (Option B - Additive Base Damage)
+		// When enabled, STR bonus is added to base damage alongside weapon delay bonus
+		// Both bonuses then scale through the existing percent modifier pipeline
+		if (RuleB(Combat, UseNewStrDamageFormula)) {
+			// Apply STR bonus to both hands for all classes
+			bool is_offhand = (Hand == EQ::invslot::slotSecondary);
+			int str_bonus = GetStrengthDamageBonus(is_offhand);
+
+			my_hit.base_damage += str_bonus;
+			hate += str_bonus;
+
+			LogCombatDetail("STR bonus applied: [{}] (offhand: [{}])", str_bonus, is_offhand);
+		}
+
+		// LEGACY WEAPON DAMAGE BONUS SYSTEM
+		// This remains for backward compatibility when new system is disabled
 		if (Hand == EQ::invslot::slotPrimary && GetLevel() >= 28 && IsWarriorClass())
 		{
 			// Damage bonuses apply only to hits from the main hand (Hand == MainPrimary) by characters level 28 and above
@@ -3489,6 +3508,89 @@ uint8 Mob::GetWeaponDamageBonus(const EQ::ItemData *weapon, bool offhand)
 			damage_bonus += delay_bonus;
 		}
 		return damage_bonus;
+	}
+
+	return 0;
+}
+
+int Mob::GetStrengthDamageBonus(bool offhand)
+{
+	// Only players and player pets get STR scaling
+	// NPCs use fixed damage values for balance (player power fantasy)
+	if (!IsOfClientBotMerc() && !IsPet()) {
+		return 0;
+	}
+
+	// Get effective STR (includes items, spells, AAs, and pet inheritance)
+	int strength = GetSTR();
+	int level = GetLevel();
+
+	// Calculate level-based multiplier using centralized config
+	// Formula: STR * max((Level^EXPONENT) / DIVISOR, MIN_MULTIPLIER)
+	float level_factor = std::pow(static_cast<float>(level), CombatBalance::STR_LEVEL_EXPONENT) / CombatBalance::STR_LEVEL_DIVISOR;
+	level_factor = std::max(level_factor, CombatBalance::STR_MIN_LEVEL_MULTIPLIER);
+
+	// Calculate base STR bonus
+	float str_bonus = strength * level_factor;
+
+	// Apply offhand penalty if applicable
+	if (offhand) {
+		str_bonus *= CombatBalance::OFFHAND_STR_PENALTY;
+	}
+
+	// Apply pet damage scalar (separate from inheritance)
+	if (IsPet()) {
+		str_bonus *= CombatBalance::PET_STR_DAMAGE_SCALAR;
+	}
+
+	// Apply optional diminishing returns for ultra-high STR
+	if (CombatBalance::ENABLE_STR_DIMINISHING_RETURNS && strength > CombatBalance::STR_DIMINISHING_START) {
+		float base_contribution = CombatBalance::STR_DIMINISHING_START * level_factor;
+		float excess_str = strength - CombatBalance::STR_DIMINISHING_START;
+		float diminished_contribution = std::pow(excess_str, CombatBalance::STR_DIMINISHING_POWER) * level_factor;
+		str_bonus = base_contribution + diminished_contribution;
+
+		// Reapply offhand/pet modifiers after diminishing
+		if (offhand) str_bonus *= CombatBalance::OFFHAND_STR_PENALTY;
+		if (IsPet()) str_bonus *= CombatBalance::PET_STR_DAMAGE_SCALAR;
+	}
+
+	return static_cast<int>(str_bonus);
+}
+
+int32 Mob::GetSTR() const
+{
+	// Base STR calculation (includes items, spells, and AAs)
+	int32 base_str = STR + itembonuses.STR + spellbonuses.STR + aabonuses.STR;
+
+	// Pets inherit a percentage of owner's STR (centralized in combat_balance_config.h)
+	// Inline logic to avoid const-safety issues
+	const Mob *owner = nullptr;
+	if (GetOwnerID()) {
+		owner = entity_list.GetMob(GetOwnerID());
+	}
+
+	if (owner) {
+		int32 owner_str = owner->GetSTR();
+		base_str += static_cast<int32>(owner_str * CombatBalance::PET_STR_INHERITANCE);
+	}
+
+	return base_str;
+}
+
+int Mob::GetPetSTRBonusFromOwner()
+{
+	// Pets inherit a percentage of their owner's STR
+	// This feeds into GetSTR() calculation, not damage directly
+	Mob *owner = nullptr;
+	if (IsPet())
+		owner = GetOwner();
+	else if (IsNPC() && CastToNPC()->GetSwarmOwner())
+		owner = entity_list.GetMobID(CastToNPC()->GetSwarmOwner());
+
+	if (owner) {
+		int owner_str = owner->GetSTR();
+		return static_cast<int>(owner_str * CombatBalance::PET_STR_INHERITANCE);
 	}
 
 	return 0;

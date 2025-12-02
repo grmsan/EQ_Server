@@ -188,6 +188,7 @@ void command_unscribespell(Client *c, const Seperator *sep);
 void command_unscribespells(Client *c, const Seperator *sep);
 void command_untraindisc(Client *c, const Seperator *sep);
 void command_untraindiscs(Client *c, const Seperator *sep);
+void command_upgrade(Client *c, const Seperator *sep);
 void command_wc(Client *c, const Seperator *sep);
 void command_worldshutdown(Client *c, const Seperator *sep);
 void command_wp(Client *c, const Seperator *sep);

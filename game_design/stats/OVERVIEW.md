@@ -43,13 +43,30 @@ To achieve "drastic improvement" and "meaningful upgrades," we propose a system 
 
 #### 1. Titanic Strength (Damage & ATK)
 **Current:** `STR * 0.9` (Weak, flat).
-**Proposed:**
-*   **Formula:** `ATK_Bonus = (STR * Level) / 5`
+
+**Proposed (OPTION B - Additive Base Damage):**
+*   **Architecture:** STR bonus is added to base damage alongside weapon delay bonus, then all percent modifiers scale the total.
+*   **Formula:** `StrengthDamageBonus = STR * (Level / STR_LEVEL_DIVISOR)` where `STR_LEVEL_DIVISOR = 10.0f`
+*   **Total Base Damage:** `BaseDamage = WeaponDamage + DelayBonus + StrengthBonus`
 *   **Impact:**
-    *   **Level 1, 100 STR:** 20 ATK.
-    *   **Level 60, 100 STR:** 1200 ATK.
-    *   **Level 60, 355 STR:** 4260 ATK.
-    *   *Result:* Strength becomes the primary driver of damage at high levels. Gaining 100 STR at level 60 adds **1200 ATK**, a massive upgrade compared to the old 90 ATK.
+    *   **Level 1, 100 STR:** 10 bonus damage (100 * 0.1)
+    *   **Level 10, 100 STR:** 100 bonus damage (100 * 1.0)
+    *   **Level 60, 100 STR:** 600 bonus damage (100 * 6.0)
+    *   **Level 60, 500 STR:** 3000 bonus damage (500 * 6.0)
+    *   *Result:* Strength becomes a primary driver of damage at high levels. The large base damage (weapon + delay + STR) then multiplies through existing crit/disc/buff systems for massive end-game DPS.
+
+**Why Option B Instead of Option C (Percent Modifier)?**
+- **Predictable Math:** STR is a flat bonus added to base; percent mods multiply the whole thing. No unexpected multiplicative explosions.
+- **Clear Mental Model:** "My weapon hits for X, delay adds Y, STR adds Z" - easy to understand and debug.
+- **Safer Scaling:** Large percent buffs (100% melee disc) scale the whole base, but STR itself doesn't multiply with other percent effects.
+- **Weapon Identity Preserved:** Delay bonuses keep weapon choice meaningful alongside STR scaling.
+
+**Tuning Strategy (see `zone/combat_balance_config.h`):**
+1. Start with linear formula using `STR_LEVEL_DIVISOR` and `STR_MIN_LEVEL_MULTIPLIER`
+2. Test at levels 1, 10, 50, 70 with low/mid/high STR values
+3. If top-end feels explosive, raise `STR_LEVEL_DIVISOR` (gentler scaling)
+4. If racial gaps at level 1 feel too large, enable `ENABLE_RACIAL_STR_COMPRESSION`
+5. Only add diminishing returns (`ENABLE_STR_DIMINISHING_RETURNS`) if linear tuning isn't enough
 
 #### 2. Super Stamina (HP)
 **Current:** Diminishing returns after 255.

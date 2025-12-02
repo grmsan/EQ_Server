@@ -91,6 +91,13 @@ EQ::ItemInstance::ItemInstance(SharedDatabase *db, uint32 item_id, int16 charges
 
 	m_item     = db->GetItem(item_id);
 
+	// If item not found and it's a dynamic item (ID >= 1 billion), try loading from database
+	if (!m_item && item_id >= 1000000000U) {
+		// Load from database and add to cache for future use
+		db->LoadDynamicItemToCache(item_id);
+		m_item = db->GetItem(item_id);
+	}
+
 	if (m_item) {
 		m_item = new ItemData(*m_item);
 	}

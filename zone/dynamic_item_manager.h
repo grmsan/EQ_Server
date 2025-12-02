@@ -20,6 +20,7 @@ struct ScalingConfig {
 	int mana_base_increment = 1;    // +1 Mana per level
 	int stat_base_increment = 1;    // +1 stat per level
 	int attack_base_increment = 2;  // +2 attack per level
+	int damage_base_increment = 4;  // +4 damage per level
 
 	// Tier bonuses (added per tier)
 	int ac_tier_bonus = 1;          // Each tier adds +1 to increment
@@ -27,6 +28,7 @@ struct ScalingConfig {
 	int mana_tier_bonus = 1;        // Each tier adds +1 to increment
 	int stat_tier_bonus = 1;        // Each tier adds +1 to increment
 	int attack_tier_bonus = 2;      // Each tier adds +2 to increment
+	int damage_tier_bonus = 4;      // Each tier adds +4 to increment
 
 	// Combat stats (slow scaling, ~10 at level 100)
 	int combat_base_increment = 0;  // No gain in tier 0

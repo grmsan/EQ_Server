@@ -161,64 +161,52 @@ void DynamicItemManager::ApplyLevelScaling(EQ::ItemData* item, const EQ::ItemDat
 	item->Endur = CalculateTieredStat(base_item->Endur, level, m_config.hp_base_increment, m_config.hp_tier_bonus);
 
 	// Attribute stats with 127 cap + heroic overflow
-	if (base_item->AStr > 0) {
-		int raw_str = CalculateTieredStat(base_item->AStr, level, m_config.stat_base_increment, m_config.stat_tier_bonus);
-		int base_str = 0, heroic_str = 0;  // Start at 0, ApplyStatCap will set correctly
-		ApplyStatCap(base_str, heroic_str, raw_str);
-		item->AStr = static_cast<int8>(base_str);          // Safe: base_str is capped at 127
-		item->HeroicStr = static_cast<int16>(heroic_str);  // Use int16 for heroics
-	}
+	// All items gain stats on upgrade, even if base is 0
+	int raw_str = CalculateTieredStat(base_item->AStr, level, m_config.stat_base_increment, m_config.stat_tier_bonus);
+	int base_str = 0, heroic_str = 0;
+	ApplyStatCap(base_str, heroic_str, raw_str);
+	item->AStr = static_cast<int8>(base_str);
+	item->HeroicStr = static_cast<int16>(heroic_str);
 
-	if (base_item->ASta > 0) {
-		int raw_sta = CalculateTieredStat(base_item->ASta, level, m_config.stat_base_increment, m_config.stat_tier_bonus);
-		int base_sta = 0, heroic_sta = 0;
-		ApplyStatCap(base_sta, heroic_sta, raw_sta);
-		item->ASta = static_cast<int8>(base_sta);
-		item->HeroicSta = static_cast<int16>(heroic_sta);
-	}
+	int raw_sta = CalculateTieredStat(base_item->ASta, level, m_config.stat_base_increment, m_config.stat_tier_bonus);
+	int base_sta = 0, heroic_sta = 0;
+	ApplyStatCap(base_sta, heroic_sta, raw_sta);
+	item->ASta = static_cast<int8>(base_sta);
+	item->HeroicSta = static_cast<int16>(heroic_sta);
 
-	if (base_item->AAgi > 0) {
-		int raw_agi = CalculateTieredStat(base_item->AAgi, level, m_config.stat_base_increment, m_config.stat_tier_bonus);
-		int base_agi = 0, heroic_agi = 0;
-		ApplyStatCap(base_agi, heroic_agi, raw_agi);
-		item->AAgi = static_cast<int8>(base_agi);
-		item->HeroicAgi = static_cast<int16>(heroic_agi);
-	}
+	int raw_agi = CalculateTieredStat(base_item->AAgi, level, m_config.stat_base_increment, m_config.stat_tier_bonus);
+	int base_agi = 0, heroic_agi = 0;
+	ApplyStatCap(base_agi, heroic_agi, raw_agi);
+	item->AAgi = static_cast<int8>(base_agi);
+	item->HeroicAgi = static_cast<int16>(heroic_agi);
 
-	if (base_item->ADex > 0) {
-		int raw_dex = CalculateTieredStat(base_item->ADex, level, m_config.stat_base_increment, m_config.stat_tier_bonus);
-		int base_dex = 0, heroic_dex = 0;
-		ApplyStatCap(base_dex, heroic_dex, raw_dex);
-		item->ADex = static_cast<int8>(base_dex);
-		item->HeroicDex = static_cast<int16>(heroic_dex);
-	}
+	int raw_dex = CalculateTieredStat(base_item->ADex, level, m_config.stat_base_increment, m_config.stat_tier_bonus);
+	int base_dex = 0, heroic_dex = 0;
+	ApplyStatCap(base_dex, heroic_dex, raw_dex);
+	item->ADex = static_cast<int8>(base_dex);
+	item->HeroicDex = static_cast<int16>(heroic_dex);
 
-	if (base_item->AInt > 0) {
-		int raw_int = CalculateTieredStat(base_item->AInt, level, m_config.stat_base_increment, m_config.stat_tier_bonus);
-		int base_int = 0, heroic_int = 0;
-		ApplyStatCap(base_int, heroic_int, raw_int);
-		item->AInt = static_cast<int8>(base_int);
-		item->HeroicInt = static_cast<int16>(heroic_int);
-	}
+	int raw_int = CalculateTieredStat(base_item->AInt, level, m_config.stat_base_increment, m_config.stat_tier_bonus);
+	int base_int = 0, heroic_int = 0;
+	ApplyStatCap(base_int, heroic_int, raw_int);
+	item->AInt = static_cast<int8>(base_int);
+	item->HeroicInt = static_cast<int16>(heroic_int);
 
-	if (base_item->AWis > 0) {
-		int raw_wis = CalculateTieredStat(base_item->AWis, level, m_config.stat_base_increment, m_config.stat_tier_bonus);
-		int base_wis = 0, heroic_wis = 0;
-		ApplyStatCap(base_wis, heroic_wis, raw_wis);
-		item->AWis = static_cast<int8>(base_wis);
-		item->HeroicWis = static_cast<int16>(heroic_wis);
-	}
+	int raw_wis = CalculateTieredStat(base_item->AWis, level, m_config.stat_base_increment, m_config.stat_tier_bonus);
+	int base_wis = 0, heroic_wis = 0;
+	ApplyStatCap(base_wis, heroic_wis, raw_wis);
+	item->AWis = static_cast<int8>(base_wis);
+	item->HeroicWis = static_cast<int16>(heroic_wis);
 
-	if (base_item->ACha > 0) {
-		int raw_cha = CalculateTieredStat(base_item->ACha, level, m_config.stat_base_increment, m_config.stat_tier_bonus);
-		int base_cha = 0, heroic_cha = 0;
-		ApplyStatCap(base_cha, heroic_cha, raw_cha);
-		item->ACha = static_cast<int8>(base_cha);
-		item->HeroicCha = static_cast<int16>(heroic_cha);
-	}
+	int raw_cha = CalculateTieredStat(base_item->ACha, level, m_config.stat_base_increment, m_config.stat_tier_bonus);
+	int base_cha = 0, heroic_cha = 0;
+	ApplyStatCap(base_cha, heroic_cha, raw_cha);
+	item->ACha = static_cast<int8>(base_cha);
+	item->HeroicCha = static_cast<int16>(heroic_cha);
 
-	// Attack (weapons only)
+	// Weapon damage and Attack (weapons only)
 	if (base_item->Damage > 0) {
+		item->Damage = CalculateTieredStat(base_item->Damage, level, m_config.damage_base_increment, m_config.damage_tier_bonus);
 		item->Attack = CalculateTieredStat(base_item->Attack, level, m_config.attack_base_increment, m_config.attack_tier_bonus);
 	}
 
@@ -623,6 +611,10 @@ void DynamicItemManager::InsertItemIntoDatabase(uint32 dynamic_id, uint32 base_i
 	database.QueryDatabase(update_query);
 
 	Log(Logs::General, Logs::Status, "InsertItemIntoDatabase: SUCCESS - Created item %u (%s) from base %u", dynamic_id, item->Name, base_id);
+
+	// Load the fully-scaled item from database into cache
+	// This ensures the cache has the scaled stats, not the base stats
+	database.LoadDynamicItemToCache(dynamic_id);
 }
 
 } // namespace EQ

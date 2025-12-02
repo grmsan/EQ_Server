@@ -196,9 +196,17 @@ protected:
 	std::unique_ptr<EQ::FixedMemoryHashSet<FactionAssociations>> faction_associations_hash;
 	std::unique_ptr<EQ::MemoryMappedFile>                        spells_mmf;
 
+	// Dynamic items cache (ID >= 1 billion) - not in shared memory
+	mutable std::unordered_map<uint32, std::unique_ptr<EQ::ItemData>> dynamic_items_cache;
+	mutable std::mutex dynamic_items_mutex;
+
 public:
 	void SetSharedItemsCount(uint32 shared_items_count);
 	void SetSharedSpellsCount(uint32 shared_spells_count);
+	void LoadDynamicItemsCache();
+	void LoadDynamicItemToCache(uint32 item_id);
+	void AddDynamicItemToCache(uint32 item_id, EQ::ItemData* item_data);
+	void ClearDynamicItemsCache();
 protected:
 	uint32 m_shared_items_count = 0;
 	uint32 m_shared_spells_count = 0;

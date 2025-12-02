@@ -377,6 +377,10 @@ int main(int argc, char **argv)
 		LogError("Failed. But ignoring error and going on..");
 	}
 
+	// Load dynamic items into cache (items with ID >= 1 billion)
+	// These are not in shared memory to avoid hash size issues
+	database.LoadDynamicItemsCache();
+
 	if (!database.LoadSpells(hotfix_name, &SPDAT_RECORDS, &spells)) {
 		LogError("Loading spells failed!");
 		return 1;

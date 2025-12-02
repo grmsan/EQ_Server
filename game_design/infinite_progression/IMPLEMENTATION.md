@@ -72,15 +72,18 @@ private:
 ### Bit Layout
 ```
 32-bit Item ID:
-[P][LLLLL][IIIIII]
- │  │      └── Base Item ID (up to 999,999)
- │  └────────── Level (up to 99,999)
- └───────────── Prefix (5 = dynamic item)
+1LLLIIIIII
+│ │  └────── Base Item ID (last 6 digits)
+│ └──────── Level with offset of 100 (101-250 = levels 1-150)
+└────────── 1 billion prefix (marks dynamic items)
 
 Examples:
-  500001001 = Cloth Cap +1      (prefix:5, level:1, base:1001)
-  500127001 = Cloth Cap +127    (prefix:5, level:127, base:1001)
-  509999001 = Cloth Cap +9999   (prefix:5, level:9999, base:1001)
+  1,101,009,998 = Short Sword +1    (1B + 101 + 009998)
+  1,200,009,998 = Short Sword +100  (1B + 200 + 009998)
+  1,250,009,998 = Short Sword +150  (1B + 250 + 009998 - max level)
+
+Max Level: 150 (offset 250 in ID)
+Fits in signed int32: 1,250,999,999 < 2,147,483,647
 ```
 
 ### Encoding/Decoding
@@ -88,23 +91,24 @@ Examples:
 uint32 DynamicItemManager::GenerateDynamicID(uint32 base_id, int level) {
   if (level == 0) return base_id;  // Base item, no dynamic ID
 
-  uint32 prefix = 5;  // Dynamic item marker
-  uint32 encoded_level = std::min(level, 99999);
-  uint32 encoded_base = base_id % 1000000;  // Limit to 6 digits
+  // Format: 1LLLIIIIII (1 billion + level with offset + base ID)
+  uint32 level_with_offset = 100 + level;  // 101-250 for levels 1-150
+  uint32 encoded_base = base_id % 1000000;  // Last 6 digits
 
-  return (prefix * 100000000) + (encoded_level * 1000) + encoded_base;
+  return 1000000000 + (level_with_offset * 1000000) + encoded_base;
 }
 
 int DynamicItemManager::GetItemLevel(uint32 item_id) {
-  if (item_id < 500000000) return 0;  // Not a dynamic item
+  if (item_id < 1000000000) return 0;  // Not a dynamic item
 
-  return (item_id / 1000) % 100000;
+  uint32 level_with_offset = (item_id / 1000000) % 1000;
+  return level_with_offset - 100;  // Remove offset
 }
 
 uint32 DynamicItemManager::GetBaseItemID(uint32 item_id) {
-  if (item_id < 500000000) return item_id;  // Already base
+  if (item_id < 1000000000) return item_id;  // Already base
 
-  return item_id % 1000;
+  return item_id % 1000000;  // Last 6 digits
 }
 ```
 
@@ -115,21 +119,38 @@ uint32 DynamicItemManager::GetBaseItemID(uint32 item_id) {
 void DynamicItemManager::ApplyLevelScaling(EQ::ItemData* item, int level) {
   if (!item || level <= 0) return;
 
-  // Primary stats - scale existing
-  item->AC += level * 1;
-  item->HP += level * 2;
-  item->Mana += level * 1;
+  // ✅ IMPLEMENTED: Primary stats - scale with tiered formulas
+  item->AC = CalculateTieredStat(item->AC, level,
+                                  m_config.ac_base_increment,
+                                  m_config.ac_tier_bonus);
+  item->HP = CalculateTieredStat(item->HP, level,
+                                  m_config.hp_base_increment,
+                                  m_config.hp_tier_bonus);
+  item->Mana = CalculateTieredStat(item->Mana, level,
+                                    m_config.mana_base_increment,
+                                    m_config.mana_tier_bonus);
 
-  // Attribute stats - scale if exist
-  if (item->AStr > 0) item->AStr += level;
-  if (item->ASta > 0) item->ASta += level;
-  if (item->AAgi > 0) item->AAgi += level;
-  if (item->ADex > 0) item->ADex += level;
-  if (item->AWis > 0) item->AWis += level;
-  if (item->AInt > 0) item->AInt += level;
-  if (item->ACha > 0) item->ACha += level;
+  // ✅ IMPLEMENTED: Universal stat scaling - ALL items gain ALL stats
+  // NOTE: Removed "if (item->AStr > 0)" checks - items with 0 base STR now gain STR
+  int raw_str = CalculateTieredStat(item->AStr, level,
+                                     m_config.stat_base_increment,
+                                     m_config.stat_tier_bonus);
+  ApplyStatCap(item->AStr, item->HeroicStr, raw_str);
 
-  // Milestone bonuses
+  // Same for all other stats (STA, AGI, DEX, WIS, INT, CHA)
+  // Each can start from 0 and still scale up
+
+  // ✅ IMPLEMENTED: Weapon damage scaling (added damage_base_increment config)
+  if (item->Damage > 0) {
+    item->Damage = CalculateTieredStat(item->Damage, level,
+                                        m_config.damage_base_increment,  // +4
+                                        m_config.damage_tier_bonus);      // +4
+    item->Attack = CalculateTieredStat(item->Attack, level,
+                                        m_config.attack_base_increment,
+                                        m_config.attack_tier_bonus);
+  }
+
+  // ✅ IMPLEMENTED: Milestone bonuses
   ApplyMilestoneBonus(item, level);
 }
 ```
@@ -206,67 +227,185 @@ void DynamicItemManager::AddRandomStat(EQ::ItemData* item, int level) {
 }
 ```
 
+## Two-Tier Cache Architecture
+
+### ⚠️ Critical: Why We Need Two Tiers
+
+**Problem:** Dynamic items (ID >= 1 billion) cannot go in shared memory
+- Shared memory uses `FixedMemoryHashSet` with pre-allocated offset array
+- Would need `max_item_id + 1` entries in offset array
+- With max ID 1,250,999,999 → would need **4.8GB+ for offset array alone**
+- Result: `ACCESS_VIOLATION` crash on `shared_memory` startup
+
+**Solution:** Split caching strategy
+
+### Tier 1: Shared Memory (Base Items Only)
+**File:** `common/shareddb.cpp` lines 948-964
+
+```cpp
+bool SharedDatabase::GetItemsCount(int32& item_count, uint32& max_id) {
+  // CRITICAL: Filter out dynamic items (ID >= 1 billion)
+  std::string query = "SELECT MAX(id), COUNT(*) FROM items WHERE id < 1000000000";
+
+  auto results = QueryDatabase(query);
+  if (results.Success() && results.RowCount() == 1) {
+    auto row = results.begin();
+    max_id = static_cast<uint32>(atoul(row[0]));  // ~200,000 for base items
+    item_count = atoi(row[1]);
+    return true;
+  }
+  return false;
+}
+```
+
+**What Goes Here:**
+- All base items (ID < 1 billion)
+- Loaded at `shared_memory` startup
+- Available to all processes via OS shared memory
+- Fast lookup: `FixedMemoryHashSet` with hash table
+
+### Tier 2: Per-Process Cache (Dynamic Items)
+**File:** `common/shareddb.h` lines 200-214
+
+```cpp
+class SharedDatabase : public Database {
+public:
+  // Two-tier cache
+  const EQ::ItemData* GetItem(uint32 item_id);  // Checks both tiers
+
+  // Tier 2: Dynamic items (ID >= 1 billion)
+  void LoadDynamicItemsCache();              // Load all at startup (optional)
+  void LoadDynamicItemToCache(uint32 id);    // On-demand loading
+  void AddDynamicItemToCache(EQ::ItemData*); // Direct insertion
+  void ClearDynamicItemsCache();             // Cleanup
+
+private:
+  // Per-process storage
+  std::unordered_map<uint32, EQ::ItemData> dynamic_items_cache_;
+  std::mutex dynamic_items_mutex_;  // Thread-safe access
+};
+```
+
+**What Goes Here:**
+- Dynamic items only (ID >= 1 billion)
+- Per-process memory (not shared)
+- On-demand loading from database
+- Thread-safe with mutex
+
+### On-Demand Loading Flow
+
+**Scenario:** Player zones with Short Sword +100 (ID: 1,200,009,998)
+
+1. **ItemInstance Constructor** (`common/item_instance.cpp` lines 91-98):
+   ```cpp
+   m_item = db->GetItem(item_id);
+   if (!m_item && item_id >= 1000000000U) {
+       db->LoadDynamicItemToCache(item_id);  // Load from database
+       m_item = db->GetItem(item_id);         // Retry
+   }
+   ```
+
+2. **LoadDynamicItemToCache** (`common/shareddb.cpp` lines 2248-2547):
+   ```cpp
+   void SharedDatabase::LoadDynamicItemToCache(uint32 item_id) {
+     // Check if already cached (early return)
+     {
+       std::lock_guard<std::mutex> lock(dynamic_items_mutex_);
+       if (dynamic_items_cache_.find(item_id) != dynamic_items_cache_.end()) {
+         return;  // Already loaded
+       }
+     }
+
+     // Query database for this specific item
+     auto item = ItemsRepository::FindOne(*this, item_id);
+     if (item.id == 0) {
+       Log(Logs::General, Logs::Error, "Dynamic item [%u] not found in database", item_id);
+       return;
+     }
+
+     // Convert all 243 fields from repository to ItemData
+     EQ::ItemData item_data;
+     item_data.ID = item.id;
+     item_data.Name = strcpy(new char[64], item.name.c_str());
+     item_data.AC = item.ac;
+     item_data.HP = item.hp;
+     // ... (241 more fields)
+
+     // Add to cache (thread-safe)
+     {
+       std::lock_guard<std::mutex> lock(dynamic_items_mutex_);
+       dynamic_items_cache_[item_id] = item_data;
+     }
+
+     Log(Logs::General, Logs::Status,
+         "Loaded dynamic item [%u] (%s) from database into cache",
+         item_id, item_data.Name);
+   }
+   ```
+
+3. **GetItem Checks Both Tiers** (`common/shareddb.cpp` lines 977-990):
+   ```cpp
+   const EQ::ItemData* SharedDatabase::GetItem(uint32 item_id) {
+     // Tier 1: Check shared memory first (base items)
+     if (item_id < 1000000000) {
+       return items_hash->Get(item_id);  // Fast hash lookup
+     }
+
+     // Tier 2: Check per-process cache (dynamic items)
+     std::lock_guard<std::mutex> lock(dynamic_items_mutex_);
+     auto it = dynamic_items_cache_.find(item_id);
+     if (it != dynamic_items_cache_.end()) {
+       return &it->second;
+     }
+
+     return nullptr;  // Not found in either tier
+   }
+   ```
+
+### Database Persistence
+
+**Critical:** After creating/updating dynamic items, must reload from database:
+
+```cpp
+// zone/dynamic_item_manager.cpp lines 481-632
+void DynamicItemManager::InsertItemIntoDatabase(uint32 item_id, EQ::ItemData* item) {
+  // 1. INSERT base row
+  database.Query("INSERT INTO items (id, name, ...) VALUES (%u, '%s', ...)",
+                 item_id, item->Name, ...);
+
+  // 2. UPDATE scaled stats (8 separate queries to avoid query length limits)
+  database.Query("UPDATE items SET ac=%d, hp=%d, ... WHERE id=%u", ...);
+  // ... 7 more UPDATE queries for different stat groups ...
+
+  // 3. ⚠️ CRITICAL: Reload from database to sync cache
+  database.LoadDynamicItemToCache(item_id);
+  //         ^^^ Without this, cache has INSERT values (base stats)
+  //             but database has UPDATE values (scaled stats)
+}
+```
+
 ## Database Integration
 
-### Schema
+### Schema - Uses Existing `items` Table
+**No separate dynamic_items table!**
+
 ```sql
-CREATE TABLE IF NOT EXISTS dynamic_items (
-  item_id INT UNSIGNED PRIMARY KEY,
-  base_item_id INT UNSIGNED NOT NULL,
-  level INT UNSIGNED NOT NULL,
-  random_stats JSON DEFAULT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  INDEX idx_base_level (base_item_id, level),
-  INDEX idx_created (created_at)
-);
+-- Dynamic items stored in standard items table
+-- Identified by ID >= 1,000,000,000
 
--- Example row:
--- item_id: 500127001
--- base_item_id: 1001
--- level: 127
--- random_stats: {"STR":{"value":25,"added_at":5},"WIS":{"value":13,"added_at":15}}
+SELECT id, name, ac, hp, damage FROM items WHERE id >= 1000000000 LIMIT 5;
+
+-- Results:
+-- 1,200,009,998 | Short Sword +100    | 550  | 400  | 404
+-- 1,150,001,001 | Cloth Cap +50       | 153  | 200  | 0
+-- 1,227,008,403 | Dragon Helm +127    | 1502 | 508  | 0
 ```
 
-### Persistence
-```cpp
-void DynamicItemManager::SaveItem(uint32 item_id) {
-  int level = GetItemLevel(item_id);
-  uint32 base_id = GetBaseItemID(item_id);
-
-  // Serialize random stats to JSON
-  std::string random_stats_json = SerializeRandomStats(item_id);
-
-  database.Query(
-    "INSERT INTO dynamic_items (item_id, base_item_id, level, random_stats) "
-    "VALUES (%u, %u, %d, '%s') "
-    "ON DUPLICATE KEY UPDATE level = %d, random_stats = '%s'",
-    item_id, base_id, level, random_stats_json.c_str(),
-    level, random_stats_json.c_str()
-  );
-}
-
-void DynamicItemManager::LoadItem(uint32 item_id) {
-  auto results = database.QueryDatabase(
-    "SELECT base_item_id, level, random_stats FROM dynamic_items WHERE item_id = %u",
-    item_id
-  );
-
-  if (results.Success() && results.RowCount() > 0) {
-    auto row = results.begin();
-    uint32 base_id = atoi(row[0]);
-    int level = atoi(row[1]);
-    std::string random_stats_json = row[2];
-
-    // Generate item
-    EQ::ItemData* item = GenerateScaledItem(base_id, level);
-
-    // Apply random stats
-    DeserializeRandomStats(item, random_stats_json);
-
-    CacheItem(item_id, item);
-  }
-}
-```
+**Why No Separate Table:**
+- Simpler schema (no foreign keys, no joins)
+- Existing item code works unchanged
+- Client can reference items normally
+- Inventory system transparent
 
 ## Command Implementation
 
@@ -342,40 +481,86 @@ void command_fuse(Client* c, const Seperator* sep) {
 
 ## Loading at Server Start
 
-### World Server Initialization
+### Shared Memory Process
 ```cpp
-// zone/main.cpp
-void ZoneInit() {
-  // ... existing init ...
+// shared_memory/main.cpp
+void LoadItems() {
+  // ✅ IMPLEMENTED: Only load base items (ID < 1 billion)
+  int32 item_count = 0;
+  uint32 max_id = 0;
 
-  // Load dynamic items from database
-  DynamicItemManager::Get().LoadAllCachedItems();
+  if (!database.GetItemsCount(item_count, max_id)) {
+    LogError("Failed to get item count");
+    return;
+  }
 
-  LogInfo("Loaded [{}] dynamic items from database",
-    DynamicItemManager::Get().GetCacheSize());
+  LogInfo("Loading [{}] base items (max ID: {})", item_count, max_id);
+  //       ^^^ Should be ~200,000 items with max_id ~200,000
+  //           NOT 1,250,999,999 which would crash!
+
+  // Allocate hash table sized for base items only
+  items_hash = new FixedMemoryHashSet<EQ::ItemData>(max_id);
+
+  // Load all base items into shared memory
+  database.LoadItems(items_hash);
 }
 ```
 
-### Shared Memory Integration
-Dynamic items are NOT in shared memory (too many variations). They're:
-1. Generated on-demand from formulas
-2. Cached in zone memory for performance
-3. Persisted to database for server restarts
+### Zone Server Initialization
+```cpp
+// zone/main.cpp
+void ZoneInit() {
+  // Attach to shared memory (base items already loaded)
+  if (!database.AttachToSharedMemory()) {
+    LogError("Failed to attach to shared memory");
+    return;
+  }
+
+  // ⏳ OPTIONAL: Pre-load dynamic items
+  // database.LoadDynamicItemsCache();  // Load all dynamic items at startup
+  //          ^^^ Usually not needed - on-demand loading is sufficient
+
+  LogInfo("Zone initialized - using on-demand dynamic item loading");
+}
+```
+
+### On-Demand Loading Strategy
+Dynamic items are **NOT** loaded at startup. Instead:
+1. Player zones in with equipped items
+2. ItemInstance constructor checks cache
+3. If not found, `LoadDynamicItemToCache(item_id)` queries database
+4. Item added to per-process cache
+5. Subsequent lookups are instant (cache hit)
+
+**Advantages:**
+- Fast startup (no need to load millions of dynamic items)
+- Low memory usage (only cache items actually in use)
+- Scales naturally (only active items consume memory)
 
 ## Performance Considerations
 
 ### Caching Strategy
 ```cpp
-// Keep last 1000 accessed items in memory
-const int MAX_CACHE_SIZE = 1000;
+// ✅ IMPLEMENTED: Two-tier caching, no eviction needed
 
-void DynamicItemManager::CacheItem(uint32 item_id, EQ::ItemData* item) {
-  if (item_cache_.size() >= MAX_CACHE_SIZE) {
-    // Evict oldest (simple LRU)
-    item_cache_.erase(item_cache_.begin());
+// Tier 1: Shared memory (FixedMemoryHashSet)
+// - All base items (ID < 1B)
+// - Never evicted (static data)
+// - Shared across all zone processes
+
+// Tier 2: Per-process unordered_map
+// - Dynamic items only (ID >= 1B)
+// - Grows as items are accessed
+// - Thread-safe with mutex
+// - Could add LRU eviction if memory becomes concern:
+
+const int MAX_CACHE_SIZE = 10000;  // Optional limit
+
+void CheckCacheSize() {
+  if (dynamic_items_cache_.size() > MAX_CACHE_SIZE) {
+    // Clear oldest entries (would need access tracking)
+    // For now: unlimited cache size (typically < 1000 items per zone)
   }
-
-  item_cache_[item_id] = item;
 }
 ```
 

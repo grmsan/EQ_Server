@@ -306,6 +306,10 @@ bool WorldBoot::DatabaseLoadRoutines(int argc, char **argv)
 		LogError("Error: Could not load item data. But ignoring");
 	}
 
+	// Load dynamic items into cache (items with ID >= 1 billion)
+	// These are not in shared memory to avoid hash size issues
+	content_db.LoadDynamicItemsCache();
+
 	guild_mgr.LoadGuilds();
 	guild_mgr.LoadTributes();
 

@@ -947,8 +947,20 @@ void SharedDatabase::ClearOldRecastTimestamps(uint32 char_id)
 
 void SharedDatabase::GetItemsCount(int32& item_count, uint32& max_id)
 {
-	max_id     = ItemsRepository::GetMaxId(*this);
-	item_count = ItemsRepository::Count(*this);
+	// Only count base items (ID < 1 billion) for shared memory allocation
+	// Dynamic items are stored in per-process cache, not shared memory
+	const uint32 DYNAMIC_ID_PREFIX = 1000000000U;
+
+	auto results = QueryDatabase(fmt::format("SELECT COUNT(*) as count, MAX(id) as max_id FROM items WHERE id < {}", DYNAMIC_ID_PREFIX));
+	if (!results.Success() || !results.RowCount()) {
+		max_id = 0;
+		item_count = 0;
+		return;
+	}
+
+	auto row = results.begin();
+	item_count = row[0] ? Strings::ToInt(row[0]) : 0;
+	max_id = row[1] ? Strings::ToUnsignedInt(row[1]) : 0;
 }
 
 bool SharedDatabase::LoadItems(const std::string &prefix) {
@@ -1313,20 +1325,15 @@ const EQ::ItemData *SharedDatabase::GetItem(uint32 id) const
 		return nullptr;
 	}
 
-	// Check if this is a dynamic item (ID >= 1 billion)
-	// Dynamic items are stored in the database with their full scaled stats
-	// They are NOT in shared memory to avoid hash size issues
+	// Check dynamic items cache first (ID >= 1 billion)
 	if (id >= 1000000000U) {
-		// For dynamic items, we need to load from database
-		// However, this method returns a const pointer from shared memory
-		// So for now, return the base item and let the caller handle scaling
-		uint32 base_id = id % 1000000;
-		if (!items_hash || base_id > items_hash->max_key()) {
-			return nullptr;
+		std::lock_guard<std::mutex> lock(dynamic_items_mutex);
+		auto it = dynamic_items_cache.find(id);
+		if (it != dynamic_items_cache.end()) {
+			return it->second.get();
 		}
-		if (items_hash->exists(base_id)) {
-			return &(items_hash->at(base_id));
-		}
+		// Not in cache - return nullptr
+		// Caller should load from database if needed
 		return nullptr;
 	}
 
@@ -1951,11 +1958,6 @@ uint32 SharedDatabase::GetSpellsCount()
 	return 0;
 }
 
-uint32 SharedDatabase::GetItemsCount()
-{
-	return ItemsRepository::Count(*this);
-}
-
 void SharedDatabase::SetSharedItemsCount(uint32 shared_items_count)
 {
 	SharedDatabase::m_shared_items_count = shared_items_count;
@@ -1964,4 +1966,579 @@ void SharedDatabase::SetSharedItemsCount(uint32 shared_items_count)
 void SharedDatabase::SetSharedSpellsCount(uint32 shared_spells_count)
 {
 	SharedDatabase::m_shared_spells_count = shared_spells_count;
+}
+
+uint32 SharedDatabase::GetItemsCount()
+{
+	// Only count base items (ID < 1 billion)
+	const uint32 DYNAMIC_ID_PREFIX = 1000000000U;
+	auto results = QueryDatabase(fmt::format("SELECT COUNT(*) FROM items WHERE id < {}", DYNAMIC_ID_PREFIX));
+	if (!results.Success() || !results.RowCount()) {
+		return 0;
+	}
+
+	auto row = results.begin();
+	return row[0] ? Strings::ToUnsignedInt(row[0]) : 0;
+}
+
+void SharedDatabase::LoadDynamicItemsCache()
+{
+	std::lock_guard<std::mutex> lock(dynamic_items_mutex);
+
+	// Clear existing cache
+	dynamic_items_cache.clear();
+
+	// Load all dynamic items from database (ID >= 1 billion)
+	auto dynamic_items = ItemsRepository::GetWhere(*this, "id >= 1000000000");
+
+	LogInfo("Loading [{}] dynamic items into cache", dynamic_items.size());
+
+	EQ::ItemData item;
+	for (const auto& e : dynamic_items) {
+		memset(&item, 0, sizeof(EQ::ItemData));
+
+		// Use the same field mapping pattern as LoadItems() in shared memory
+		// This is tedious but ensures consistency with the existing system
+
+		// Unique Identifier
+		item.ID = e.id;
+
+		// Minimum Status
+		item.MinStatus = static_cast<uint8>(e.minstatus);
+
+		// Name, Lore, and Comment
+		strn0cpy(item.Name, e.Name.c_str(), sizeof(item.Name));
+		strn0cpy(item.Lore, e.lore.c_str(), sizeof(item.Lore));
+		strn0cpy(item.Comment, e.comment.c_str(), sizeof(item.Comment));
+
+		// Flags
+		item.ArtifactFlag    = e.artifactflag;
+		item.Attuneable      = e.attuneable;
+		item.BenefitFlag     = e.benefitflag;
+		item.FVNoDrop        = e.fvnodrop;
+		item.Magic           = e.magic;
+		item.NoDrop          = e.nodrop;
+		item.NoPet           = e.nopet;
+		item.NoRent          = e.norent;
+		item.NoTransfer      = e.notransfer;
+		item.PendingLoreFlag = e.pendingloreflag;
+		item.QuestItemFlag   = e.questitemflag;
+		item.Stackable       = e.stackable;
+		item.Tradeskills     = e.tradeskills;
+		item.SummonedFlag    = e.summonedflag;
+
+		// Lore
+		item.LoreGroup = e.loregroup;
+		item.LoreFlag  = item.LoreGroup != 0;
+
+		// Type
+		item.AugType  = e.augtype;
+		item.ItemType = static_cast<uint8>(e.itemtype);
+		item.SubType  = e.subtype;
+
+		// Miscellaneous
+		item.ExpendableArrow = e.expendablearrow;
+		item.Light           = EQ::Clamp(e.light, -128, 127);
+		item.MaxCharges      = e.maxcharges;
+		item.Size            = static_cast<uint8>(e.size);
+		item.StackSize       = e.stacksize;
+		item.Weight          = e.weight;
+
+		// Potion Belt
+		item.PotionBelt      = e.potionbelt;
+		item.PotionBeltSlots = static_cast<uint8>(e.potionbeltslots);
+
+		// Merchant
+		item.Favor      = e.favor;
+		item.GuildFavor = e.guildfavor;
+		item.Price      = e.price;
+		item.SellRate   = e.sellrate;
+
+		// Display
+		item.Color           = e.color;
+		item.EliteMaterial   = e.elitematerial;
+		item.HerosForgeModel = e.herosforgemodel;
+		item.Icon            = e.icon;
+		strn0cpy(item.IDFile, e.idfile.c_str(), sizeof(item.IDFile));
+		item.Material = e.material;
+
+		// Resists
+		item.CR           = EQ::Clamp(e.cr, -128, 127);
+		item.DR           = EQ::Clamp(e.dr, -128, 127);
+		item.FR           = EQ::Clamp(e.fr, -128, 127);
+		item.MR           = EQ::Clamp(e.mr, -128, 127);
+		item.PR           = EQ::Clamp(e.pr, -128, 127);
+		item.SVCorruption = EQ::Clamp(e.svcorruption, -128, 127);
+
+		// Heroic Resists
+		item.HeroicCR       = e.heroic_cr;
+		item.HeroicDR       = e.heroic_dr;
+		item.HeroicFR       = e.heroic_fr;
+		item.HeroicMR       = e.heroic_mr;
+		item.HeroicPR       = e.heroic_pr;
+		item.HeroicSVCorrup = e.heroic_svcorrup;
+
+		// Stats
+		item.AAgi = EQ::Clamp(e.aagi, -128, 127);
+		item.ACha = EQ::Clamp(e.acha, -128, 127);
+		item.ADex = EQ::Clamp(e.adex, -128, 127);
+		item.AInt = EQ::Clamp(e.aint, -128, 127);
+		item.ASta = EQ::Clamp(e.asta, -128, 127);
+		item.AStr = EQ::Clamp(e.astr, -128, 127);
+		item.AWis = EQ::Clamp(e.awis, -128, 127);
+
+		// Heroic Stats
+		item.HeroicAgi = e.heroic_agi;
+		item.HeroicCha = e.heroic_cha;
+		item.HeroicDex = e.heroic_dex;
+		item.HeroicInt = e.heroic_int;
+		item.HeroicSta = e.heroic_sta;
+		item.HeroicStr = e.heroic_str;
+		item.HeroicWis = e.heroic_wis;
+
+		// Primary Stats
+		item.AC   = e.ac;
+		item.HP   = e.hp;
+		item.Mana = e.mana;
+		item.Endur = e.endur;
+
+		// Combat Modifiers
+		item.Accuracy       = e.accuracy;
+		item.Attack         = e.attack;
+		item.Avoidance      = e.avoidance;
+		item.BackstabDmg    = e.backstabdmg;
+		item.Clairvoyance   = e.clairvoyance;
+		item.CombatEffects  = Strings::IsNumber(e.combateffects) ? static_cast<int8>(EQ::Clamp(Strings::ToInt(e.combateffects), -128, 127)) : 0;
+		item.DamageShield   = e.damageshield;
+		item.DSMitigation   = e.dsmitigation;
+		item.DotShielding   = e.dotshielding;
+		item.HealAmt        = e.healamt;
+		item.Haste          = e.haste;
+		item.Regen          = e.regen;
+		item.ManaRegen      = e.manaregen;
+		item.EnduranceRegen = e.enduranceregen;
+		item.Shielding      = e.shielding;
+		item.SpellDmg       = e.spelldmg;
+		item.SpellShield    = e.spellshield;
+		item.StrikeThrough  = e.strikethrough;
+		item.StunResist     = e.stunresist;
+		item.Purity         = e.purity;
+
+		// Skill Modifiers
+		item.SkillModType  = e.skillmodtype;
+		item.SkillModValue = e.skillmodvalue;
+		item.ExtraDmgSkill = e.extradmgskill;
+		item.ExtraDmgAmt   = e.extradmgamt;
+
+		// Bane Damage
+		item.BaneDmgAmt     = e.banedmgamt;
+		item.BaneDmgBody    = static_cast<uint8>(e.banedmgbody);
+		item.BaneDmgRace    = static_cast<uint16>(e.banedmgrace);
+		item.BaneDmgRaceAmt = e.banedmgraceamt;
+
+		// Elemental Damage
+		item.ElemDmgAmt  = e.elemdmgamt;
+		item.ElemDmgType = static_cast<uint8>(e.elemdmgtype);
+
+		// Bard
+		item.BardType  = e.bardtype;
+		item.BardValue = e.bardvalue;
+
+		// Faction
+		item.FactionAmt1 = e.factionamt1;
+		item.FactionAmt2 = e.factionamt2;
+		item.FactionAmt3 = e.factionamt3;
+		item.FactionAmt4 = e.factionamt4;
+		item.FactionMod1 = e.factionmod1;
+		item.FactionMod2 = e.factionmod2;
+		item.FactionMod3 = e.factionmod3;
+		item.FactionMod4 = e.factionmod4;
+
+		// Requirements
+		item.ReqLevel = static_cast<uint8>(e.reqlevel);
+		item.RecLevel = static_cast<uint8>(e.reclevel);
+		item.RecSkill = static_cast<uint8>(e.recskill);
+
+		// Restrictions
+		item.Classes = e.classes;
+		item.Deity   = e.deity;
+		item.Races   = e.races;
+		item.Slots   = e.slots;
+
+		// Effects (Click, Proc, Worn, Focus, Scroll, Bard)
+		item.Click.Effect = e.clickeffect;
+		item.Click.Type   = e.clicktype;
+		item.Click.Level  = e.clicklevel;
+		item.Click.Level2 = e.clicklevel2;
+
+		item.Proc.Effect = e.proceffect;
+		item.Proc.Type   = e.proctype;
+		item.Proc.Level  = e.proclevel;
+		item.Proc.Level2 = e.proclevel2;
+		item.ProcRate    = e.procrate;
+
+		item.Worn.Effect = e.worneffect;
+		item.Worn.Type   = e.worntype;
+		item.Worn.Level  = e.wornlevel;
+		item.Worn.Level2 = e.wornlevel2;
+
+		item.Focus.Effect = e.focuseffect;
+		item.Focus.Type   = e.focustype;
+		item.Focus.Level  = e.focuslevel;
+		item.Focus.Level2 = e.focuslevel2;
+
+		item.Scroll.Effect = e.scrolleffect;
+		item.Scroll.Type   = e.scrolltype;
+		item.Scroll.Level  = e.scrolllevel;
+		item.Scroll.Level2 = e.scrolllevel2;
+
+		item.Bard.Effect = e.bardeffect;
+		item.Bard.Type   = e.bardeffecttype;
+		item.Bard.Level  = e.bardlevel;
+		item.Bard.Level2 = e.bardlevel2;
+
+		// Augmentations
+		item.AugSlotType[0]    = static_cast<uint8>(e.augslot1type);
+		item.AugSlotType[1]    = static_cast<uint8>(e.augslot2type);
+		item.AugSlotType[2]    = static_cast<uint8>(e.augslot3type);
+		item.AugSlotType[3]    = static_cast<uint8>(e.augslot4type);
+		item.AugSlotType[4]    = static_cast<uint8>(e.augslot5type);
+		item.AugSlotType[5]    = static_cast<uint8>(e.augslot6type);
+		item.AugSlotVisible[0] = e.augslot1visible;
+		item.AugSlotVisible[1] = e.augslot2visible;
+		item.AugSlotVisible[2] = e.augslot3visible;
+		item.AugSlotVisible[3] = e.augslot4visible;
+		item.AugSlotVisible[4] = e.augslot5visible;
+		item.AugSlotVisible[5] = e.augslot6visible;
+		item.AugRestrict       = e.augrestrict;
+
+		// LDoN
+		item.LDoNSellBackRate = e.ldonsellbackrate;
+		item.LDoNSold         = e.ldonsold;
+		item.LDoNTheme        = e.ldontheme;
+		item.LDoNPrice        = e.ldonprice;
+
+		// Bag
+		item.BagSize   = static_cast<uint8>(e.bagsize);
+		item.BagSlots  = static_cast<uint8>(e.bagslots);
+		item.BagType   = static_cast<uint8>(e.bagtype);
+		item.BagWR     = static_cast<uint8>(e.bagwr);
+
+		// Book
+		item.Book     = e.book;
+		item.BookType = static_cast<uint8>(e.booktype);
+		strn0cpy(item.Filename, e.filename.c_str(), sizeof(item.Filename));
+
+		// Miscellaneous Fields
+		item.Delay          = e.delay;
+		item.Damage         = e.damage;
+		item.Range          = static_cast<uint8>(e.range_);
+		item.ScriptFileID   = e.scriptfileid;
+		item.CharmFileID    = Strings::IsNumber(e.charmfileid) ? Strings::ToUnsignedInt(e.charmfileid) : 0;
+		strn0cpy(item.CharmFile, e.charmfile.c_str(), sizeof(item.CharmFile));
+		item.CastTime_ = e.casttime_;
+
+		// Create a copy in the cache
+		auto cached_item = std::make_unique<EQ::ItemData>(item);
+		dynamic_items_cache[e.id] = std::move(cached_item);
+	}
+
+	LogInfo("Loaded [{}] dynamic items into cache", dynamic_items_cache.size());
+}
+
+void SharedDatabase::LoadDynamicItemToCache(uint32 item_id)
+{
+	if (item_id < 1000000000U) {
+		LogError("Attempted to load non-dynamic item [{}] to cache", item_id);
+		return;
+	}
+
+	// Check if already cached
+	{
+		std::lock_guard<std::mutex> lock(dynamic_items_mutex);
+		if (dynamic_items_cache.find(item_id) != dynamic_items_cache.end()) {
+			return; // Already cached
+		}
+	}
+
+	// Load from database
+	auto db_item = ItemsRepository::FindOne(*this, item_id);
+	if (db_item.id != item_id) {
+		LogError("Failed to load dynamic item [{}] from database", item_id);
+		return;
+	}
+
+	// Convert to ItemData using the same mapping as LoadDynamicItemsCache
+	EQ::ItemData item;
+	memset(&item, 0, sizeof(EQ::ItemData));
+
+	const auto& e = db_item;
+
+	// Unique Identifier
+	item.ID = e.id;
+
+	// Minimum Status
+	item.MinStatus = static_cast<uint8>(e.minstatus);
+
+	// Name, Lore, and Comment
+	strn0cpy(item.Name, e.Name.c_str(), sizeof(item.Name));
+	strn0cpy(item.Lore, e.lore.c_str(), sizeof(item.Lore));
+	strn0cpy(item.Comment, e.comment.c_str(), sizeof(item.Comment));
+
+	// Flags
+	item.ArtifactFlag    = e.artifactflag;
+	item.Attuneable      = e.attuneable;
+	item.BenefitFlag     = e.benefitflag;
+	item.FVNoDrop        = e.fvnodrop;
+	item.Magic           = e.magic;
+	item.NoDrop          = e.nodrop;
+	item.NoPet           = e.nopet;
+	item.NoRent          = e.norent;
+	item.NoTransfer      = e.notransfer;
+	item.PendingLoreFlag = e.pendingloreflag;
+	item.QuestItemFlag   = e.questitemflag;
+	item.Stackable       = e.stackable;
+	item.Tradeskills     = e.tradeskills;
+	item.SummonedFlag    = e.summonedflag;
+
+	// Lore
+	item.LoreGroup = e.loregroup;
+	item.LoreFlag  = item.LoreGroup != 0;
+
+	// Type
+	item.AugType  = e.augtype;
+	item.ItemType = static_cast<uint8>(e.itemtype);
+	item.SubType  = e.subtype;
+
+	// Miscellaneous
+	item.ExpendableArrow = e.expendablearrow;
+	item.Light           = EQ::Clamp(e.light, -128, 127);
+	item.MaxCharges      = e.maxcharges;
+	item.Size            = static_cast<uint8>(e.size);
+	item.StackSize       = e.stacksize;
+	item.Weight          = e.weight;
+
+	// Potion Belt
+	item.PotionBelt      = e.potionbelt;
+	item.PotionBeltSlots = static_cast<uint8>(e.potionbeltslots);
+
+	// Merchant
+	item.Favor      = e.favor;
+	item.GuildFavor = e.guildfavor;
+	item.Price      = e.price;
+	item.SellRate   = e.sellrate;
+
+	// Display
+	item.Color           = e.color;
+	item.EliteMaterial   = e.elitematerial;
+	item.HerosForgeModel = e.herosforgemodel;
+	item.Icon            = e.icon;
+	strn0cpy(item.IDFile, e.idfile.c_str(), sizeof(item.IDFile));
+	item.Material = e.material;
+
+	// Resists
+	item.CR           = EQ::Clamp(e.cr, -128, 127);
+	item.DR           = EQ::Clamp(e.dr, -128, 127);
+	item.FR           = EQ::Clamp(e.fr, -128, 127);
+	item.MR           = EQ::Clamp(e.mr, -128, 127);
+	item.PR           = EQ::Clamp(e.pr, -128, 127);
+	item.SVCorruption = EQ::Clamp(e.svcorruption, -128, 127);
+
+	// Heroic Resists
+	item.HeroicCR       = e.heroic_cr;
+	item.HeroicDR       = e.heroic_dr;
+	item.HeroicFR       = e.heroic_fr;
+	item.HeroicMR       = e.heroic_mr;
+	item.HeroicPR       = e.heroic_pr;
+	item.HeroicSVCorrup = e.heroic_svcorrup;
+
+	// Stats
+	item.AAgi = EQ::Clamp(e.aagi, -128, 127);
+	item.ACha = EQ::Clamp(e.acha, -128, 127);
+	item.ADex = EQ::Clamp(e.adex, -128, 127);
+	item.AInt = EQ::Clamp(e.aint, -128, 127);
+	item.ASta = EQ::Clamp(e.asta, -128, 127);
+	item.AStr = EQ::Clamp(e.astr, -128, 127);
+	item.AWis = EQ::Clamp(e.awis, -128, 127);
+
+	// Heroic Stats
+	item.HeroicAgi = e.heroic_agi;
+	item.HeroicCha = e.heroic_cha;
+	item.HeroicDex = e.heroic_dex;
+	item.HeroicInt = e.heroic_int;
+	item.HeroicSta = e.heroic_sta;
+	item.HeroicStr = e.heroic_str;
+	item.HeroicWis = e.heroic_wis;
+
+	// Primary Stats
+	item.AC   = e.ac;
+	item.HP   = e.hp;
+	item.Mana = e.mana;
+	item.Endur = e.endur;
+
+	// Combat Modifiers
+	item.Accuracy       = e.accuracy;
+	item.Attack         = e.attack;
+	item.Avoidance      = e.avoidance;
+	item.BackstabDmg    = e.backstabdmg;
+	item.Clairvoyance   = e.clairvoyance;
+	item.CombatEffects  = Strings::IsNumber(e.combateffects) ? static_cast<int8>(EQ::Clamp(Strings::ToInt(e.combateffects), -128, 127)) : 0;
+	item.DamageShield   = e.damageshield;
+	item.DSMitigation   = e.dsmitigation;
+	item.DotShielding   = e.dotshielding;
+	item.HealAmt        = e.healamt;
+	item.Haste          = e.haste;
+	item.Regen          = e.regen;
+	item.ManaRegen      = e.manaregen;
+	item.EnduranceRegen = e.enduranceregen;
+	item.Shielding      = e.shielding;
+	item.SpellDmg       = e.spelldmg;
+	item.SpellShield    = e.spellshield;
+	item.StrikeThrough  = e.strikethrough;
+	item.StunResist     = e.stunresist;
+	item.Purity         = e.purity;
+
+	// Skill Modifiers
+	item.SkillModType  = e.skillmodtype;
+	item.SkillModValue = e.skillmodvalue;
+	item.ExtraDmgSkill = e.extradmgskill;
+	item.ExtraDmgAmt   = e.extradmgamt;
+
+	// Bane Damage
+	item.BaneDmgAmt     = e.banedmgamt;
+	item.BaneDmgBody    = static_cast<uint8>(e.banedmgbody);
+	item.BaneDmgRace    = static_cast<uint16>(e.banedmgrace);
+	item.BaneDmgRaceAmt = e.banedmgraceamt;
+
+	// Elemental Damage
+	item.ElemDmgAmt  = e.elemdmgamt;
+	item.ElemDmgType = static_cast<uint8>(e.elemdmgtype);
+
+	// Bard
+	item.BardType  = e.bardtype;
+	item.BardValue = e.bardvalue;
+
+	// Faction
+	item.FactionAmt1 = e.factionamt1;
+	item.FactionAmt2 = e.factionamt2;
+	item.FactionAmt3 = e.factionamt3;
+	item.FactionAmt4 = e.factionamt4;
+	item.FactionMod1 = e.factionmod1;
+	item.FactionMod2 = e.factionmod2;
+	item.FactionMod3 = e.factionmod3;
+	item.FactionMod4 = e.factionmod4;
+
+	// Requirements
+	item.ReqLevel = static_cast<uint8>(e.reqlevel);
+	item.RecLevel = static_cast<uint8>(e.reclevel);
+	item.RecSkill = static_cast<uint8>(e.recskill);
+
+	// Restrictions
+	item.Classes = e.classes;
+	item.Deity   = e.deity;
+	item.Races   = e.races;
+	item.Slots   = e.slots;
+
+	// Effects (Click, Proc, Worn, Focus, Scroll, Bard)
+	item.Click.Effect = e.clickeffect;
+	item.Click.Type   = e.clicktype;
+	item.Click.Level  = e.clicklevel;
+	item.Click.Level2 = e.clicklevel2;
+
+	item.Proc.Effect = e.proceffect;
+	item.Proc.Type   = e.proctype;
+	item.Proc.Level  = e.proclevel;
+	item.Proc.Level2 = e.proclevel2;
+	item.ProcRate    = e.procrate;
+
+	item.Worn.Effect = e.worneffect;
+	item.Worn.Type   = e.worntype;
+	item.Worn.Level  = e.wornlevel;
+	item.Worn.Level2 = e.wornlevel2;
+
+	item.Focus.Effect = e.focuseffect;
+	item.Focus.Type   = e.focustype;
+	item.Focus.Level  = e.focuslevel;
+	item.Focus.Level2 = e.focuslevel2;
+
+	item.Scroll.Effect = e.scrolleffect;
+	item.Scroll.Type   = e.scrolltype;
+	item.Scroll.Level  = e.scrolllevel;
+	item.Scroll.Level2 = e.scrolllevel2;
+
+	item.Bard.Effect = e.bardeffect;
+	item.Bard.Type   = e.bardeffecttype;
+	item.Bard.Level  = e.bardlevel;
+	item.Bard.Level2 = e.bardlevel2;
+
+	// Augmentations
+	item.AugSlotType[0]    = static_cast<uint8>(e.augslot1type);
+	item.AugSlotType[1]    = static_cast<uint8>(e.augslot2type);
+	item.AugSlotType[2]    = static_cast<uint8>(e.augslot3type);
+	item.AugSlotType[3]    = static_cast<uint8>(e.augslot4type);
+	item.AugSlotType[4]    = static_cast<uint8>(e.augslot5type);
+	item.AugSlotType[5]    = static_cast<uint8>(e.augslot6type);
+	item.AugSlotVisible[0] = e.augslot1visible;
+	item.AugSlotVisible[1] = e.augslot2visible;
+	item.AugSlotVisible[2] = e.augslot3visible;
+	item.AugSlotVisible[3] = e.augslot4visible;
+	item.AugSlotVisible[4] = e.augslot5visible;
+	item.AugSlotVisible[5] = e.augslot6visible;
+	item.AugRestrict       = e.augrestrict;
+
+	// LDoN
+	item.LDoNSellBackRate = e.ldonsellbackrate;
+	item.LDoNSold         = e.ldonsold;
+	item.LDoNTheme        = e.ldontheme;
+	item.LDoNPrice        = e.ldonprice;
+
+	// Bag
+	item.BagSize   = static_cast<uint8>(e.bagsize);
+	item.BagSlots  = static_cast<uint8>(e.bagslots);
+	item.BagType   = static_cast<uint8>(e.bagtype);
+	item.BagWR     = static_cast<uint8>(e.bagwr);
+
+	// Book
+	item.Book     = e.book;
+	item.BookType = static_cast<uint8>(e.booktype);
+	strn0cpy(item.Filename, e.filename.c_str(), sizeof(item.Filename));
+
+	// Miscellaneous Fields
+	item.Delay          = e.delay;
+	item.Damage         = e.damage;
+	item.Range          = static_cast<uint8>(e.range_);
+	item.ScriptFileID   = e.scriptfileid;
+	item.CharmFileID    = Strings::IsNumber(e.charmfileid) ? Strings::ToUnsignedInt(e.charmfileid) : 0;
+	strn0cpy(item.CharmFile, e.charmfile.c_str(), sizeof(item.CharmFile));
+	item.CastTime_ = e.casttime_;
+
+	// Add to cache
+	std::lock_guard<std::mutex> lock(dynamic_items_mutex);
+	auto cached_item = std::make_unique<EQ::ItemData>(item);
+	dynamic_items_cache[item_id] = std::move(cached_item);
+
+	LogDebug("Loaded dynamic item [{}] ([{}]) from database into cache", item_id, item.Name);
+}
+
+void SharedDatabase::AddDynamicItemToCache(uint32 item_id, EQ::ItemData* item_data)
+{
+	if (item_id < 1000000000U) {
+		LogError("Attempted to add non-dynamic item [{}] to dynamic cache", item_id);
+		return;
+	}
+
+	std::lock_guard<std::mutex> lock(dynamic_items_mutex);
+
+	// Create a copy of the item data
+	auto cached_item = std::make_unique<EQ::ItemData>(*item_data);
+	dynamic_items_cache[item_id] = std::move(cached_item);
+
+	LogDebug("Added dynamic item [{}] ([{}]) to cache", item_id, item_data->Name);
+}
+
+void SharedDatabase::ClearDynamicItemsCache()
+{
+	std::lock_guard<std::mutex> lock(dynamic_items_mutex);
+	dynamic_items_cache.clear();
+	LogInfo("Cleared dynamic items cache");
 }

@@ -1,273 +1,179 @@
 # Player Commands Reference
 
-## Item Progression Commands
+## ⚠️ IMPORTANT: Natural Progression System
 
-### #upgrade
-Increase the level of the item on your cursor.
+**Players DON'T use commands!** Items upgrade automatically when killing mobs.
 
-**Syntax:**
+**How It Works:**
+- Kill any mob: **5% chance** to upgrade a random equipped item
+- Kill named/rare mob: **100% chance** to upgrade 1-3 random equipped items
+- No player input needed - system handles everything
+
+**Message Example:**
 ```
-#upgrade [levels]
-```
-
-**Parameters:**
-- `levels` (optional): Number of levels to add (default: 1)
-
-**Requirements:**
-- Item must be on cursor
-- Item must be eligible for upgrade
-
-**Examples:**
-```
-#upgrade          -- Add 1 level to cursor item
-#upgrade 5        -- Add 5 levels to cursor item
-#upgrade 100      -- Add 100 levels (if you have resources)
-```
-
-**Output:**
-```
-[Upgrade] Cloth Cap +10 upgraded to Cloth Cap +11
-[Stats] +1 AC, +2 HP, +1 STR
+[You have slain a fire goblin!]
+Your Short Sword +10 has been upgraded!
 ```
 
 ---
 
-### #fuse
-Transfer levels from cursor item (donor) to a worn/inventory item (receiver).
+## GM Commands (Admin Only)
+
+### #upgrade
+Manually upgrade an item in a specific equipment slot.
 
 **Syntax:**
+```
+#upgrade <slot_number> [levels]
+```
+
+**Parameters:**
+- `slot_number`: Equipment slot (0-21, see slot reference below)
+- `levels` (optional): Number of levels to add (default: 1)
+
+**Slot Reference:**
+```
+0  = Charm        11 = Range
+1  = Left Ear     12 = Hands
+2  = Head         13 = Primary
+3  = Face         14 = Secondary
+4  = Right Ear    15 = Left Finger
+5  = Neck         16 = Right Finger
+6  = Shoulders    17 = Chest
+7  = Arms         18 = Legs
+8  = Back         19 = Feet
+9  = Left Wrist   20 = Waist
+10 = Right Wrist  21 = Ammo
+```
+
+**Examples:**
+```
+#upgrade 17          -- Upgrade chest item by 1 level
+#upgrade 13 10       -- Upgrade primary weapon by 10 levels
+#upgrade 2 100       -- Upgrade head item by 100 levels (testing)
+```
+
+**Implementation:**
+- Called internally by Lua event system
+- Can bypass GM status check via `SendGMCommand(cmd, true)`
+- Used by auto-upgrade system
+
+---
+
+## TODO: Player-Accessible Commands
+
+These commands exist in code but need player-safe implementations:
+
+###  #fuse (TODO)
+###  #fuse (TODO)
+Transfer levels from cursor item (donor) to a worn/inventory item (receiver).
+
+**Status:** GM command exists, needs player-safe version
+
+**Proposed Syntax:**
 ```
 #fuse [slot]
 #fuse confirm
 ```
 
-**Parameters:**
-- `slot` (optional): Equipment slot number or name (e.g., "chest", "17")
-- `confirm`: Confirms fusion after preview
-
-**Requirements:**
-- Donor item on cursor
-- Receiver item worn or in inventory
-- Items must be same equipment slot
-- Donor level > 0
-
 **Examples:**
 ```
-#fuse             -- Preview fusion with equipped item
-#fuse chest       -- Fuse into chest slot
+#fuse chest       -- Fuse cursor item into chest slot
 #fuse 17          -- Fuse into slot 17 (chest)
 #fuse confirm     -- Execute fusion after preview
 ```
 
-**Output:**
-```
-=== FUSION PREVIEW ===
-Donor: Cloth Cap +127 (will be destroyed)
-Receiver: Dragon Helm +0
-Result: Dragon Helm +127
-
-Type #fuse confirm to proceed
-```
+**TODO:**
+- Add cost system (platinum, materials)
+- Add confirmation prompts
+- Prevent exploits (same item fusion)
 
 ---
 
-### #iteminfo
+### #iteminfo (TODO)
 Display detailed information about an item's level and stats.
 
-**Syntax:**
+**Status:** Framework exists, needs implementation
+
+**Proposed Syntax:**
 ```
 #iteminfo [target]
 ```
 
-**Parameters:**
-- `target` (optional): "cursor", slot number, or nothing for worn items
-
 **Examples:**
 ```
-#iteminfo           -- Info about targeted item
 #iteminfo cursor    -- Info about cursor item
 #iteminfo chest     -- Info about chest slot item
 ```
 
-**Output:**
-```
-=== ITEM INFO ===
-Item: Dragon Helm +127
-Base Item: Dragon Helm (ID: 8403)
-Level: 127
-Dynamic ID: 500127403
-
-Base Stats:
-  AC: 25 → 152 (+127)
-  STR: 5 → 132 (+127)
-  HP: 0 → 254 (+254)
-
-Random Stats (acquired through leveling):
-  WIS: +65 (added at level 15)
-  STA: +45 (added at level 20)
-  Fire Resist: +12 (added at level 30)
-
-Milestone Bonuses:
-  Haste: 12% (unlocked at level 25)
-  Heroic STR: +7 (unlocked at level 50)
-  Focus: Improved Damage III (unlocked at level 200)
-```
-
 ---
 
-### #reforge (Future)
-Reroll random stats on an item.
+## Future Commands (Not Implemented)
 
-**Syntax:**
-```
-#reforge [keep_count]
-```
+### #reforge (Planned)
+Reroll random stats on an item for a cost.
 
-**Parameters:**
-- `keep_count` (optional): Number of stats to keep (default: 0)
-
-**Examples:**
+**Concept:**
 ```
 #reforge          -- Reroll all random stats
 #reforge 2        -- Keep 2 best stats, reroll the rest
 ```
 
----
-
-### #extract (Future)
+### #extract (Planned)
 Extract levels from an item into a consumable essence.
 
-**Syntax:**
-```
-#extract [levels]
-```
-
-**Parameters:**
-- `levels`: Number of levels to extract
-
-**Examples:**
+**Concept:**
 ```
 #extract 10       -- Extract 10 levels into essence
 ```
 
-**Result:**
-```
-Cloth Cap +127 → Cloth Cap +117
-Created: Level Essence x10 (consumable)
-```
-
----
-
-## Information Commands
-
-### #itemstats
+### #itemstats (Planned)
 Show current equipment stats summary.
 
-**Syntax:**
+**Concept:**
 ```
-#itemstats
-```
-
-**Output:**
-```
-=== EQUIPMENT STATS ===
-Total Item Levels: 847
-Average Item Level: 48.1
-
-Slot Breakdown:
-  Head:  Dragon Helm +127
-  Chest: Plate Chestguard +98
-  Arms:  Cloth Sleeves +45
-  ...
-
-Total Stats:
-  AC: 1,247
-  HP: 3,892
-  Mana: 1,456
-  STR: 342
-  Haste: 35%
+#itemstats        -- Display total stats from all equipment
 ```
 
 ---
 
-### #progression
-Show character progression statistics.
+## How Automatic Upgrades Work (CURRENT SYSTEM)
 
-**Syntax:**
-```
-#progression
-```
+**File:** `quests/global/global_npc.lua`
 
-**Output:**
-```
-=== PROGRESSION STATS ===
-Total Upgrades: 1,247
-Total Fusions: 23
-Highest Item Level: 127 (Dragon Helm)
-Total Boss Kills: 456
+**Trigger:** NPC death event
 
-Recent Milestones:
-  Level 100 item achieved: Dragon Helm
-  Level 50 Heroic stats unlocked
-  First fusion: Cloth Cap → Banded Helm
-```
+**Logic:**
+1. Check if killer is a player
+2. Determine if named/rare mob (100% chance) or regular (5% chance)
+3. Roll for upgrade trigger
+4. Pick 1-3 random equipped slots (more for named mobs)
+5. Call `#upgrade <slot>` internally for each slot
+6. Player sees message: "Your [item] has been upgraded!"
+
+**Player Experience:**
+- Natural progression through gameplay
+- No commands to remember
+- Clear feedback when items upgrade
+- Strategic: equip items you want to upgrade
 
 ---
 
-## Admin/Debug Commands
+## GM Debug Commands
 
-### #createscaled (GM)
-Create a scaled item at specified level.
-
-**Syntax:**
-```
-#createscaled <item_id> <level>
-```
-
-**Parameters:**
-- `item_id`: Base item ID
-- `level`: Item level to create
-
-**Examples:**
-```
-#createscaled 1001 100    -- Create Cloth Cap +100
-#createscaled 8403 500    -- Create Dragon Helm +500
-```
-
----
-
-### #itemdebug (GM)
+### #itemdebug (TODO)
 Toggle debug output for item system.
 
-**Syntax:**
+**Proposed:**
 ```
-#itemdebug [on|off]
-```
-
-**Output:**
-```
-[DEBUG] Item scaling enabled
-[DEBUG] Cloth Cap +127:
-  - Base AC: 3
-  - Level bonus: +127
-  - Random stats: 4 (WIS, STA, CHA, FR)
-  - Milestones: Haste(25), Heroic(50), Focus(100)
+#itemdebug on     -- Enable debug logging
+#itemdebug off    -- Disable debug logging
 ```
 
----
+### #setitemlevel (TODO)
+Force set an item's level (testing only).
 
-### #setitemlevel (GM)
-Force set an item's level.
-
-**Syntax:**
-```
-#setitemlevel <level>
-```
-
-**Parameters:**
-- `level`: New level for cursor item
-
-**Examples:**
+**Proposed:**
 ```
 #setitemlevel 100     -- Set cursor item to level 100
 #setitemlevel 0       -- Reset item to base level
@@ -277,17 +183,26 @@ Force set an item's level.
 
 ## Quick Reference Table
 
-| Command | Purpose | Syntax |
-|---------|---------|--------|
-| `#upgrade` | Level up item | `#upgrade [levels]` |
-| `#fuse` | Fuse items | `#fuse [slot]` |
-| `#iteminfo` | View item details | `#iteminfo [target]` |
-| `#itemstats` | View equipment summary | `#itemstats` |
-| `#progression` | View character progression | `#progression` |
-| `#createscaled` (GM) | Create scaled item | `#createscaled <id> <lvl>` |
+| Command | Status | Purpose |
+|---------|--------|---------|
+| (Auto-upgrade) | ✅ WORKING | Items upgrade when killing mobs |
+| `#upgrade <slot>` | ✅ GM-only | Manually upgrade equipped item |
+| `#fuse` | ⏳ GM-only | Fuse items (needs player version) |
+| `#iteminfo` | ⏳ TODO | View item details |
+| `#itemstats` | 📋 Planned | View equipment summary |
+| `#reforge` | 📋 Planned | Reroll stats |
+| `#extract` | 📋 Planned | Extract levels to essence |
+
+**Legend:**
+- ✅ = Working now
+- ⏳ = Partially implemented
+- 📋 = Planned for future
 
 ## See Also
 - [OVERVIEW.md](OVERVIEW.md) - System overview
 - [SCALING_FORMULAS.md](SCALING_FORMULAS.md) - How stats scale
 - [FUSION_SYSTEM.md](FUSION_SYSTEM.md) - Fusion mechanics
-- [IMPLEMENTATION.md](IMPLEMENTATION.md) - For developers
+- [QUICK_START.md](QUICK_START.md) - Getting started
+
+**Last Updated:** December 2, 2025
+**System Status:** Auto-upgrades working, manual commands GM-only

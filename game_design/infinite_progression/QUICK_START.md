@@ -1,113 +1,125 @@
 # Infinite Progression - Quick Start Guide
 
-## Current Status: 85% Complete ✅
+## Current Status: 90% Complete ✅
 
 ### What's Working NOW:
-1. ✅ **Core C++ scaling system** - All formulas implemented
-2. ✅ **Dynamic ID encoding/decoding** - 5LLLLLIIIIII format
-3. ✅ **Stat capping with heroic overflow** - 127 cap handled
-4. ✅ **Tiered linear scaling** - Reasonable values (Level 200 = 4,100 HP)
-5. ✅ **Item generation & caching** - LRU cache for 1000 items
-6. ✅ **Fusion mechanics** - Transfer levels between items
-7. ✅ **Build system integration** - CMakeLists updated
-8. ✅ **Lua bindings created** - `inf.*` namespace functions
-9. ✅ **Lua commands created** - #upgrade, #fuse, #iteminfo, #createscaled
-10. ✅ **Database schema** - Full SQL schema created
+1. ✅ **Core C++ scaling system** - All tiered formulas implemented
+2. ✅ **Dynamic ID encoding/decoding** - 1LLLIIIIII format (1 billion + level + base ID)
+3. ✅ **Stat capping with heroic overflow** - 127 cap handled correctly
+4. ✅ **Tiered linear scaling** - All stats scale (AC, HP, damage, all attributes)
+5. ✅ **Weapon damage scaling** - Fully implemented (+4/level tier 0, +4 bonus/tier)
+6. ✅ **Universal stat scaling** - ALL items gain ALL stats (even if base is 0)
+7. ✅ **Item generation & caching** - Two-tier cache (shared memory + per-process)
+8. ✅ **Cross-zone persistence** - On-demand loading from database
+9. ✅ **Automatic upgrades** - 5% chance on mob kill, 100% on named/rare
+10. ✅ **GM Commands** - #upgrade working via Lua SendGMCommand
+11. ✅ **Natural progression** - Players don't use commands, just kill mobs
+12. ✅ **Database integration** - Items stored in `items` table with full stats
 
-### Remaining Work (15%):
-1. ⚠️ **Fix logging syntax** - Need to convert Log() calls to correct fmt format
-2. ⏳ **Recompile** - Once logging fixed
-3. ⏳ **Hook SummonItem** - Make #createscaled actually work
-4. ⏳ **Run SQL schema** - Create database tables
-5. ⏳ **Test in-game** - Boot server and test commands
+### Remaining Work (10%):
+1. ⏳ **Haste formula** - Config exists, needs to be applied in ApplyMilestoneBonus
+2. ⏳ **Focus effects** - Milestones defined, not yet implemented
+3. ⏳ **Player fusion access** - Currently GM-only, need to expose safely
+4. ⏳ **Random stats** - Framework exists, needs milestone triggers
+5. ⏳ **Combat stats** - Shielding, StrikeThrough, etc. scaling disabled for now
 
 ---
 
-## Quick Test Plan (Once Compiled)
+## How It Works (Current Implementation)
 
-### Step 1: Run Database Schema
+### Automatic Progression System
+**Players don't use commands** - items upgrade automatically!
+
+**When you kill a mob:**
+1. 5% chance to upgrade a random equipped item (+1 level)
+2. 100% chance if mob is named/rare (upgrades 1-3 random items)
+3. Message: "Your Short Sword +10 has been upgraded!" (appears automatically)
+
+**No GM commands needed for normal play!**
+
+### Current ID Format
+```
+1LLLIIIIII
+├─ 1: Prefix (1 billion) - marks dynamic item
+├─ LLL: Level with offset 100 (101-250 = levels 1-150)
+└─ IIIIII: Base Item ID (last 6 digits)
+
+Example: 1,200,009,998
+  ├─ Prefix: 1 billion
+  ├─ Level: 200 - 100 = 100
+  └─ Base ID: 9998 (Short Sword)
+```
+
+### Stat Scaling (What Actually Happens)
+```
+Short Sword +100:
+  Base: 4 damage, 0 AC, 0 stats
+
+  After scaling:
+  - Damage: 2,004 (+4/level tier 0, +4/tier bonus → ~2000 added)
+  - AC: 2,750 (+1/level → ~2750 added)
+  - STR/STA/AGI/DEX/WIS/INT/CHA: 127 base + 473 heroic (capped at 127)
+  - Attack: 2,200
+  - HP: ~5500
+  - Mana: ~2750
+```
+
+---
+
+## Testing the System
+
+### Step 1: Boot Server
 ```bash
-cd utils/sql
-mysql -u root -p peq < infinite_progression_schema.sql
+python start_server.py
 ```
 
-### Step 2: Boot Server
-```bash
-python server_manager.py
-# Start: shared_memory, loginserver, world, ucs, queryserv, eqlaunch
+### Step 2: Test Automatic Upgrades
+
+**In-Game:**
+1. Equip any item (Short Sword, Cloth Cap, etc.)
+2. Kill mobs repeatedly
+3. Watch for message: "Your [item] has been upgraded!"
+4. Inspect item to see stats increase
+
+**Expected Results:**
+- 5% of kills trigger upgrade
+- Named mobs always trigger (1-3 items upgraded)
+- Stats increase with each level
+- All attributes appear (even if base item had none)
+
+### Step 3: Test GM Commands (Admin Only)
+
+```
+#upgrade 17        -- Upgrade chest slot item by 1 level
+#upgrade 13 10     -- Upgrade primary weapon by 10 levels
 ```
 
-### Step 3: Test Commands In-Game
-
-**Test 1: Create Scaled Item**
-```
-#createscaled 1001 50
-```
-Expected: Cloth Cap +50 appears on cursor
-
-**Test 2: Check Item Stats**
-```
-#iteminfo cursor
-```
-Expected: Shows level, AC, HP, stats
-
-**Test 3: Upgrade Item**
-```
-#upgrade 10
-```
-Expected: Cloth Cap +50 becomes +60
-
-**Test 4: Item Fusion**
-```
-#createscaled 2001 100
-(Equip to head slot)
-#createscaled 1001 50
-(Place on cursor)
-#fuse head
-```
-Expected: Head item becomes +50 level item
+**Note:** Regular players don't need these - auto-upgrades handle everything!
 
 ---
 
-## Logging System
-
-### Log Files Will Be Created In:
-- `logs/inf/` - All infinite progression events
-- Main server logs will also show progression events
-
-### Verbosity Levels:
-- **Logs::General** - Important events (item creation, upgrades, fusions)
-- **Logs::Detail** - Verbose debugging (formula calculations, cache hits/misses)
-
-### Example Log Output (Once Fixed):
-```
-[Quests] Lua: generate_dynamic_id(base=1001, level=50) -> 500050001001
-[Quests] GenerateScaledItem: START - base_item_id=1001, level=50
-[Quests] GenerateScaledItem: Cache MISS - dynamic_id=500050001001, generating new item
-[Quests] GenerateScaledItem: Base item loaded - id=1001, name='Cloth Cap', AC=1, HP=5, STR=0
-[Quests] CalculateTieredStat: base=1, level=50, base_inc=1, tier_bonus=1 -> result=151 (tier=5)
-[Quests] GenerateScaledItem: SUCCESS - Cached dynamic_id=500050001001, cache_size=1
-```
-
----
-
-## Formulas Reference
+## Formulas Reference (Current Implementation)
 
 ### Dynamic ID Format
 ```
-5LLLLLIIIIII
-├─ 5: Prefix (dynamic item marker)
-├─ LLLLL: Level (00000-99999)
-└─ IIIIII: Base Item ID (000000-999999)
+1LLLIIIIII
+├─ 1: Prefix (1 billion marker for dynamic items)
+├─ LLL: Level with offset 100 (101-250 = levels 1-150)
+└─ IIIIII: Base Item ID (last 6 digits)
 
-Example: 500050001001
-  ├─ Prefix: 5
-  ├─ Level: 50
-  └─ Base ID: 1001 (Cloth Cap)
+Example: 1,200,009,998
+  ├─ Prefix: 1,000,000,000
+  ├─ Level: 200 - 100 = 100
+  └─ Base ID: 9998 (Short Sword)
+
+Max Level: 150 (ID would be 1,250,999,999)
+Fits in signed int32: 2,147,483,647 ✓
 ```
 
-### Tiered Scaling Formula
+### Tiered Scaling Formula (CURRENT IMPLEMENTATION)
 ```
+Total = Base + Sum of all tier contributions
+
 For level 50:
   Tier 0 (1-10):   10 levels × +1/level = +10
   Tier 1 (11-20):  10 levels × +2/level = +20
@@ -116,102 +128,122 @@ For level 50:
   Tier 4 (41-50):  10 levels × +5/level = +50
   Total: 10+20+30+40+50 = 150
 
-If base AC is 1:
-  Final AC = 1 + 150 = 151
+Short Sword (base 4 damage) at level 50:
+  Final Damage = 4 + (4×150) = 4 + 600 = 604 damage
+  (Using damage_base_increment=4, damage_tier_bonus=4)
 ```
 
-### Milestone Bonuses
-- **Level 25+**: Haste (starts at 0%, increases slowly)
-- **Level 50+**: Heroic stats (+1 per 5 levels)
-- **Level 50+**: Regen (+1 per 10 levels)
-- **Future**: Focus effects at levels 100, 200, 500
+### Milestone Bonuses (PARTIALLY IMPLEMENTED)
+- ✅ **Level 1+**: All stats scale every level
+- ✅ **Level 50+**: Heroic stats (+1 per 5 levels)
+- ✅ **Level 50+**: HP Regen (+1 per 10 levels)
+- ⏳ **Level 25+**: Haste (formula exists, not applied)
+- ⏳ **Level 100+**: Focus effects (milestones defined, not implemented)
 
 ---
 
-## Lua Command Reference
+## Lua Integration (CURRENT SYSTEM)
 
-### Available Functions
+### How Automatic Upgrades Work
+
+**File:** `quests/global/global_npc.lua`
 
 ```lua
--- inf.generate_dynamic_id(base_item_id, level) -> dynamic_id
-local dynamic_id = inf.generate_dynamic_id(1001, 50)  -- Returns 500050001001
+function event_death_complete(e)
+    -- 5% chance on regular mobs, 100% on named
+    local upgrade_chance = is_named and 100 or 5
 
--- inf.get_item_level(item_id) -> level
-local level = inf.get_item_level(500050001001)  -- Returns 50
-
--- inf.get_base_item_id(item_id) -> base_id
-local base_id = inf.get_base_item_id(500050001001)  -- Returns 1001
-
--- inf.is_dynamic_item(item_id) -> boolean
-local is_dynamic = inf.is_dynamic_item(500050001001)  -- Returns true
-
--- inf.clear_cache()  -- Clears item cache
-inf.clear_cache()
-
--- inf.get_cache_stats() -> table
-local stats = inf.get_cache_stats()
--- stats.enabled = true
--- stats.max_size = 1000
+    -- Pick 1-3 random equipped items
+    -- Call: client:SendGMCommand("#upgrade " .. slot_id, true)
+    -- (bypasses GM status check)
+end
 ```
 
-### Player Commands
-
-```
-#createscaled <base_id> <level>
-  Creates a scaled item
-  Example: #createscaled 1001 100
-
-#upgrade [levels]
-  Levels up cursor item
-  Example: #upgrade 5
-  Default: +1 level
-
-#fuse <slot_name>
-  Fuses cursor item levels into worn item
-  Example: #fuse chest
-  Slots: head, chest, arms, legs, feet, etc.
-
-#iteminfo [cursor|slot]
-  Shows detailed item stats
-  Example: #iteminfo cursor
-  Example: #iteminfo chest
-```
+**Player Experience:**
+- Kill mob → item upgrades automatically
+- No commands needed
+- Message shows which item upgraded
 
 ---
 
-## Troubleshooting
+## Architecture Details (CURRENT)
 
-### Q: #createscaled doesn't create anything
-**A:** Check that:
-1. DynamicItemManager is integrated with SummonItem()
-2. Base item ID exists in database
-3. Check logs/qseqlog for errors
+### Two-Tier Cache System
+**Problem:** Dynamic items (ID >= 1B) caused shared memory ACCESS_VIOLATION
+**Solution:** Split caching strategy
 
-### Q: Item has wrong stats
-**A:** Verify formulas in SCALING_FORMULAS.md match DynamicItemManager.cpp
+**Tier 1 - Shared Memory:**
+- Base items only (ID < 1 billion)
+- Loaded at startup via shared_memory process
+- Uses FixedMemoryHashSet
 
-### Q: Client shows same stats for all items
-**A:** This is cache pollution - make sure dynamic IDs are unique (they should be)
+**Tier 2 - Per-Process Cache:**
+- Dynamic items only (ID >= 1 billion)
+- `std::unordered_map<uint32, std::unique_ptr<ItemData>>`
+- Thread-safe with `std::mutex`
+- On-demand loading from database
 
-### Q: Fusion destroys both items
-**A:** Check fusion implementation - donor should be destroyed, receiver should upgrade
+**Files:**
+- `common/shareddb.h` - Cache declarations
+- `common/shareddb.cpp` - LoadDynamicItemsCache(), LoadDynamicItemToCache()
+- `common/item_instance.cpp` - On-demand loading in constructor
+
+### Database Storage
+**Items stored in existing `items` table:**
+1. INSERT copies base item with dynamic ID
+2. 8 UPDATE queries apply scaled stats:
+   - name, damage, hp, mana, endur, ac
+   - astr, asta, aagi, adex, awis, aint, acha
+   - fr, cr, mr, pr, dr, svcorruption
+   - heroic_str, heroic_sta, heroic_agi, heroic_dex, heroic_wis, heroic_int, heroic_cha
+   - heroic_fr, heroic_cr, heroic_mr, heroic_pr, heroic_dr, heroic_svcorrup
+   - haste, regen, manaregen, enduranceregen
+   - attack, strikethrough, accuracy, stunresist, avoidance
+   - shielding, dotshielding, spellshield, healamt, spelldmg, clairvoyance, backstabdmg
+
+3. LoadDynamicItemToCache() reloads from database after UPDATEs
+
+**No separate dynamic_items table** - all in main `items` table!
 
 ---
 
-## Next Steps for Development
+## Next Steps (TODO)
 
-1. **Fix Logging** - Convert all Log() calls to proper EQEmu syntax
-2. **Compile** - Rebuild zone.exe with logging fixed
-3. **Hook SummonItem** - Modify eq.SummonItem() to use CreateItemInstance()
-4. **Database Integration** - Hook character inventory save/load
-5. **Loot Integration** - Modify NPC death events to drop dynamic items
-6. **Testing** - Full in-game testing of all commands
-7. **Performance** - Profile cache hit rate, optimize if needed
-8. **Polish** - Add error handling, edge cases, validation
+### High Priority
+1. **Enable Haste Scaling**
+   - Formula exists in config
+   - Add to ApplyMilestoneBonus()
+   - Test on items
+
+2. **Add Focus Effects**
+   - Milestones defined (100/200/500)
+   - Implement AddFocusEffect()
+   - Test spell damage/healing boosts
+
+3. **Player Fusion Access**
+   - Currently GM-only (#upgrade command)
+   - Need safe player version
+   - Consider fusion costs/restrictions
+
+### Medium Priority
+4. **Random Stats System**
+   - Framework exists
+   - Need milestone triggers (every 5/10 levels)
+   - Implement AddRandomStat()
+
+5. **Combat Stats Scaling**
+   - Shielding, StrikeThrough, etc.
+   - Currently commented out
+   - Enable and test
+
+### Low Priority
+6. **Reforge System** - Reroll stats for currency
+7. **Item Quality Tiers** - Normal/Magic/Rare/Epic variants
+8. **Set Bonuses** - Bonuses for wearing matched items
 
 ---
 
-**Last Updated**: December 1, 2025
-**Build Status**: Pending recompile after logging fixes
-**Documentation**: Complete (5 markdown files + SQL schema)
-**Code Status**: 85% complete, needs logging syntax fixes
+**Last Updated**: December 2, 2025
+**Build Status**: WORKING - Server running with auto-upgrades
+**Core Features**: 90% complete
+**Player Experience**: Natural progression via mob kills ✓

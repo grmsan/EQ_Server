@@ -128,11 +128,13 @@ Examples:
 
 ## Attribute Stats (STR, STA, etc.)
 
-### Existing Stats (base > 0)
+### ✅ IMPLEMENTED: Universal Stat Scaling
+**ALL items gain ALL stats**, regardless of base values:
 ```cpp
 // Tiered increment: starts at +1, gains +1 per tier
+// NOTE: No longer checks if (base_stat > 0)
 int tier = floor(level / 10);
-int raw_stat = base_stat;
+int raw_stat = base_stat;  // Can be 0!
 
 for (int t = 0; t < tier; t++) {
   raw_stat += 10 * (1 + t);  // Tier 0: +1, Tier 1: +2, etc.
@@ -156,9 +158,17 @@ Example - Banded Mail (base +5 STR):
   Level 50:  +127 STR, +28 Heroic STR (155 total)
   Level 100: +127 STR, +428 Heroic STR (555 total)
   Level 200: +127 STR, +2,028 Heroic STR (2,155 total)
+
+Example - Short Sword (base 0 STR):
+  Level 1:   +1 STR   (0 base + 1 from tier 0)
+  Level 10:  +10 STR  (0 + 10 from tier 0)
+  Level 20:  +30 STR  (0 + 10 tier 0 + 20 tier 1)
+  Level 50:  +127 STR, +23 Heroic STR (150 total)
+  Level 100: +127 STR, +423 Heroic STR (550 total)
 ```
 
-### New Stats (added during progression)
+### ⏳ TODO: Random Stats (Framework Exists)
+Planned for milestone-based stat additions:
 ```cpp
 // Added at level milestones (every 5 levels)
 // If item has < 8 different stats:
@@ -170,13 +180,7 @@ if (level % 5 == 0 && num_stats < 8) {
   }
 }
 
-Example - Cloth Cap (no base STR):
-  Level 5:  +1 STR (random roll succeeded)
-  Level 10: +3 STR (+1, +1, +1, +1, +1 from levels 6-10)
-  Level 15: +8 STR, +2 WIS (new random stat added)
-  Level 20: +13 STR, +4 WIS
-  Level 50: +78 STR, +43 WIS
-  Level 100: +127 STR, +127 WIS, +226 H.STR, +71 H.WIS
+// NOTE: Currently disabled - all items get all stats instead
 ```
 
 ## Heroic Stats
@@ -220,10 +224,27 @@ Banded Mail +100 (base +5 STR):
 
 ## Secondary Stats
 
-### Attack
+### Weapon Damage
+```cpp
+if (item_is_weapon && base_damage > 0) {
+  // ✅ IMPLEMENTED - Tiered increment: starts at +4, gains +4 per tier
+  int tier = floor(level / 10);
+  int increment = 4 + (tier * 4);  // Base: +4, Tier bonus: +4
+
+  int total_damage = base_damage + (level * increment);
+}
+
+Example - Short Sword (base 4 damage):
+  Level 1:   8 damage   (+4*1 = +4)
+  Level 10:  44 damage  (+4*10 = +40)
+  Level 50:  404 damage (+4 tier 0-4 = +400)
+  Level 100: 1,604 damage
+```
+
+### Attack Rating
 ```cpp
 if (item_is_weapon) {
-  // Tiered increment: starts at +2, gains +2 per tier
+  // ✅ IMPLEMENTED - Tiered increment: starts at +2, gains +2 per tier
   int tier = floor(level / 10);
   int total_attack = base_attack;
 
@@ -234,7 +255,7 @@ if (item_is_weapon) {
   total_attack += remaining_levels * (2 + tier * 2);
 }
 
-Example - Rusty Dagger (base 10 attack):
+Example - Short Sword (base 10 attack):
   Level 1:   12 attack
   Level 10:  30 attack (+20 from tier 0)
   Level 20:  70 attack (+20, +40)
@@ -242,8 +263,9 @@ Example - Rusty Dagger (base 10 attack):
   Level 100: 1,110 attack (sum of tiers)
 ```
 
-### Haste
+### ⏳ TODO: Haste (Formula Exists, Commented Out)
 ```cpp
+// ⏳ TODO: Enable haste scaling (lines 305-327 in dynamic_item_manager.cpp)
 // Haste unlocks at 25, scales with tiers, caps at 100%
 if (level >= 25) {
   if (level <= 50) {
@@ -257,13 +279,15 @@ if (level >= 25) {
   haste = min(haste, 100)  // Cap at 100%
 }
 
-Examples:
+Planned Examples:
   Level 25:  0% haste (just unlocked)
   Level 30:  1% haste
   Level 50:  5% haste
   Level 100: 30% haste
   Level 200: 80% haste
   Level 250+: 100% haste (capped)
+
+// NOTE: Code exists but is commented out - needs client testing
 ```
 
 ### Regeneration (HP/Mana/Endurance)
@@ -308,42 +332,45 @@ Example progression:
 Note: Resists cap at 127 in the client
 ```
 
-## Focus Effects
+## ⏳ TODO: Focus Effects (Milestones Defined)
 
-### Minor Focus (Level 100+)
+### Minor Focus (Level 100+) - NOT YET IMPLEMENTED
 ```cpp
+// ⏳ TODO: Implement AddFocusEffect() method
 if (level >= 100 && level < 200) {
-  add_focus_effect(MINOR_TIER)
+  add_focus_effect(MINOR_TIER)  // Needs implementation
 }
 
-Examples:
+Planned Examples:
   - Improved Damage I (+5% spell damage)
   - Improved Healing I (+5% heal amount)
   - Spell Haste I (-5% cast time)
 ```
 
-### Major Focus (Level 200+)
+### Major Focus (Level 200+) - NOT YET IMPLEMENTED
 ```cpp
 if (level >= 200 && level < 500) {
-  upgrade_focus_effect(MAJOR_TIER)
+  upgrade_focus_effect(MAJOR_TIER)  // Needs implementation
 }
 
-Examples:
+Planned Examples:
   - Improved Damage III (+15% spell damage)
   - Improved Healing III (+15% heal amount)
   - Spell Haste III (-15% cast time)
 ```
 
-### Epic Focus (Level 500+)
+### Epic Focus (Level 500+) - NOT YET IMPLEMENTED
 ```cpp
 if (level >= 500) {
-  add_second_focus_effect(EPIC_TIER)
+  add_second_focus_effect(EPIC_TIER)  // Needs implementation
 }
 
-Examples:
+Planned Examples:
   - Improved Damage V (+25% spell damage)
   - Mana Preservation IV (25% chance no mana cost)
   - Multiple simultaneous focus effects
+
+// NOTE: Milestone thresholds defined in config, needs spell database entries
 ```
 
 ## Procs and Clicks
@@ -403,40 +430,42 @@ struct ScalingConfig {
   // Tiered scaling - increment increases per tier
   int tier_size = 10;                // Levels per tier
 
-  // Base increments (tier 0, levels 1-10)
+  // ✅ IMPLEMENTED - Base increments (tier 0, levels 1-10)
   int ac_base_increment = 1;         // +1 AC per level
-  int hp_base_increment = 2;         // +2 HP per level
+  int hp_base_increment = 4;         // +4 HP per level (updated from 2)
   int mana_base_increment = 1;       // +1 Mana per level
   int stat_base_increment = 1;       // +1 stat per level
   int attack_base_increment = 2;     // +2 attack per level
+  int damage_base_increment = 4;     // +4 damage per level (NEW)
 
-  // Tier bonuses (added per tier)
+  // ✅ IMPLEMENTED - Tier bonuses (added per tier)
   int ac_tier_bonus = 1;             // Each tier adds +1 to increment
-  int hp_tier_bonus = 2;             // Each tier adds +2 to increment
+  int hp_tier_bonus = 4;             // Each tier adds +4 to increment (updated from 2)
   int mana_tier_bonus = 1;           // Each tier adds +1 to increment
   int stat_tier_bonus = 1;           // Each tier adds +1 to increment
   int attack_tier_bonus = 2;         // Each tier adds +2 to increment
+  int damage_tier_bonus = 4;         // Each tier adds +4 to increment (NEW)
 
-  // Client limits
+  // ✅ IMPLEMENTED - Client limits
   int base_stat_cap = 127;           // EQ client hard cap
   int resist_cap = 127;              // Resist cap
   int haste_cap = 100;               // Haste cap (%)
 
-  // Heroic milestones
+  // ✅ IMPLEMENTED - Heroic milestones
   int heroic_start_level = 50;
   int heroic_per_levels = 5;         // +1 heroic per 5 levels
 
-  // Haste progression
+  // ⏳ TODO - Haste progression (commented out)
   int haste_start_level = 25;
   int haste_slow_divisor = 5;        // Levels 25-50
   int haste_fast_divisor = 2;        // Levels 50+
 
-  // Focus effects
+  // ⏳ TODO - Focus effects (milestones defined, not implemented)
   int focus_minor_level = 100;
   int focus_major_level = 200;
   int focus_epic_level = 500;
 
-  // Random stats
+  // ⏳ TODO - Random stats (framework exists, disabled for universal scaling)
   float new_stat_chance = 0.5f;      // 50%
   int new_stat_interval = 5;         // Every 5 levels
   int max_random_stats = 8;          // Limit to 8 different stats

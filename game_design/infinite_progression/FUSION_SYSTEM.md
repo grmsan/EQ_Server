@@ -1,5 +1,19 @@
 # Item Fusion System
 
+## ⚠️ Current Status: GM-Only Command
+
+**Implementation Status:**
+- ✅ Core fusion system working (#fuse command)
+- ✅ Level transfer mechanics functional
+- ⏳ **TODO**: Player-accessible system via in-game container
+  - Plan: Buyable container that allows item combination
+  - Will require currency/materials cost
+  - Needs confirmation prompts to prevent accidents
+
+**For Now:** Fusion is available only via GM command `#fuse`. The mechanics below describe the system as it currently works and how it will work when player-accessible.
+
+---
+
 ## Concept
 Transfer item levels from one item to another, allowing players to upgrade their base item while keeping progression.
 
@@ -42,7 +56,7 @@ ItemInstance* FuseItems(ItemInstance* donor, ItemInstance* receiver) {
 
 ### Example Fusion
 ```
-Donor:    Cloth Cap +127 (ID: 500127001)
+Donor:    Cloth Cap +127 (ID: 1,227,001,001)
           Base: 3 AC
           Level: 127
           Scaled: 130 AC, +254 HP, +127 STR, +65 WIS, +10% Haste, etc.
@@ -51,11 +65,16 @@ Receiver: Dragon Helm +0 (ID: 8403)
           Base: 25 AC, +5 STR, +10 STA
           Level: 0
 
-Result:   Dragon Helm +127 (ID: 500127403)
+Result:   Dragon Helm +127 (ID: 1,227,008,403)
           Base: 25 AC, +5 STR, +10 STA (from receiver)
           Level: 127 (from donor)
           Scaled: 152 AC, +259 STR, +137 STA, +254 HP, +65 WIS, +10% Haste
                   ^^^ Much better than Cloth Cap because Dragon Helm has superior base stats
+
+ID Format: 1LLLIIIIII where:
+  - 1 billion prefix (dynamic item marker)
+  - LLL = level with offset 100 (227 = level 127)
+  - IIIIII = base item ID (001001 or 008403)
 ```
 
 ## Advanced Fusion Options
@@ -96,18 +115,25 @@ Dragon Helm +127 rolls to inherit:
 Final: Dragon Helm +127 with extra +32 WIS, +7 FR beyond normal scaling
 ```
 
-## Fusion Costs (Future)
+## ⏳ TODO: Fusion Costs (Planned for Player System)
+
+When fusion becomes player-accessible, it will require resources:
 
 ### Resource Requirements
 ```lua
--- In upgrade command
+-- Future player fusion costs
 local fusion_cost = {
   platinum = donor_level * 100,        -- 100pp per level
-  essence = donor_level * 10,          -- Special currency
+  essence = donor_level * 10,          -- Special currency (optional)
   materials = {
-    { item_id = 123456, count = 5 }    -- Fusion Crystal x5
+    { item_id = 123456, count = 5 }    -- Fusion Crystal x5 (from vendor or drops)
   }
 }
+
+-- Container system:
+-- Players buy "Fusion Vessel" from vendor
+-- Place donor + receiver + materials into vessel
+-- Combine to create fused item
 ```
 
 ### Risk/Reward System
@@ -211,26 +237,34 @@ if (receiver_level > donor_level) {
 
 ## UI/UX
 
-### Command Syntax
+### Current GM Command Syntax
 ```
-#fuse                    -- Fuse cursor item into target
-#fuse <slot>             -- Fuse cursor into specific worn slot
-#fuse <percentage>       -- Partial fusion (future)
-#fuseinfo                -- Preview fusion result before committing
+#fuse                    -- ✅ WORKING: Fuse cursor item into target
+#fuse <slot>             -- ✅ WORKING: Fuse cursor into specific worn slot
+#fuse <percentage>       -- ⏳ TODO: Partial fusion
+#fuseinfo                -- ⏳ TODO: Preview fusion result
 ```
 
-### Confirmation Prompt
-```lua
--- Show preview before fusion
-local donor_level = get_item_level(cursor_item)
-local receiver_base = get_base_item(worn_item)
+### ⏳ TODO: Future Player Container System
+```
+Step 1: Buy "Fusion Vessel" from special vendor
+Step 2: Place donor item in slot 1
+Step 3: Place receiver item in slot 2
+Step 4: Place required materials in remaining slots
+Step 5: Click "Combine" button
+Step 6: Confirmation dialog appears with preview:
 
-client:Message(15, "=== FUSION PREVIEW ===")
-client:Message(15, "Donor: " .. cursor_item:GetItem():Name .. " +" .. donor_level)
-client:Message(15, "Receiver: " .. worn_item:GetItem():Name)
-client:Message(15, "Result: " .. receiver_base:Name .. " +" .. donor_level)
-client:Message(15, "")
-client:Message(15, "Type #fuse confirm to proceed (donor will be destroyed!)")
+  =================================
+  FUSION PREVIEW
+  =================================
+  Donor:    Cloth Cap +127 (will be DESTROYED)
+  Receiver: Dragon Helm +0
+  Result:   Dragon Helm +127
+
+  Cost: 12,700pp, 5x Fusion Crystal
+
+  Click OK to proceed (cannot be undone!)
+  =================================
 ```
 
 ## Database Schema

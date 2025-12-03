@@ -4504,11 +4504,29 @@ void Mob::CommonDamage(Mob* attacker, int64 &damage, const uint16 spell_id, cons
 				// SpellEffect::FrontalStunResist description says any angle now a days
 				int stun_resist2 = spellbonuses.FrontalStunResist + itembonuses.FrontalStunResist +
 					aabonuses.FrontalStunResist;
+
+				// Add STR-based frontal stun resist (can reach 100% immunity from front)
+				if (CombatBalance::ENABLE_STR_STUN_RESIST) {
+					int32 str_frontal_bonus = static_cast<int32>(
+						std::min(GetSTR() / CombatBalance::STR_FRONTAL_STUN_RESIST_DIVISOR, 100.0f)
+					);
+					stun_resist2 += str_frontal_bonus;
+				}
+
 				if (zone->random.Int(1, 100) > stun_resist2) {
 					// stun resist 2 failed
 					// time to check SpellEffect::StunResist and mod2 stun resist
 					int stun_resist =
 						spellbonuses.StunResist + itembonuses.StunResist + aabonuses.StunResist;
+
+					// Add STR-based stun resist (asymptotic, never reaches 100%)
+					if (CombatBalance::ENABLE_STR_STUN_RESIST) {
+						float str = static_cast<float>(GetSTR());
+						float scale = CombatBalance::STR_STUN_RESIST_SCALE_FACTOR;
+						float str_resist = 100.0f * (1.0f - std::exp(-str / scale));
+						stun_resist += static_cast<int32>(str_resist);
+					}
+
 					if (zone->random.Int(0, 100) >= stun_resist) {
 						// did stun
 						// nothing else to check!
@@ -4575,17 +4593,50 @@ void Mob::CommonDamage(Mob* attacker, int64 &damage, const uint16 spell_id, cons
 			//see if root will break
 			if (IsRooted() && !FromDamageShield)  // neotoyko: only spells cancel root
 				TryRootFadeByDamage(buffslot, attacker);
-		}
-		else if (!IsValidSpell(spell_id))
-		{
-			//increment chances of interrupting
-			if (IsCasting()) { //shouldnt interrupt on regular spell damage
-				attacked_count++;
-				LogCombat("Melee attack while casting. Attack count [{}]", attacked_count);
+	}
+	else if (!IsValidSpell(spell_id))
+	{
+		//increment chances of interrupting
+		if (IsCasting()) { //shouldnt interrupt on regular spell damage
+			attacked_count++;
+			LogCombat("Melee attack while casting. Attack count [{}]", attacked_count);
+
+			// STR-based per-hit interrupt chance
+			if (CombatBalance::ENABLE_STR_INTERRUPT_RESISTANCE && IsOfClientBot() && attacker) {
+				// Base interrupt chance per hit
+				float interrupt_chance = CombatBalance::INTERRUPT_BASE_CHANCE_PER_HIT;
+
+				// STR reduces interrupt chance
+				float str_reduction = GetSTR() / CombatBalance::STR_INTERRUPT_RESISTANCE_DIVISOR;
+				interrupt_chance -= str_reduction;
+
+				// Level difference heavily modifies interrupt chance
+				int level_diff = attacker->GetLevel() - GetLevel();
+				float level_modifier = level_diff * CombatBalance::INTERRUPT_LEVEL_DIFFERENCE_MULTIPLIER;
+				interrupt_chance += level_modifier;
+
+				// Channeling skill helps resist interrupts
+				if (GetSkill(EQ::skills::SkillChanneling) > 0) {
+					float channeling_reduction = GetSkill(EQ::skills::SkillChanneling) /
+					                              CombatBalance::INTERRUPT_CHANNELING_DIVISOR;
+					interrupt_chance -= channeling_reduction;
+				}
+
+				// Minimum 0% (can be fully immune), maximum 95%
+				interrupt_chance = std::max(0.0f, std::min(interrupt_chance, 95.0f));
+
+				// Roll for interrupt
+				if (zone->random.Real(0.0, 100.0) < interrupt_chance) {
+					LogSpells("STR Interrupt: [{}]% chance triggered (STR: [{}], Level diff: [{}], Channeling: [{}])",
+						interrupt_chance, GetSTR(), level_diff, GetSkill(EQ::skills::SkillChanneling));
+					InterruptSpell();
+				} else {
+					LogSpells("STR Interrupt: Resisted [{}]% chance (STR: [{}], Level diff: [{}])",
+						interrupt_chance, GetSTR(), level_diff);
+				}
 			}
 		}
-
-		//send an HP update if we are hurt
+	}		//send an HP update if we are hurt
 		if(GetHP() < GetMaxHP())
 		{
 			// Don't send a HP update for melee damage unless we've damaged ourself.

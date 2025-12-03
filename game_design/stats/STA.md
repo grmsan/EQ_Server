@@ -16,14 +16,26 @@ Classic EQ HP calculation is often conservative. For a solo player facing raid b
 MaxHP = BaseHP + (Stamina * LevelMultiplier * ClassMultiplier);
 ```
 *   **Class Multiplier:**
-    *   Warrior/SK/Pal: **1.5x** (The Meat Shields)
-    *   Ranger/Monk/Bard/Bst/Ber: **1.2x** (The Skirmishers)
-    *   Cleric/Druid/Shaman: **1.0x** (The Supports)
-    *   Casters: **0.8x** (The Glass Cannons)
+    static constexpr float WARRIOR_MULTIPLIER = 1.6f;
+    static constexpr float CLERIC_MULTIPLIER = 1.1f;
+    static constexpr float PALADIN_MULTIPLIER = 1.5f;
+    static constexpr float RANGER_MULTIPLIER = 1.2f;
+    static constexpr float SHADOWKNIGHT_MULTIPLIER = 1.4f;
+    static constexpr float DRUID_MULTIPLIER = 1.0f;
+    static constexpr float MONK_MULTIPLIER = 1.1f;
+    static constexpr float BARD_MULTIPLIER = 1.1f;
+    static constexpr float ROGUE_MULTIPLIER = 1.0f;
+    static constexpr float SHAMAN_MULTIPLIER = 1.1f;
+    static constexpr float NECROMANCER_MULTIPLIER = 1.3f;    // Higher HP for caster
+    static constexpr float WIZARD_MULTIPLIER = 0.8f;
+    static constexpr float MAGICIAN_MULTIPLIER = 0.8f;
+    static constexpr float ENCHANTER_MULTIPLIER = 0.9f;
+    static constexpr float BEASTLORD_MULTIPLIER = 1.2f;
+    static constexpr float BERSERKER_MULTIPLIER = 1.0f;
 
 ### Progression Goal
 *   **Level 1:** ~100 HP (Survivable start).
-*   **Level 70 (Tank):** ~30,000 HP (Unbuffed).
+*   **Level 70 (Tank):** ~30,000 HP
 *   **Level 70 (Caster):** ~15,000 HP.
 *   *Why:* Bosses will hit hard. You need the pool to survive the spike damage while your regen kicks in.
 

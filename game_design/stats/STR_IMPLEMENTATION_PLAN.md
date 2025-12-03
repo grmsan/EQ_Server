@@ -72,8 +72,8 @@ Players can easily understand: "I upgraded from 300 STR to 400 STR, so my base d
 
 The broader STR system includes:
 - Pet inheritance (50% of owner STR)
-- Tank interrupt immunity (`Channeling + STR/4`)
-- Caster stun resistance (`STR/50%`)
+- Spell interrupt resistance (per-hit % chance: `5% - STR/100 - Channeling/50 + LevelDiff*1.5%`)
+- Stun resistance (two-layer: frontal `min(STR/10, 100%)`, regular `100*(1-e^(-STR/2000))`)
 - Monk weight limits (`STR * 10`)
 
 These features want a simple "how much STR is this entity worth?" calculation.
@@ -541,47 +541,139 @@ int Mob::GetSTR()
 
 ## Class-Specific Feature Implementation
 
-### Tanks: Interrupt Immunity
-**Design**: `Channeling + STR/4` for interrupt resistance
+### Spell Interruption Resistance ✅ IMPLEMENTED
+**Design**: Per-hit interrupt chance system with STR, Channeling, and level difference modifiers
 
+**Location**: `zone/attack.cpp` (lines ~4600)
+
+**Formula**: `Interrupt% = 5% - (STR/100) - (Channeling/50) + (AttackerLevel - DefenderLevel) * 1.5%`
+- **Minimum**: 0% (full immunity possible with high STR vs low-level mobs)
+- **Maximum**: 95% (always some chance to succeed with channeling)
+
+**Implementation**:
 ```cpp
-// zone/spell_effects.cpp or zone/mob.cpp
-bool Mob::CheckInterruptImmunity(int damage)
-{
-    // Base channeling skill
-    int channeling = GetSkill(EQ::skills::SkillChanneling);
+// Each melee hit while casting rolls for interrupt
+if (CombatBalance::ENABLE_STR_INTERRUPT_RESISTANCE && IsOfClientBot() && attacker) {
+    float interrupt_chance = CombatBalance::INTERRUPT_BASE_CHANCE_PER_HIT;  // 5%
 
-    // Add STR bonus for tanks
-    if (IsWarriorClass()) { // Or check for tank classes specifically
-        channeling += GetSTR() / 4;
+    // STR reduces interrupt chance (-1% per 100 STR)
+    interrupt_chance -= GetSTR() / CombatBalance::STR_INTERRUPT_RESISTANCE_DIVISOR;
+
+    // Level difference heavily modifies (±1.5% per level)
+    int level_diff = attacker->GetLevel() - GetLevel();
+    interrupt_chance += level_diff * CombatBalance::INTERRUPT_LEVEL_DIFFERENCE_MULTIPLIER;
+
+    // Channeling skill helps (-1% per 50 skill)
+    if (GetSkill(EQ::skills::SkillChanneling) > 0) {
+        interrupt_chance -= GetSkill(EQ::skills::SkillChanneling) /
+                            CombatBalance::INTERRUPT_CHANNELING_DIVISOR;
     }
 
-    // Roll vs damage
-    return (zone->random.Int(0, channeling) > damage);
+    // Clamp to valid range
+    interrupt_chance = std::max(0.0f, std::min(interrupt_chance, 95.0f));
+
+    if (zone->random.Real(0.0, 100.0) < interrupt_chance) {
+        InterruptSpell();
+    }
 }
 ```
 
-### Rogues: Already handled by backstab implementation above
-
-### Casters: Stun Resistance
-**Design**: `STR/50` percent chance to resist stun
-
+**Configuration** (`zone/combat_balance_config.h`):
 ```cpp
-// zone/spell_effects.cpp
-bool Mob::TryStunResist(int spell_id)
-{
-    // Base resist chance
-    int resist_chance = 0;
+static constexpr bool ENABLE_STR_INTERRUPT_RESISTANCE = true;
+static constexpr float INTERRUPT_BASE_CHANCE_PER_HIT = 5.0f;
+static constexpr float STR_INTERRUPT_RESISTANCE_DIVISOR = 100.0f;
+static constexpr float INTERRUPT_LEVEL_DIFFERENCE_MULTIPLIER = 1.5f;
+static constexpr float INTERRUPT_CHANNELING_DIVISOR = 50.0f;
+```
 
-    // Casters get STR-based stun resist
-    if (IsWisdomCasterClass() || IsIntelligenceCasterClass()) {
-        resist_chance = GetSTR() / 50; // 1% per 50 STR
+**Examples**:
+- Level 70, 800 STR, 250 Channeling vs Level 55 mob: **0%** per hit (immune)
+- Level 70, 200 STR, 100 Channeling vs Level 70 mob: **1%** per hit (~4% over 4 hits)
+- Level 70, 200 STR, 100 Channeling vs Level 73 mob: **5.5%** per hit (~20% over 4 hits)
+
+**Benefits All Classes**:
+- **Tanks**: Can cast heals/lifetaps while tanking multiple mobs
+- **Priests**: Complete Heals go off even under heavy melee pressure
+- **Casters**: Can nuke/gate without interruption from low-level trash
+- **Bards**: Songs don't break when pulling/kiting (uses Singing skill instead of Channeling)
+
+### Rogues: Backstab
+Already handled by backstab implementation above
+
+### Stun Resistance ✅ IMPLEMENTED
+**Design**: Two-layer system - Frontal (linear, can reach 100%) + Regular (asymptotic, never 100%)
+
+**Location**: `zone/attack.cpp` (lines ~4505), `zone/client_mods.cpp`
+
+**Layer 1 - Frontal Stun Resist**:
+- **Formula**: `min(STR / 10, 100%)`
+- **Can reach 100% immunity** from frontal bash/kick attacks
+- Checked first for frontal attacks
+
+**Layer 2 - Regular Stun Resist (Asymptotic)**:
+- **Formula**: `100 * (1 - e^(-STR / 2000))`
+- **Never reaches 100%** - asymptotic curve approaches infinity
+- Used for rear attacks and as fallback if frontal check fails
+
+**Implementation**:
+```cpp
+// Frontal stun resist (first layer) - zone/attack.cpp ~line 4505
+if (CombatBalance::ENABLE_STR_STUN_RESIST) {
+    int32 str_frontal_bonus = static_cast<int32>(
+        std::min(GetSTR() / CombatBalance::STR_FRONTAL_STUN_RESIST_DIVISOR, 100.0f)
+    );  // min(STR / 10, 100%)
+    stun_resist2 += str_frontal_bonus;
+}
+
+// Regular stun resist (second layer, asymptotic) - zone/attack.cpp ~line 4520
+if (CombatBalance::ENABLE_STR_STUN_RESIST) {
+    float str = static_cast<float>(GetSTR());
+    float scale = CombatBalance::STR_STUN_RESIST_SCALE_FACTOR;  // 2000.0f
+    float str_resist = 100.0f * (1.0f - std::exp(-str / scale));
+    stun_resist += static_cast<int32>(str_resist);
+}
+
+// GetStunResist() - zone/client_mods.cpp
+int32 Client::GetStunResist() const
+{
+    int32 base_stun_resist = itembonuses.StunResist;
+
+    if (CombatBalance::ENABLE_STR_STUN_RESIST) {
+        float str = static_cast<float>(GetSTR());
+        float scale = CombatBalance::STR_STUN_RESIST_SCALE_FACTOR;
+        float str_resist = 100.0f * (1.0f - std::exp(-str / scale));
+        base_stun_resist += static_cast<int32>(str_resist);
     }
 
-    // Roll
-    return (zone->random.Int(1, 100) <= resist_chance);
+    return base_stun_resist;
 }
 ```
+
+**Configuration** (`zone/combat_balance_config.h`):
+```cpp
+static constexpr bool ENABLE_STR_STUN_RESIST = true;
+static constexpr float STR_FRONTAL_STUN_RESIST_DIVISOR = 10.0f;
+static constexpr float STR_STUN_RESIST_SCALE_FACTOR = 2000.0f;
+```
+
+**Examples**:
+- 500 STR: 50% frontal, 22% regular
+- 1000 STR: **100% frontal** (immune from front), 39% regular (rear vulnerable)
+- 2000 STR: 100% frontal, 63% regular
+- 5000 STR: 100% frontal, 92% regular
+- 10000 STR: 100% frontal, 99.3% regular (asymptotically approaches but never reaches 100%)
+
+**Benefits All Classes**:
+- **Tanks**: Immune to frontal bash stuns with 1000+ STR, high rear resistance
+- **Casters**: Significant passive stun resist for solo tanking/kiting scenarios
+- **All**: Scales infinitely but maintains some vulnerability (never total immunity from rear)
+
+**Tuning Guidance**:
+- Increase `INTERRUPT_BASE_CHANCE_PER_HIT` to make interrupts more frequent
+- Decrease `STR_INTERRUPT_RESISTANCE_DIVISOR` to make STR more valuable (-1% per 50 STR instead of per 100)
+- Increase `STR_STUN_RESIST_SCALE_FACTOR` to slow down the asymptotic curve (less resist at high STR)
+- Decrease `STR_FRONTAL_STUN_RESIST_DIVISOR` to make frontal immunity easier to reach (STR/5 instead of STR/10)
 
 ### Monks: Weight Limit
 **Design**: `MaxWeight = STR * 10`
@@ -655,13 +747,16 @@ bool Mob::CheckSongInterruptImmunity(int damage)
    - Check pet GetSTR() returns owner_str / 2
    - Verify pet damage scales correctly
 
-7. **Tank Interrupt Immunity**
-   - Cast spells while taking damage
-   - Verify `Channeling + STR/4` calculation
+7. **Spell Interrupt Resistance**
+   - Cast spells while taking damage from mobs at various levels
+   - Verify per-hit interrupt chance: `5% - STR/100 - Channeling/50 + LevelDiff*1.5%`
+   - Test: High STR vs low-level = 0% interrupt, even-level = some interrupts, higher-level = frequent interrupts
 
-8. **Caster Stun Resistance**
-   - Test stun spell at various STR levels
-   - Verify `STR/50` percent resistance
+8. **Stun Resistance**
+   - Test bash/kick stuns at various STR levels
+   - Verify frontal: `min(STR/10, 100%)` (1000 STR = immune from front)
+   - Verify regular: `100*(1-e^(-STR/2000))` (asymptotic curve, never 100%)
+   - Test: Rear attacks should always have some chance to stun even at very high STR
 
 9. **Monk Weight Limits**
    - Test inventory weight at various STR levels

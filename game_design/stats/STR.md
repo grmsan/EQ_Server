@@ -1,6 +1,6 @@
 # Strength (STR) - Design Document
 
-> **⚙️ BALANCE CONFIGURATION**: All tunable values for this system are centralized in `zone/combat_balance_config.h`.  
+> **⚙️ BALANCE CONFIGURATION**: All tunable values for this system are centralized in `zone/combat_balance_config.h`.
 > **📊 IMPLEMENTATION**: Technical details in `game_design/STR_IMPLEMENTATION_PLAN.md`.
 
 ## Core Philosophy
@@ -90,8 +90,16 @@ StrengthDamageBonus = Strength * (Level / STR_LEVEL_DIVISOR);
 *   **Primary Benefit: Aggro Generation.**
     *   In this era, Aggro is often capped by weapon damage. By scaling Base Damage with STR, a Tank's aggro generation scales infinitely. A 1000 STR Warrior holds aggro against 100k DPS Wizards easily.
 *   **Secondary Benefit: The "Battle Caster" (Pal/SK).**
-    *   **Interrupt Immunity:** `Channeling + (STR / 4)`.
-    *   Tanking multiple mobs means constant hit checks. High STR ensures your lifetaps and heals *never* fizzle due to melee hits.
+    *   **Interrupt Resistance:** Per-hit interrupt chance system.
+        *   **Formula:** `Interrupt% = 5% - (STR/100) - (Channeling/50) + (AttackerLevel - DefenderLevel) * 1.5%`
+        *   **Min: 0%** (can achieve complete immunity vs low-level mobs with high STR)
+        *   **Example:** 800 STR, 250 Channeling vs even-level mob = 0% interrupt chance per hit
+        *   Tanking multiple mobs means constant hit checks. High STR ensures your lifetaps and heals are virtually uninterruptible.
+    *   **Stun Resistance:** Two-layer system protects from bash/kick stuns.
+        *   **Frontal Layer:** `min(STR / 10, 100%)` - can reach 100% immunity from front
+        *   **Regular Layer:** `100 * (1 - e^(-STR / 2000))` - asymptotic, never reaches 100%
+        *   **Example:** 1000 STR = 100% frontal resist (immune from front), 39% from rear
+        *   **Example:** 5000 STR = 100% frontal resist, 92% from rear (still some vulnerability)
 
 ### B. The DPS Melee (Rogue, Berserker, Monk, Ranger)
 *   **Rogue:**
@@ -118,20 +126,35 @@ StrengthDamageBonus = Strength * (Level / STR_LEVEL_DIVISOR);
     *   **Mana Conservation:** When OOM, a Priest with high STR can switch to melee.
     *   *Scenario:* A Level 70 Cleric with 800 STR hits for ~40,000 damage. This is enough to finish off bosses or grind trash without spending a drop of mana.
 *   **Feature: "Unshakable Faith"**
-    *   **Interrupt Resist:** Critical for healers. If you are being beaten on by 5 mobs, you need to get that Complete Heal off. High STR makes you immovable.
+    *   **Interrupt Resistance:** Critical for healers. If you are being beaten on by 5 mobs, you need to get that Complete Heal off.
+    *   **Formula:** `Interrupt% = 5% - (STR/100) - (Channeling/50) + Level_Difference * 1.5%`
+    *   **Scenario:** Level 70 Cleric with 600 STR, 200 Channeling vs 5 even-level mobs:
+        *   Per-hit interrupt chance: 5% - 6% - 4% = **0%** (immune to interrupts)
+        *   Even taking 20+ hits during cast = Complete Heal goes off
+    *   High STR makes you immovable when it matters most.
 
 ### E. The Pure Casters (Wizard, Enchanter)
 *   **Feature: "Iron Focus"**
-    *   **Stun Resistance:** `Chance to Resist Stun = STR / 50 %`.
-    *   **Scenario:** A Wizard with 1000 STR has a **20% passive chance** to ignore melee stuns (Bash/Kick stuns). Combined with AA, this makes them incredibly durable in solo kiting/tanking situations.
-    *   **Trade-off:** Do you take +INT for more mana pool, or +STR to ensure your Gate/Nuke never gets interrupted?
+    *   **Stun Resistance:** Asymptotic curve that scales infinitely but never reaches 100%.
+        *   **Formula:** `StunResist% = 100 * (1 - e^(-STR / 2000))`
+        *   **Scenario:** Wizard with 1000 STR has **39% base stun resist** from STR alone (stacks with items/AAs)
+        *   **Scenario:** Wizard with 5000 STR has **92% stun resist** (still some risk, but very tanky)
+        *   This makes them incredibly durable in solo kiting/tanking situations.
+    *   **Interrupt Resistance:** Each melee hit has reduced chance to interrupt based on STR.
+        *   **Formula:** `Interrupt% = 5% - (STR/100) - (Channeling/50) + Level_Difference * 1.5%`
+        *   **Scenario:** Wizard with 800 STR vs 15 levels lower mob = **0% interrupt chance** (completely immune)
+        *   **Scenario:** Wizard with 200 STR vs +3 levels higher mob = **5.5% per hit** (~20% chance over 4 hits)
+    *   **Trade-off:** Do you take +INT for more mana pool, or +STR to ensure your Gate/Nuke never gets interrupted and you can tank more effectively?
 
 ### F. The Bard (Jack of All Trades)
 *   **Melee Damage:** Bards are melee combatants. Strength scales their damage just like Rangers or Rogues, allowing them to contribute significant DPS between songs.
 *   **"Unbroken Melody":**
-    *   **Interrupt Resist:** Bards are constantly singing while being hit (pulling, kiting, AOEing).
-    *   **Mechanic:** Strength adds to the check to avoid "You miss a note" when hit.
-    *   *Scenario:* A Bard with high STR can swarm kite or tank mobs without their songs dropping, maintaining CC and buffs.
+    *   **Interrupt Resistance:** Bards are constantly singing while being hit (pulling, kiting, AOEing).
+    *   **Mechanic:** Per-hit interrupt chance reduced by STR and Singing skill.
+        *   **Formula:** `Interrupt% = 5% - (STR/100) - (Singing/50) + Level_Difference * 1.5%`
+        *   **Note:** Uses Singing skill instead of Channeling for song-based casting
+    *   *Scenario:* A Bard with 600 STR and 250 Singing vs even-level mobs = **0% interrupt chance**
+    *   Can swarm kite or tank mobs without songs dropping, maintaining CC and buffs perfectly.
 
 
 ---
@@ -153,10 +176,10 @@ This gear curve aligns perfectly with the `STR * (Level/10)` formula to produce 
 
 **Who Gets STR Scaling?** (Controlled by `combat_balance_config.h`)
 
-✅ **Players**: All player characters get full STR scaling (`IsClient()`)  
-✅ **Player Pets**: Inherit owner STR at `PET_STR_INHERITANCE` rate (currently 50%)  
-❌ **NPCs**: Do NOT get STR scaling (`NPCS_USE_STR_SCALING = false`)  
-❌ **Charmed NPCs**: Do NOT get STR scaling (`CHARMED_NPCS_USE_STR_SCALING = false`)  
+✅ **Players**: All player characters get full STR scaling (`IsClient()`)
+✅ **Player Pets**: Inherit owner STR at `PET_STR_INHERITANCE` rate (currently 50%)
+❌ **NPCs**: Do NOT get STR scaling (`NPCS_USE_STR_SCALING = false`)
+❌ **Charmed NPCs**: Do NOT get STR scaling (`CHARMED_NPCS_USE_STR_SCALING = false`)
 
 **Rationale**:
 - Player power fantasy: Players scale infinitely, NPCs have fixed power

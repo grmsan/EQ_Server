@@ -44,7 +44,7 @@ To achieve "drastic improvement" and "meaningful upgrades," we propose a system 
 #### 1. Titanic Strength (Damage & ATK)
 **Current:** `STR * 0.9` (Weak, flat).
 
-**Proposed (OPTION B - Additive Base Damage):**
+**Proposed (Additive Base Damage):**
 *   **Architecture:** STR bonus is added to base damage alongside weapon delay bonus, then all percent modifiers scale the total.
 *   **Formula:** `StrengthDamageBonus = STR * (Level / STR_LEVEL_DIVISOR)` where `STR_LEVEL_DIVISOR = 10.0f`
 *   **Total Base Damage:** `BaseDamage = WeaponDamage + DelayBonus + StrengthBonus`
@@ -55,7 +55,7 @@ To achieve "drastic improvement" and "meaningful upgrades," we propose a system 
     *   **Level 60, 500 STR:** 3000 bonus damage (500 * 6.0)
     *   *Result:* Strength becomes a primary driver of damage at high levels. The large base damage (weapon + delay + STR) then multiplies through existing crit/disc/buff systems for massive end-game DPS.
 
-**Why Option B Instead of Option C (Percent Modifier)?**
+**Why Additive vs Percent Modifier?**
 - **Predictable Math:** STR is a flat bonus added to base; percent mods multiply the whole thing. No unexpected multiplicative explosions.
 - **Clear Mental Model:** "My weapon hits for X, delay adds Y, STR adds Z" - easy to understand and debug.
 - **Safer Scaling:** Large percent buffs (100% melee disc) scale the whole base, but STR itself doesn't multiply with other percent effects.

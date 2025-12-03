@@ -469,6 +469,495 @@ namespace CombatBalance {
 	 */
 	constexpr bool STR_DAMAGE_AFFECTED_BY_AC = true;
 
+	//=============================================================================
+	// STRENGTH - SPELL INTERRUPTION RESISTANCE
+	//=============================================================================
+
+	/**
+	 * @brief Enable STR-based per-hit spell interruption resistance
+	 *
+	 * TRUE: Each melee hit while casting has a % chance to interrupt based on STR/level
+	 * FALSE: Use legacy channeling skill system only
+	 *
+	 * Current: TRUE (enabled by default)
+	 *
+	 * Design: Per-hit interrupt chance modified by STR, Channeling skill, and level difference.
+	 * Low-level mobs with high defender STR can have 0% interrupt chance (full immunity).
+	 */
+	constexpr bool ENABLE_STR_INTERRUPT_RESISTANCE = true;
+
+	/**
+	 * @brief Base interrupt chance per melee hit while casting
+	 *
+	 * Current: 5.0f (5% base chance before modifiers)
+	 *
+	 * This is the starting point before STR, Channeling, and level difference modify it.
+	 * Small enough that single hits rarely interrupt, but multiple hits add up.
+	 */
+	constexpr float INTERRUPT_BASE_CHANCE_PER_HIT = 5.0f;
+
+	/**
+	 * @brief STR divisor for interrupt resistance
+	 *
+	 * Formula: interrupt_reduction = STR / DIVISOR
+	 *
+	 * Current: 100.0f (every 100 STR = -1% interrupt chance)
+	 *
+	 * Examples:
+	 * - 200 STR: -2% interrupt chance
+	 * - 800 STR: -8% interrupt chance
+	 * - 1000 STR: -10% interrupt chance
+	 */
+	constexpr float STR_INTERRUPT_RESISTANCE_DIVISOR = 100.0f;
+
+	/**
+	 * @brief Level difference modifier for interrupt chance
+	 *
+	 * Formula: level_modifier = (attacker_level - defender_level) * MULTIPLIER
+	 *
+	 * Current: 1.5f (each level difference = ±1.5% interrupt chance)
+	 *
+	 * Examples:
+	 * - Attacker 3 levels higher: +4.5% interrupt chance
+	 * - Attacker 15 levels lower: -22.5% interrupt chance
+	 *
+	 * Design: Level difference is a major factor - low-level mobs rarely interrupt.
+	 */
+	constexpr float INTERRUPT_LEVEL_DIFFERENCE_MULTIPLIER = 1.5f;
+
+	/**
+	 * @brief Channeling skill divisor for interrupt resistance
+	 *
+	 * Formula: channeling_reduction = Channeling_Skill / DIVISOR
+	 *
+	 * Current: 50.0f (every 50 Channeling skill = -1% interrupt chance)
+	 *
+	 * Example: 250 Channeling skill = -5% interrupt chance
+	 *
+	 * This preserves the value of Channeling skill while adding STR contribution.
+	 */
+	constexpr float INTERRUPT_CHANNELING_DIVISOR = 50.0f;
+
+	//=============================================================================
+	// STRENGTH - STUN RESISTANCE
+	//=============================================================================
+
+	/**
+	 * @brief Enable STR contribution to stun resistance
+	 *
+	 * TRUE: STR adds to both Frontal and Regular stun resist (stacks with items/AAs)
+	 * FALSE: Only item/spell/AA bonuses apply
+	 *
+	 * Current: TRUE (enabled by default)
+	 *
+	 * Design: Two-layer system:
+	 * 1. FrontalStunResist: Can reach 100% immunity from frontal attacks (medium STR)
+	 * 2. StunResist: Asymptotic curve that never reaches 100% (for rear attacks)
+	 */
+	constexpr bool ENABLE_STR_STUN_RESIST = true;
+
+	/**
+	 * @brief STR divisor for FRONTAL stun resistance
+	 *
+	 * Formula: FrontalStunResist = min(STR / DIVISOR, 100)
+	 *
+	 * Current: 10.0f (every 10 STR = 1% frontal stun resist, caps at 100%)
+	 *
+	 * Examples:
+	 * - 500 STR = 50% frontal resist
+	 * - 1000 STR = 100% frontal resist (completely immune from front)
+	 * - 2000 STR = 100% (capped)
+	 *
+	 * This allows medium-high STR characters to be immune to frontal stuns (bash from front).
+	 * Rear attacks bypass this layer and go straight to regular StunResist check.
+	 */
+	constexpr float STR_FRONTAL_STUN_RESIST_DIVISOR = 10.0f;
+
+	/**
+	 * @brief STR scaling factor for REGULAR stun resistance (asymptotic curve)
+	 *
+	 * Formula: StunResist = 100 * (1 - e^(-STR / SCALE_FACTOR))
+	 *
+	 * Current: 2000.0f (controls how quickly resist approaches 100%)
+	 *
+	 * This creates a diminishing returns curve that NEVER reaches 100% resist.
+	 * Used for rear attacks and as secondary layer if frontal resist fails.
+	 *
+	 * Examples:
+	 * - 500 STR = 22% resist
+	 * - 1000 STR = 39% resist
+	 * - 2000 STR = 63% resist
+	 * - 5000 STR = 92% resist
+	 * - 10000 STR = 99.3% resist (asymptotically approaches 100%, never reaches it)
+	 *
+	 * TUNING: Lower value = resist ramps up faster but plateaus sooner
+	 *         Higher value = resist grows slower but continues scaling longer
+	 */
+	constexpr float STR_STUN_RESIST_SCALE_FACTOR = 2000.0f;
+
+	//=============================================================================
+	// STAMINA SYSTEM CONFIGURATION
+	//=============================================================================
+	//
+	// ENABLE/DISABLE: Use RuleB(Combat, UseNewStaminaFormula) to toggle the new
+	// STA systems on/off. Set in common/ruletypes.h or via /reload rules.
+	//
+	// DESIGN PHILOSOPHY:
+	// - Stamina is the "Sustainability Stat" - fuels combat through HP, regen, and mitigation
+	// - All systems use LINEAR scaling for predictability (no exponentials)
+	// - Conservative tuning prevents 50-70k HP pools
+	// - AC×STA synergy for mitigation (both stats remain valuable)
+	//=============================================================================
+
+	//=============================================================================
+	// STAMINA - HP SCALING (Iron Constitution)
+	//=============================================================================
+
+	/**
+	 * @brief Enable STA-based HP scaling system
+	 *
+	 * TRUE: Use new linear HP formula with class multipliers
+	 * FALSE: Use legacy HP formula
+	 *
+	 * Current: TRUE (enabled by default)
+	 *
+	 * Formula: BASE_HP + (BASE_HP_PER_LEVEL * Level * ClassMult) + (STA * Level * ClassMult / STA_DIVISOR)
+	 */
+	constexpr bool ENABLE_STA_HP_SCALING = true;
+
+	/**
+	 * @brief Base HP for all characters
+	 *
+	 * Current: 100 (survivable start for level 1)
+	 */
+	constexpr int STA_BASE_HP = 100;
+
+	/**
+	 * @brief Flat HP gained per level (before class multiplier)
+	 *
+	 * Current: 5 (conservative tuning)
+	 *
+	 * This provides smooth HP progression independent of STA investment.
+	 * Lower value = more reliant on STA for HP growth
+	 * Higher value = less reliant on STA, all classes get more base HP
+	 */
+	constexpr int STA_BASE_HP_PER_LEVEL = 5;
+
+	/**
+	 * @brief STA divisor for HP scaling
+	 *
+	 * Formula: (STA * Level * ClassMult) / STA_HP_DIVISOR
+	 *
+	 * Current: 10.0f (conservative - prevents massive HP pools)
+	 *
+	 * TUNING (Primary Knob):
+	 * - Lower value (7-8): More HP from STA
+	 * - Higher value (12-15): Less HP from STA
+	 *
+	 * Examples at L70 with 1000 STA, 1.5x class mult:
+	 * - Divisor 10: 10,500 HP from STA
+	 * - Divisor 7: 15,000 HP from STA
+	 * - Divisor 15: 7,000 HP from STA
+	 */
+	constexpr float STA_HP_DIVISOR = 10.0f;
+
+	/**
+	 * @brief Global HP scalar (emergency tuning knob)
+	 *
+	 * Multiplies entire HP formula result.
+	 * Current: 1.0f (no scaling)
+	 *
+	 * Use only for global adjustments - prefer tuning STA_HP_DIVISOR and BASE_HP_PER_LEVEL
+	 */
+	constexpr float STA_HP_LEVEL_SCALAR = 1.0f;
+
+	/**
+	 * @brief Class-specific HP multipliers
+	 *
+	 * Applied to both level scaling AND STA scaling portions of HP formula.
+	 * Allows fine-tuning each class's HP progression independently.
+	 *
+	 * Current values:
+	 * - Tanks (War/Pal/SK): 1.5x (highest HP)
+	 * - Melee (Rog/Ber/Mnk/Rng/Brd/Bst): 1.2x (medium-high HP)
+	 * - Priests (Clr/Dru/Shm): 1.0x (baseline)
+	 * - Casters: 0.8x-1.3x (varies by class design)
+	 *   - Necro: 1.3x (tanky caster)
+	 *   - Wiz/Mag: 0.8x (squishy nukers)
+	 *   - Enc: 0.9x (slightly less squishy)
+	 */
+	constexpr float STA_HP_WARRIOR_MULTIPLIER = 1.5f;
+	constexpr float STA_HP_CLERIC_MULTIPLIER = 1.0f;
+	constexpr float STA_HP_PALADIN_MULTIPLIER = 1.5f;
+	constexpr float STA_HP_RANGER_MULTIPLIER = 1.2f;
+	constexpr float STA_HP_SHADOWKNIGHT_MULTIPLIER = 1.5f;
+	constexpr float STA_HP_DRUID_MULTIPLIER = 1.0f;
+	constexpr float STA_HP_MONK_MULTIPLIER = 1.2f;
+	constexpr float STA_HP_BARD_MULTIPLIER = 1.2f;
+	constexpr float STA_HP_ROGUE_MULTIPLIER = 1.2f;
+	constexpr float STA_HP_SHAMAN_MULTIPLIER = 1.0f;
+	constexpr float STA_HP_NECROMANCER_MULTIPLIER = 1.3f;  // Higher HP for caster
+	constexpr float STA_HP_WIZARD_MULTIPLIER = 0.8f;
+	constexpr float STA_HP_MAGICIAN_MULTIPLIER = 0.8f;
+	constexpr float STA_HP_ENCHANTER_MULTIPLIER = 0.9f;
+	constexpr float STA_HP_BEASTLORD_MULTIPLIER = 1.2f;
+	constexpr float STA_HP_BERSERKER_MULTIPLIER = 1.2f;
+
+	//=============================================================================
+	// STAMINA - REGENERATION (Undying Vitality)
+	//=============================================================================
+
+	/**
+	 * @brief Enable STA-based HP regeneration
+	 *
+	 * TRUE: STA adds to HP regen (self-sufficiency)
+	 * FALSE: Use legacy HP regen only
+	 *
+	 * Current: TRUE
+	 *
+	 * Formula: (STA * Level) / HP_REGEN_DIVISOR HP per tick
+	 */
+	constexpr bool ENABLE_STA_HP_REGEN = true;
+
+	/**
+	 * @brief STA divisor for HP regeneration
+	 *
+	 * Current: 20.0f (conservative - ~5% max HP per tick at end-game)
+	 *
+	 * Examples at L70 with 1000 STA:
+	 * - Divisor 20: 3,500 HP/tick (~5% of 70k total HP)
+	 * - Divisor 10: 7,000 HP/tick (~10% of 70k total HP)
+	 * - Divisor 30: 2,333 HP/tick (~3.3% of 70k total HP)
+	 *
+	 * TUNING:
+	 * - Too strong (god mode)? Increase divisor (20 → 30 → 40)
+	 * - Too weak (always dying)? Decrease divisor (20 → 15 → 10)
+	 */
+	constexpr float STA_HP_REGEN_DIVISOR = 20.0f;
+
+	/**
+	 * @brief Enable STA-based mana regeneration
+	 *
+	 * TRUE: STA adds to mana regen for casters (resource sustainability)
+	 * FALSE: Use legacy mana regen only
+	 *
+	 * Current: TRUE
+	 *
+	 * Formula: (STA * Level) / MANA_REGEN_DIVISOR mana per tick (casters only)
+	 */
+	constexpr bool ENABLE_STA_MANA_REGEN = true;
+
+	/**
+	 * @brief STA divisor for mana regeneration
+	 *
+	 * Current: 50.0f (moderate - ~3-7% max mana per tick)
+	 *
+	 * Examples at L70:
+	 * - 500 STA: 700 mana/tick (~3.5% of 20k mana pool)
+	 * - 1000 STA: 1,400 mana/tick (~7% of 20k mana pool)
+	 *
+	 * TUNING:
+	 * - Trivializes mana management? Increase divisor (50 → 70 → 100)
+	 * - Can't sustain rotations? Decrease divisor (50 → 40 → 30)
+	 */
+	constexpr float STA_MANA_REGEN_DIVISOR = 50.0f;
+
+	/**
+	 * @brief Enable STA-based endurance regeneration
+	 *
+	 * TRUE: STA adds to endurance regen (discipline uptime)
+	 * FALSE: Use legacy endurance regen only
+	 *
+	 * Current: TRUE
+	 *
+	 * Formula: (STA * Level) / ENDURANCE_REGEN_DIVISOR endurance per tick
+	 */
+	constexpr bool ENABLE_STA_ENDURANCE_REGEN = true;
+
+	/**
+	 * @brief STA divisor for endurance regeneration
+	 *
+	 * Current: 20.0f (high regen for near-permanent discipline uptime)
+	 *
+	 * Examples at L70:
+	 * - 1000 STA: 3,500 End/tick
+	 * - 1500 STA: 5,250 End/tick
+	 *
+	 * TUNING: Adjust based on discipline endurance costs
+	 */
+	constexpr float STA_ENDURANCE_REGEN_DIVISOR = 20.0f;
+
+	//=============================================================================
+	// STAMINA - DAMAGE MITIGATION (Thick Skin) - Hybrid AC×STA Model
+	//=============================================================================
+
+	/**
+	 * @brief Enable Hybrid AC×STA mitigation system
+	 *
+	 * TRUE: STA amplifies AC-based mitigation (synergy between defensive stats)
+	 * FALSE: Use legacy AC-only mitigation
+	 *
+	 * Current: TRUE
+	 *
+	 * Philosophy: AC is primary mitigation source, STA amplifies AC effectiveness.
+	 * STA never produces mitigation alone - only enhances what AC already provides.
+	 * This ensures both AC and STA remain valuable (no stat obsolescence).
+	 *
+	 * Formula:
+	 * 1. ac_mitigation = ComputeACMitigation() (existing system)
+	 * 2. sta_ceiling = (STA * Level) / STA_MIT_DIVISOR
+	 * 3. sta_bonus = min(sta_ceiling, ac_mitigation) if STA_MATCH_AC enabled
+	 * 4. total_mitigation = ac_mitigation + sta_bonus
+	 * 5. total_mitigation = min(total_mitigation, COMBAT_MAX_MITIGATION_PERCENT)
+	 */
+	constexpr bool ENABLE_HYBRID_AC_STA_MITIGATION = true;
+
+	/**
+	 * @brief STA divisor for mitigation ceiling calculation
+	 *
+	 * Current: 2000.0f (conservative - prevents easy 90% mitigation)
+	 *
+	 * Examples at L70:
+	 * - 1000 STA: 35% ceiling
+	 * - 1500 STA: 52.5% ceiling
+	 * - 500 STA: 17.5% ceiling
+	 *
+	 * TUNING (Primary STA Mitigation Knob):
+	 * - Too strong (tanks unkillable)? Increase divisor (2000 → 3000)
+	 * - Too weak (no noticeable benefit)? Decrease divisor (2000 → 1500)
+	 */
+	constexpr float STA_MIT_DIVISOR = 2000.0f;
+
+	/**
+	 * @brief Absolute maximum STA contribution to mitigation
+	 *
+	 * Current: 50.0f (50% max, even at extreme STA values)
+	 *
+	 * Safety cap to prevent weird edge cases at 5000+ STA.
+	 */
+	constexpr float STA_MIT_MAX_PERCENT = 50.0f;
+
+	/**
+	 * @brief Whether STA mitigation bonus is limited by AC mitigation
+	 *
+	 * TRUE: STA can only amplify existing AC mitigation (enforces synergy)
+	 * FALSE: STA provides full ceiling regardless of AC
+	 *
+	 * Current: TRUE (recommended - ensures AC remains valuable)
+	 *
+	 * Example (TRUE):
+	 * - AC provides 15% mitigation
+	 * - STA ceiling is 35%
+	 * - STA bonus limited to 15% (matches AC)
+	 * - Total: 15% + 15% = 30%
+	 *
+	 * Example (FALSE):
+	 * - AC provides 15% mitigation
+	 * - STA ceiling is 35%
+	 * - STA bonus gets full 35%
+	 * - Total: 15% + 35% = 50%
+	 */
+	constexpr bool STA_MATCH_AC = true;
+
+	/**
+	 * @brief Maximum mitigation AC alone can provide
+	 *
+	 * Current: 50.0f (AC caps at 50% before STA amplification)
+	 *
+	 * TUNING (Primary AC Mitigation Knob):
+	 * - AC too strong? Lower cap (50 → 40 → 35)
+	 * - AC too weak? Raise cap (50 → 60)
+	 */
+	constexpr float AC_MITIGATION_HARD_CAP = 50.0f;
+
+	/**
+	 * @brief Global maximum total mitigation (AC + STA combined)
+	 *
+	 * Current: 90.0f (prevents immunity, always take 10% minimum damage)
+	 *
+	 * TUNING (Safety Valve):
+	 * - Damage still too trivial? Lower cap (90 → 85 → 80)
+	 * - Players dying too fast? Raise cap (90 → 95)
+	 */
+	constexpr float COMBAT_MAX_MITIGATION_PERCENT = 90.0f;
+
+	/**
+	 * @brief Global scalar for AC mitigation effectiveness
+	 *
+	 * Current: 1.0f (no scaling)
+	 *
+	 * Multiplies AC's mitigation contribution before combining with STA.
+	 * Use to globally tune AC effectiveness without changing caps.
+	 */
+	constexpr float AC_MITIGATION_SOFTCAP_SCALAR = 1.0f;
+
+	//=============================================================================
+	// STAMINA - ENVIRONMENTAL RESISTANCE
+	//=============================================================================
+
+	/**
+	 * @brief Enable STA-based poison resistance bonus
+	 *
+	 * TRUE: STA adds to poison resist
+	 * FALSE: Use legacy resist only
+	 *
+	 * Current: TRUE
+	 *
+	 * Formula: Poison_Resist += STA / POISON_RESIST_DIVISOR
+	 */
+	constexpr bool ENABLE_STA_POISON_RESIST = true;
+
+	/**
+	 * @brief STA divisor for poison resistance
+	 *
+	 * Current: 5.0f (every 5 STA = +1 resist)
+	 *
+	 * Example: 1000 STA = +200 poison resist
+	 */
+	constexpr float STA_POISON_RESIST_DIVISOR = 5.0f;
+
+	/**
+	 * @brief Enable STA-based disease resistance bonus
+	 *
+	 * TRUE: STA adds to disease resist
+	 * FALSE: Use legacy resist only
+	 *
+	 * Current: TRUE
+	 *
+	 * Formula: Disease_Resist += STA / DISEASE_RESIST_DIVISOR
+	 */
+	constexpr bool ENABLE_STA_DISEASE_RESIST = true;
+
+	/**
+	 * @brief STA divisor for disease resistance
+	 *
+	 * Current: 5.0f (every 5 STA = +1 resist)
+	 *
+	 * Example: 1000 STA = +200 disease resist
+	 */
+	constexpr float STA_DISEASE_RESIST_DIVISOR = 5.0f;
+
+	/**
+	 * @brief Enable STA-based breath timer bonus
+	 *
+	 * TRUE: STA extends underwater breath timer
+	 * FALSE: Use legacy breath timer only
+	 *
+	 * Current: TRUE
+	 *
+	 * Formula: Breath_Timer += STA / BREATH_BONUS_DIVISOR seconds
+	 */
+	constexpr bool ENABLE_STA_BREATH_BONUS = true;
+
+	/**
+	 * @brief STA divisor for breath timer bonus
+	 *
+	 * Current: 10.0f (every 10 STA = +1 second underwater)
+	 *
+	 * Example: 1000 STA = +100 seconds breath
+	 */
+	constexpr float STA_BREATH_BONUS_DIVISOR = 10.0f;
+
 } // namespace CombatBalance
 
 #endif // COMBAT_BALANCE_CONFIG_H

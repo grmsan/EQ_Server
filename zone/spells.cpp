@@ -106,6 +106,9 @@ Copyright (C) 2001-2002 EQEMu Development Team (http://eqemu.org)
 #include "client.h"
 #include "mob.h"
 #include "water_map.h"
+#include "combat_balance_config.h"
+#include "combat_balance_config.h"
+#include "combat_balance_config.h"
 
 extern Zone         *zone;
 extern volatile bool is_zone_loaded;
@@ -1523,9 +1526,16 @@ void Mob::CastedSpellFinished(uint16 spell_id, uint32 target_id, CastingSlot slo
 			// but cap it so it's not that large a factor
 			if(attacked_count > 15) attacked_count = 15;
 
-			float channelchance, distance_moved, d_x, d_y, distancemod;
+			// STR-based per-hit interrupt system (replaces threshold immunity check)
+			// Interrupt chance is calculated and rolled per-hit in attack.cpp
+			// If enabled, we skip the old immunity threshold and just use channeling for movement
+			if (CombatBalance::ENABLE_STR_INTERRUPT_RESISTANCE && IsOfClientBot()) {
+				// New system: interrupts are checked per-hit in attack.cpp
+				// Here we only check movement-based interruption via channeling
+				attacked_count = 0;  // Clear attack count since it's handled per-hit
+			}
 
-			if (IsOfClientBot()) {
+			float channelchance, distance_moved, d_x, d_y, distancemod;			if (IsOfClientBot()) {
 				float channelbonuses = 0.0f;
 				//AA that effect Spell channel chance are no longer on live. http://everquest.allakhazam.com/history/patches-2006-2.html
 				//No harm in maintaining the effects regardless, since we do check for channel chance.

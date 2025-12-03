@@ -28,6 +28,8 @@
 #include "bot.h"
 
 #include <algorithm>
+#include <cmath>
+#include "combat_balance_config.h"
 
 
 int32 Client::GetMaxStat() const
@@ -111,6 +113,25 @@ int32 Client::GetMaxCHA() const
 	       + spellbonuses.CHACapMod
 	       + aabonuses.CHACapMod;
 }
+
+int32 Client::GetStunResist() const
+{
+	int32 base_stun_resist = itembonuses.StunResist;
+
+	// Add STR-based stun resistance if enabled
+	if (CombatBalance::ENABLE_STR_STUN_RESIST) {
+		// Use asymptotic curve: 100 * (1 - e^(-STR / scale_factor))
+		// This approaches but never reaches 100% resist
+		float str = static_cast<float>(GetSTR());
+		float scale = CombatBalance::STR_STUN_RESIST_SCALE_FACTOR;
+		float str_resist = 100.0f * (1.0f - std::exp(-str / scale));
+
+		base_stun_resist += static_cast<int32>(str_resist);
+	}
+
+	return base_stun_resist;
+}
+
 int32 Client::GetMaxMR() const
 {
 	return GetMaxResist()
@@ -295,6 +316,13 @@ int64 Client::CalcHPRegen(bool bCombat)
 	}
 
 	int64 regen = base + item_regen + spellbonuses.HPRegen; // TODO: client does this in buff tick
+
+	// Add STA-based HP regen if enabled
+	if (RuleB(Combat, UseNewStaminaFormula) && CombatBalance::ENABLE_STA_HP_REGEN) {
+		int64 sta_hp_regen = static_cast<int64>((GetSTA() * GetLevel()) / CombatBalance::STA_HP_REGEN_DIVISOR);
+		regen += sta_hp_regen;
+	}
+
 	return (regen * RuleI(Character, HPRegenMultiplier) / 100);
 }
 
@@ -481,6 +509,32 @@ uint32 Mob::GetClassLevelFactor()
 
 int64 Client::CalcBaseHP()
 {
+	// Check if new STA HP scaling is enabled
+	if (RuleB(Combat, UseNewStaminaFormula) && CombatBalance::ENABLE_STA_HP_SCALING) {
+		// New STA-based HP formula (Option B - Direct Scaling)
+		// Formula: BASE_HP + (BASE_HP_PER_LEVEL * Level * ClassMult) + (STA * Level * ClassMult / STA_DIVISOR)
+
+		float class_mult = GetSTAHPMultiplier();
+		int level = GetLevel();
+		int sta = GetSTA();
+
+		// Base HP (constant for all)
+		int64 hp = CombatBalance::STA_BASE_HP;
+
+		// Level-based HP (scales with class multiplier)
+		hp += static_cast<int64>(CombatBalance::STA_BASE_HP_PER_LEVEL * level * class_mult);
+
+		// STA-based HP (scales with both level and class multiplier)
+		hp += static_cast<int64>((sta * level * class_mult) / CombatBalance::STA_HP_DIVISOR);
+
+		// Apply global scalar if needed
+		hp = static_cast<int64>(hp * CombatBalance::STA_HP_LEVEL_SCALAR);
+
+		base_hp = hp;
+		return base_hp;
+	}
+
+	// Legacy HP calculation
 	if (ClientVersion() >= EQ::versions::ClientVersion::SoF && RuleB(Character, SoDClientUseSoDHPManaEnd)) {
 		int stats = GetSTA();
 		if (stats > 255) {
@@ -506,6 +560,47 @@ int64 Client::CalcBaseHP()
 		base_hp = (5) + (GetLevel() * lm / 10) + (((GetSTA() - Post255) * GetLevel() * lm / 3000)) + ((Post255 * GetLevel()) * lm / 6000);
 	}
 	return base_hp;
+}
+
+// Helper function to get class-specific HP multiplier for STA scaling
+float Client::GetSTAHPMultiplier() const
+{
+	switch (GetClass()) {
+		case Class::Warrior:
+			return CombatBalance::STA_HP_WARRIOR_MULTIPLIER;
+		case Class::Cleric:
+			return CombatBalance::STA_HP_CLERIC_MULTIPLIER;
+		case Class::Paladin:
+			return CombatBalance::STA_HP_PALADIN_MULTIPLIER;
+		case Class::Ranger:
+			return CombatBalance::STA_HP_RANGER_MULTIPLIER;
+		case Class::ShadowKnight:
+			return CombatBalance::STA_HP_SHADOWKNIGHT_MULTIPLIER;
+		case Class::Druid:
+			return CombatBalance::STA_HP_DRUID_MULTIPLIER;
+		case Class::Monk:
+			return CombatBalance::STA_HP_MONK_MULTIPLIER;
+		case Class::Bard:
+			return CombatBalance::STA_HP_BARD_MULTIPLIER;
+		case Class::Rogue:
+			return CombatBalance::STA_HP_ROGUE_MULTIPLIER;
+		case Class::Shaman:
+			return CombatBalance::STA_HP_SHAMAN_MULTIPLIER;
+		case Class::Necromancer:
+			return CombatBalance::STA_HP_NECROMANCER_MULTIPLIER;
+		case Class::Wizard:
+			return CombatBalance::STA_HP_WIZARD_MULTIPLIER;
+		case Class::Magician:
+			return CombatBalance::STA_HP_MAGICIAN_MULTIPLIER;
+		case Class::Enchanter:
+			return CombatBalance::STA_HP_ENCHANTER_MULTIPLIER;
+		case Class::Beastlord:
+			return CombatBalance::STA_HP_BEASTLORD_MULTIPLIER;
+		case Class::Berserker:
+			return CombatBalance::STA_HP_BERSERKER_MULTIPLIER;
+		default:
+			return 1.0f;  // Default multiplier for unknown classes
+	}
 }
 
 // This should return the combined AC of all the items the player is wearing.
@@ -712,6 +807,15 @@ int64 Client::CalcManaRegen(bool bCombat)
 	}
 
 	regen += spellbonuses.ManaRegen; // TODO: live does this in buff tick
+
+	// Add STA-based mana regen if enabled (casters only)
+	if (RuleB(Combat, UseNewStaminaFormula) && CombatBalance::ENABLE_STA_MANA_REGEN) {
+		if (IsIntelligenceCasterClass() || IsWisdomCasterClass()) {
+			int64 sta_mana_regen = static_cast<int64>((GetSTA() * GetLevel()) / CombatBalance::STA_MANA_REGEN_DIVISOR);
+			regen += sta_mana_regen;
+		}
+	}
+
 	return (regen * RuleI(Character, ManaRegenMultiplier) / 100);
 }
 
@@ -1739,6 +1843,12 @@ int64 Client::CalcEnduranceRegen(bool bCombat)
 
 	regen += aa_regen;
 	regen += spellbonuses.EnduranceRegen; // TODO: client does this in buff tick
+
+	// Add STA-based endurance regen if enabled
+	if (RuleB(Combat, UseNewStaminaFormula) && CombatBalance::ENABLE_STA_ENDURANCE_REGEN) {
+		int64 sta_end_regen = static_cast<int64>((GetSTA() * GetLevel()) / CombatBalance::STA_ENDURANCE_REGEN_DIVISOR);
+		regen += sta_end_regen;
+	}
 
 	return (regen * RuleI(Character, EnduranceRegenMultiplier) / 100);
 }

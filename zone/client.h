@@ -672,7 +672,7 @@ public:
 	inline virtual int32 GetShielding() const { return itembonuses.MeleeMitigation; }
 	inline virtual int32 GetSpellShield() const { return itembonuses.SpellShield; }
 	inline virtual int32 GetDoTShield() const { return itembonuses.DoTShielding; }
-	inline virtual int32 GetStunResist() const { return itembonuses.StunResist; }
+	virtual int32 GetStunResist() const;
 	inline virtual int32 GetStrikeThrough() const { return itembonuses.StrikeThrough; }
 	inline virtual int32 GetAvoidance() const { return itembonuses.AvoidMeleeChance; }
 	inline virtual int32 GetAccuracy() const { return itembonuses.HitChance; }
@@ -2036,6 +2036,7 @@ private:
 	int32 CalcCorrup();
 	int64 CalcMaxHP();
 	int64 CalcBaseHP();
+	float GetSTAHPMultiplier() const;  // Helper for STA HP scaling
 	int64 CalcHPRegen(bool bCombat = false);
 	int64 CalcManaRegen(bool bCombat = false);
 	int64 CalcBaseManaRegen();

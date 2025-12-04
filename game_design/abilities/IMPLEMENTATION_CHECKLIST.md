@@ -28,6 +28,7 @@ This checklist provides step-by-step instructions for implementing spells, disci
 - [ ] Set `mana` cost
 - [ ] Set `buffduration` and `buffdurationformula`
 - [ ] Set resist type in `resisttype`
+- [ ] Set string IDs to non-NULL (use 0 if you don’t have custom strings): `descnum`, `typedescnum`, `effectdescnum`, `effectdescnum2`
 
 ### ☑ Phase 3: Testing
 - [ ] Reload shared memory: `shared_memory.exe`
@@ -129,15 +130,18 @@ This checklist provides step-by-step instructions for implementing spells, disci
 - [ ] Set `type` (1=General, 2=Archetype, 3=Class)
 - [ ] Set `charges` (0 for unlimited)
 - [ ] Set `grant_only` (0 for purchasable)
-- [ ] Set `first_rank_id` to first rank ID
+- [ ] Set `first_rank_id` to first rank ID (must exist in `aa_ranks.id`)
 - [ ] Set `enabled = 1`
 - [ ] Set `reset_on_death` if applicable
+- [ ] Leave `races` / `deities` / `status` defaults unless you are intentionally gating the AA
 
 ### ☑ Phase 3: Rank Entries
 
 **For Each Rank**:
 - [ ] Choose unique rank ID
 - [ ] Create `aa_ranks` entry
+- [ ] Set `upper_hotkey_sid` / `lower_hotkey_sid` (-1 for none)
+- [ ] Set `title_sid` / `desc_sid` (db_str ids)
 - [ ] Set `cost` (AA points)
 - [ ] Set `level_req` (minimum level)
 - [ ] Set `prev_id` (previous rank or -1)
@@ -169,8 +173,8 @@ This checklist provides step-by-step instructions for implementing spells, disci
 ### ☑ Phase 5: Prerequisites (Optional)
 - [ ] Create `aa_rank_prereqs` entries
 - [ ] Set `rank_id` (rank requiring prereq)
-- [ ] Set `prereq_rank_id` (required rank)
-- [ ] Set `prereq_points` (points needed)
+- [ ] Set `aa_id` (required ability)
+- [ ] Set `points` (points needed)
 
 ### ☑ Phase 6: Testing
 - [ ] Reload AA data: `/reloadaa`

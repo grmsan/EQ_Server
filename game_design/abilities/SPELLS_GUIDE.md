@@ -50,6 +50,10 @@ In EQEmulator, spells are the foundation of all magical abilities, buffs, debuff
 id                INT PRIMARY KEY    -- Unique spell ID (1-65535)
 name              VARCHAR(64)        -- Spell name
 player_1          TEXT               -- Description shown to player
+descnum           INT                -- Description string ID (db_str)
+typedescnum       INT                -- Type/primary category string ID (db_str)
+effectdescnum     INT                -- Effect/secondary category string ID (db_str)
+effectdescnum2    INT                -- Additional effect description (db_str)
 ```
 
 #### Cast Properties

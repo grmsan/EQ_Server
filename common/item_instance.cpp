@@ -1455,6 +1455,14 @@ void EQ::ItemInstance::ApplyCustomStats() {
 			else if (key == "HEROIC_PR") m_scaledItem->HeroicPR += iVal;
 			else if (key == "HEROIC_SV_CORRUP") m_scaledItem->HeroicSVCorrup += iVal;
 
+			// Base resistances (allow setting base resists via custom data keys)
+			else if (key == "MR") { int32 v = (int32)m_scaledItem->MR + iVal; m_scaledItem->MR = (int8)(v > 127 ? 127 : (v < -128 ? -128 : v)); }
+			else if (key == "FR") { int32 v = (int32)m_scaledItem->FR + iVal; m_scaledItem->FR = (int8)(v > 127 ? 127 : (v < -128 ? -128 : v)); }
+			else if (key == "CR") { int32 v = (int32)m_scaledItem->CR + iVal; m_scaledItem->CR = (int8)(v > 127 ? 127 : (v < -128 ? -128 : v)); }
+			else if (key == "DR") { int32 v = (int32)m_scaledItem->DR + iVal; m_scaledItem->DR = (int8)(v > 127 ? 127 : (v < -128 ? -128 : v)); }
+			else if (key == "PR") { int32 v = (int32)m_scaledItem->PR + iVal; m_scaledItem->PR = (int8)(v > 127 ? 127 : (v < -128 ? -128 : v)); }
+			else if (key == "SV_CORRUP") m_scaledItem->SVCorruption += iVal;
+
 			// Mod2 / Other Stats
 			else if (key == "ATTACK") m_scaledItem->Attack += iVal;
 			else if (key == "HASTE") m_scaledItem->Haste += iVal;

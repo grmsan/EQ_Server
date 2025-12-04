@@ -89,6 +89,8 @@ reset_on_death     TINYINT          -- 1=Lost on death
 **Key Fields**:
 ```sql
 id                 INT PRIMARY KEY  -- Unique rank ID
+upper_hotkey_sid   INT              -- Upper hotkey text ID (-1 = none)
+lower_hotkey_sid   INT              -- Lower hotkey text ID (-1 = none)
 title_sid          INT              -- String ID for title
 desc_sid           INT              -- String ID for description
 cost               INT              -- AA point cost for this rank
@@ -121,8 +123,8 @@ base2              INT              -- Effect limit value
 **Key Fields**:
 ```sql
 rank_id            INT              -- Rank requiring prerequisite
-prereq_rank_id     INT              -- Required rank ID
-prereq_points      INT              -- Points in required ability
+aa_id              INT              -- Required ability ID
+points             INT              -- Points in required ability
 ```
 
 ### Table 5: `character_alternate_abilities`
@@ -512,10 +514,9 @@ Restart server. AA purchases/activations will log.
 
 #### AA Doesn't Appear in Window
 - Check `aa_ability.enabled = 1`
+- Ensure `aa_ability.first_rank_id` points to an existing `aa_ranks.id`
 - Verify `classes` bitmask includes your class
 - Check `level_req` isn't too high
-- Ensure `first_rank_id` is correct
-
 #### AA Effects Not Applying
 - Verify effect is implemented in `ApplyAABonuses()`
 - Check `aa_rank_effects` has correct `rank_id`

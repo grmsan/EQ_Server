@@ -12,14 +12,14 @@
 <a href="https://github.com/eqemu/server/graphs/contributors"><img src="https://img.shields.io/github/contributors/eqemu/server" alt="Contributors"></a>
 <a href="https://discord.gg/QHsm7CD"><img src="https://img.shields.io/discord/212663220849213441?label=Discord&amp;logo=discord&amp;color=7289DA" alt="Discord"></a>
 <a href="https://docs.eqemu.io"><img src="https://img.shields.io/badge/docs-MkDocs%20Powered-blueviolet" alt="Docs"></a>
-<a href="./LICENSE"><img src="https://img.shields.io/github/license/EQEmu/Server" alt="License"></a> 
+<a href="./LICENSE"><img src="https://img.shields.io/github/license/EQEmu/Server" alt="License"></a>
 <a href="https://github.com/eqemu/server/releases"><img src="https://img.shields.io/github/v/release/eqemu/server" alt="Latest Release"></a>
 <a href="https://github.com/EQEmu/Server/releases"><img src="https://img.shields.io/github/release-date/EQEmu/Server" alt="Release Date"></a>
 <img src="https://img.shields.io/github/downloads/eqemu/server/total.svg" alt="Github All Releases"></a>
-<a href="http://drone.akkadius.com/EQEmu/Server"><img src="http://drone.akkadius.com/api/badges/EQEmu/Server/status.svg" alt="Build Status"></a> 
+<a href="http://drone.akkadius.com/EQEmu/Server"><img src="http://drone.akkadius.com/api/badges/EQEmu/Server/status.svg" alt="Build Status"></a>
 <img src="https://img.shields.io/github/issues-pr-closed/eqemu/server" alt="GitHub Issues or Pull Requests">
 <img src="https://img.shields.io/docker/pulls/akkadius/eqemu-server" alt="Docker Pulls">
-<a href="http://drone.akkadius.com/EQEmu/Server"><img src="http://drone.akkadius.com/api/badges/EQEmu/Server/status.svg" alt="Build Status"></a> <img src="https://jb.gg/badges/official-plastic.svg" alt="Official"> 
+<a href="http://drone.akkadius.com/EQEmu/Server"><img src="http://drone.akkadius.com/api/badges/EQEmu/Server/status.svg" alt="Build Status"></a> <img src="https://jb.gg/badges/official-plastic.svg" alt="Official">
 
 </p>
 
@@ -59,7 +59,7 @@ EQEmulator has for over 20 years and always will be a <strong>fan-based, non-com
 
 
 <p align="center">
- <strong>Reverse Engineering</strong> 
+ <strong>Reverse Engineering</strong>
 Every system, packet, opcode, and game mechanic has been reconstructed through countless hours of live packet sniffing, client disassembly, and in-game experimentation by dedicated contributors over the years.
 </p>
 
@@ -132,6 +132,50 @@ Every system, packet, opcode, and game mechanic has been reconstructed through c
 ## 🛠️ Getting Started
 
 If you want to set up your own EQEmulator server, please refer to the current [server installation guides](https://docs.eqemu.io/#server-installation). We've had 100,000s of players and developers use our guides to set up their own servers, and we hope you will too!
+
+## Extras: EQ Client Injection DLL
+We maintain an optional client-side DLL in `extras/eq-core-dll-main`. It's used for advanced client-side diagnostics and features such as packet interception and local overlays (helpful for debug-only per-client overlays so server changes don't alter global client caches).
+
+How to build it (Windows):
+```powershell
+# Build using PowerShell helper (requires Visual Studio/MSBuild)
+cd extras\eq-core-dll-main
+pwsh.exe -ExecutionPolicy Bypass -File build_dll.ps1 -Configuration Release -Platform Win32
+
+# Resulting DLLs are copied to extras/eq-core-dll-main/bin if the build succeeded.
+```
+
+Take extreme caution when using a client DLL — always backup the original client DLLs and be aware that this may modify client behavior in ways that affect testing or gameplay.
+
+## 🧰 Developer Tools (DB Viewer)
+
+We include a small database viewer and diagnostic script to help developers inspect server data and run basic queries quickly.
+
+Usage:
+- Install dependency:
+  ```bash
+  pip install mysql-connector-python
+  ```
+- The script tries to read `eqemu_config.json` in the repo root by default; you can override credentials using CLI args.
+- Examples:
+  ```bash
+  # list tables in the configured database
+  python tools/db_viewer.py --list-tables
+
+  # Describe a specific table
+  python tools/db_viewer.py --describe items
+
+  # Display the first 50 rows of a table
+  python tools/db_viewer.py --rows items --limit 50
+
+  # Run an ad-hoc SQL query
+  python tools/db_viewer.py --query "SELECT * FROM items LIMIT 10"
+
+  # Start an interactive DB shell
+  python tools/db_viewer.py --shell
+  ```
+
+This tool is intended for quick development/diagnostics and is not a replacement for full DB management tools. Use caution when running write queries — the script will execute whatever SQL is provided.
 
 ## 🗂️ Related Repositories
 

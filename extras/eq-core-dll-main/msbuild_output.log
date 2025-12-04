@@ -1,0 +1,582 @@
+MSBuild version 17.12.12+1cce77968 for .NET Framework
+Build started 12/4/2025 2:10:29 PM.
+
+     1>Project "C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\eq-core-dll-visualstudio2022.sln" on node 1 (default targets).
+     1>ValidateSolutionConfiguration:
+         Building solution configuration "Release|Win32".
+     1>Project "C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\eq-core-dll-visualstudio2022.sln" (1) is building "C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj" (2) on node 1 (default targets).
+     2>PrepareForBuild:
+         Structured output is enabled. The formatting of compiler diagnostics will reflect the error hierarchy. See https://aka.ms/cpp/structured-output for more details.
+       InitializeBuildStatus:
+         Touching "Release\eq-core-dll.tlog\unsuccessfulbuild".
+       ClCompile:
+         C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.42.34433\bin\HostX86\x86\CL.exe /c /I..\dependencies\detours\inc /I..\dependencies\dx9\Include /I..\dependencies\boost /Zi /nologo /W3 /WX- /diagnostics:column /MP /Ox /Ob2 /Oi /Oy /GT /GL /D WIN32 /D NDEBUG /D _WINDOWS /D _USRDLL /D DINPUT8_EXPORTS /D EQLIB_EXPORTS /D DPSPLUGIN /D WINDOWS_IGNORE_PACKING_MISMATCH /D _WINDLL /D _MBCS /GF /Gm- /MD /Zp1 /GS /Gy- /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"Release\\" /Fd"Release\vc143.pdb" /external:W3 /Gd /TP /analyze- /FC /errorReport:queue MQ2HUD.cpp MQ2Spawns.cpp
+         MQ2HUD.cpp
+         MQ2Spawns.cpp
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2Internal.h(105,17): warning C4091: 'static ': ignored on left of 'MQ2Internal::SearchItemFlag' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2Internal.h(105,17): warning C4091: 'static ': ignored on left of 'MQ2Internal::SearchItemFlag' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(167,17): warning C4091: 'static ': ignored on left of 'MQ2IntType::IntMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(207,17): warning C4091: 'static ': ignored on left of 'MQ2ArgbType::ArgbMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(167,17): warning C4091: 'static ': ignored on left of 'MQ2IntType::IntMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(284,17): warning C4091: 'static ': ignored on left of 'MQ2StringType::StringMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(207,17): warning C4091: 'static ': ignored on left of 'MQ2ArgbType::ArgbMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(360,17): warning C4091: 'static ': ignored on left of 'MQ2FloatType::FloatMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(284,17): warning C4091: 'static ': ignored on left of 'MQ2StringType::StringMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(408,17): warning C4091: 'static ': ignored on left of 'MQ2TicksType::TicksMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(360,17): warning C4091: 'static ': ignored on left of 'MQ2FloatType::FloatMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(459,17): warning C4091: 'static ': ignored on left of 'MQ2SpawnType::SpawnMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(559,17): warning C4091: 'static ': ignored on left of 'MQ2SpawnType::SpawnMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(408,17): warning C4091: 'static ': ignored on left of 'MQ2TicksType::TicksMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(459,17): warning C4091: 'static ': ignored on left of 'MQ2SpawnType::SpawnMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(559,17): warning C4091: 'static ': ignored on left of 'MQ2SpawnType::SpawnMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(729,17): warning C4091: 'static ': ignored on left of 'MQ2CharacterType::CharacterMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(917,17): warning C4091: 'static ': ignored on left of 'MQ2CharacterType::CharacterMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(729,17): warning C4091: 'static ': ignored on left of 'MQ2CharacterType::CharacterMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(917,17): warning C4091: 'static ': ignored on left of 'MQ2CharacterType::CharacterMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1158,17): warning C4091: 'static ': ignored on left of 'MQ2SpellType::SpellMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1188,17): warning C4091: 'static ': ignored on left of 'MQ2SpellType::SpellMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1158,17): warning C4091: 'static ': ignored on left of 'MQ2SpellType::SpellMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1262,17): warning C4091: 'static ': ignored on left of 'MQ2BuffType::BuffMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1188,17): warning C4091: 'static ': ignored on left of 'MQ2SpellType::SpellMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1272,17): warning C4091: 'static ': ignored on left of 'MQ2BuffType::BuffMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1336,17): warning C4091: 'static ': ignored on left of 'MQ2ItemType::ItemMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1469,17): warning C4091: 'static ': ignored on left of 'MQ2ItemType::ItemMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1262,17): warning C4091: 'static ': ignored on left of 'MQ2BuffType::BuffMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1272,17): warning C4091: 'static ': ignored on left of 'MQ2BuffType::BuffMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1336,17): warning C4091: 'static ': ignored on left of 'MQ2ItemType::ItemMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1469,17): warning C4091: 'static ': ignored on left of 'MQ2ItemType::ItemMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1647,17): warning C4091: 'static ': ignored on left of 'MQ2SwitchType::SwitchMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1670,17): warning C4091: 'static ': ignored on left of 'MQ2SwitchType::SwitchMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1735,17): warning C4091: 'static ': ignored on left of 'MQ2GroundType::GroundMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1750,17): warning C4091: 'static ': ignored on left of 'MQ2GroundType::GroundMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1647,17): warning C4091: 'static ': ignored on left of 'MQ2SwitchType::SwitchMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1670,17): warning C4091: 'static ': ignored on left of 'MQ2SwitchType::SwitchMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1811,17): warning C4091: 'static ': ignored on left of 'MQ2CorpseType::CorpseMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1817,17): warning C4091: 'static ': ignored on left of 'MQ2CorpseType::CorpseMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1735,17): warning C4091: 'static ': ignored on left of 'MQ2GroundType::GroundMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1750,17): warning C4091: 'static ': ignored on left of 'MQ2GroundType::GroundMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1860,17): warning C4091: 'static ': ignored on left of 'MQ2MerchantType::MerchantMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1868,17): warning C4091: 'static ': ignored on left of 'MQ2MerchantType::MerchantMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1811,17): warning C4091: 'static ': ignored on left of 'MQ2CorpseType::CorpseMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1913,17): warning C4091: 'static ': ignored on left of 'MQ2WindowType::WindowMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1949,17): warning C4091: 'static ': ignored on left of 'MQ2WindowType::WindowMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1817,17): warning C4091: 'static ': ignored on left of 'MQ2CorpseType::CorpseMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1860,17): warning C4091: 'static ': ignored on left of 'MQ2MerchantType::MerchantMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1868,17): warning C4091: 'static ': ignored on left of 'MQ2MerchantType::MerchantMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2046,17): warning C4091: 'static ': ignored on left of 'MQ2MacroType::MacroMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1913,17): warning C4091: 'static ': ignored on left of 'MQ2WindowType::WindowMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1949,17): warning C4091: 'static ': ignored on left of 'MQ2WindowType::WindowMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2094,17): warning C4091: 'static ': ignored on left of 'MQ2ZoneType::ZoneMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2141,17): warning C4091: 'static ': ignored on left of 'MQ2CurrentZoneType::CurrentZoneMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2046,17): warning C4091: 'static ': ignored on left of 'MQ2MacroType::MacroMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2203,17): warning C4091: 'static ': ignored on left of 'MQ2MacroQuestType::MacroQuestMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2094,17): warning C4091: 'static ': ignored on left of 'MQ2ZoneType::ZoneMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2228,17): warning C4091: 'static ': ignored on left of 'MQ2MacroQuestType::MacroQuestMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2141,17): warning C4091: 'static ': ignored on left of 'MQ2CurrentZoneType::CurrentZoneMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2281,17): warning C4091: 'static ': ignored on left of 'MQ2MathType::MathMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2203,17): warning C4091: 'static ': ignored on left of 'MQ2MacroQuestType::MacroQuestMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2339,17): warning C4091: 'static ': ignored on left of 'MQ2RaceType::RaceMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2228,17): warning C4091: 'static ': ignored on left of 'MQ2MacroQuestType::MacroQuestMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2377,17): warning C4091: 'static ': ignored on left of 'MQ2ClassType::ClassMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2281,17): warning C4091: 'static ': ignored on left of 'MQ2MathType::MathMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2432,17): warning C4091: 'static ': ignored on left of 'MQ2BodyType::BodyMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2339,17): warning C4091: 'static ': ignored on left of 'MQ2RaceType::RaceMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2469,17): warning C4091: 'static ': ignored on left of 'MQ2DeityType::DeityMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2377,17): warning C4091: 'static ': ignored on left of 'MQ2ClassType::ClassMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2509,17): warning C4091: 'static ': ignored on left of 'MQ2TimeType::TimeMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2432,17): warning C4091: 'static ': ignored on left of 'MQ2BodyType::BodyMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2584,17): warning C4091: 'static ': ignored on left of 'MQ2TypeType::TypeMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2469,17): warning C4091: 'static ': ignored on left of 'MQ2DeityType::DeityMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2509,17): warning C4091: 'static ': ignored on left of 'MQ2TimeType::TimeMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2622,17): warning C4091: 'static ': ignored on left of 'MQ2HeadingType::HeadingMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2630,17): warning C4091: 'static ': ignored on left of 'MQ2HeadingType::HeadingMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2584,17): warning C4091: 'static ': ignored on left of 'MQ2TypeType::TypeMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2676,17): warning C4091: 'static ': ignored on left of 'MQ2InvSlotType::InvSlotMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2684,17): warning C4091: 'static ': ignored on left of 'MQ2InvSlotType::InvSlotMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2622,17): warning C4091: 'static ': ignored on left of 'MQ2HeadingType::HeadingMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2630,17): warning C4091: 'static ': ignored on left of 'MQ2HeadingType::HeadingMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2676,17): warning C4091: 'static ': ignored on left of 'MQ2InvSlotType::InvSlotMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2684,17): warning C4091: 'static ': ignored on left of 'MQ2InvSlotType::InvSlotMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2738,17): warning C4091: 'static ': ignored on left of 'MQ2PluginType::PluginMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2780,17): warning C4091: 'static ': ignored on left of 'MQ2BenchmarkType::BenchmarkMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2738,17): warning C4091: 'static ': ignored on left of 'MQ2PluginType::PluginMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2826,17): warning C4091: 'static ': ignored on left of 'MQ2SkillType::SkillMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2836,17): warning C4091: 'static ': ignored on left of 'MQ2SkillType::SkillMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2780,17): warning C4091: 'static ': ignored on left of 'MQ2BenchmarkType::BenchmarkMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2826,17): warning C4091: 'static ': ignored on left of 'MQ2SkillType::SkillMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2836,17): warning C4091: 'static ': ignored on left of 'MQ2SkillType::SkillMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2885,17): warning C4091: 'static ': ignored on left of 'MQ2AltAbilityType::AltAbilityMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2902,17): warning C4091: 'static ': ignored on left of 'MQ2AltAbilityType::AltAbilityMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2885,17): warning C4091: 'static ': ignored on left of 'MQ2AltAbilityType::AltAbilityMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2902,17): warning C4091: 'static ': ignored on left of 'MQ2AltAbilityType::AltAbilityMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2947,17): warning C4091: 'static ': ignored on left of 'MQ2TimerType::TimerMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2952,17): warning C4091: 'static ': ignored on left of 'MQ2TimerType::TimerMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2947,17): warning C4091: 'static ': ignored on left of 'MQ2TimerType::TimerMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2952,17): warning C4091: 'static ': ignored on left of 'MQ2TimerType::TimerMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3049,17): warning C4091: 'static ': ignored on left of 'MQ2ArrayType::ArrayMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3049,17): warning C4091: 'static ': ignored on left of 'MQ2ArrayType::ArrayMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3094,17): warning C4091: 'static ': ignored on left of 'MQ2GroupType::GroupMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3104,17): warning C4091: 'static ': ignored on left of 'MQ2GroupType::GroupMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3094,17): warning C4091: 'static ': ignored on left of 'MQ2GroupType::GroupMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3104,17): warning C4091: 'static ': ignored on left of 'MQ2GroupType::GroupMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3139,17): warning C4091: 'static ': ignored on left of 'MQ2GroupMemberType::GroupMemberMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3151,17): warning C4091: 'static ': ignored on left of 'MQ2GroupMemberType::GroupMemberMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3139,17): warning C4091: 'static ': ignored on left of 'MQ2GroupMemberType::GroupMemberMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3151,17): warning C4091: 'static ': ignored on left of 'MQ2GroupMemberType::GroupMemberMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3193,17): warning C4091: 'static ': ignored on left of 'MQ2RaidType::RaidMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3208,17): warning C4091: 'static ': ignored on left of 'MQ2RaidType::RaidMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3193,17): warning C4091: 'static ': ignored on left of 'MQ2RaidType::RaidMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3208,17): warning C4091: 'static ': ignored on left of 'MQ2RaidType::RaidMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3252,17): warning C4091: 'static ': ignored on left of 'MQ2RaidMemberType::RaidMemberMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3263,17): warning C4091: 'static ': ignored on left of 'MQ2RaidMemberType::RaidMemberMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3252,17): warning C4091: 'static ': ignored on left of 'MQ2RaidMemberType::RaidMemberMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3263,17): warning C4091: 'static ': ignored on left of 'MQ2RaidMemberType::RaidMemberMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3312,17): warning C4091: 'static ': ignored on left of 'MQ2EvolvingItemType::EvolvingItemMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3312,17): warning C4091: 'static ': ignored on left of 'MQ2EvolvingItemType::EvolvingItemMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3354,17): warning C4091: 'static ': ignored on left of 'MQ2DynamicZoneType::DynamicZoneMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3354,17): warning C4091: 'static ': ignored on left of 'MQ2DynamicZoneType::DynamicZoneMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3396,17): warning C4091: 'static ': ignored on left of 'MQ2DZMemberType::DZMemberTypeMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3396,17): warning C4091: 'static ': ignored on left of 'MQ2DZMemberType::DZMemberTypeMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3428,17): warning C4091: 'static ': ignored on left of 'MQ2FellowshipType::FellowshipTypeMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3428,17): warning C4091: 'static ': ignored on left of 'MQ2FellowshipType::FellowshipTypeMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3481,17): warning C4091: 'static ': ignored on left of 'MQ2FellowshipMemberType::FMTypeMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3481,17): warning C4091: 'static ': ignored on left of 'MQ2FellowshipMemberType::FMTypeMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3519,17): warning C4091: 'static ': ignored on left of 'MQ2FriendsType::FriendsMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3523,17): warning C4091: 'static ': ignored on left of 'MQ2FriendsType::FriendsMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3519,17): warning C4091: 'static ': ignored on left of 'MQ2FriendsType::FriendsMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3523,17): warning C4091: 'static ': ignored on left of 'MQ2FriendsType::FriendsMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3562,17): warning C4091: 'static ': ignored on left of 'MQ2TargetType::TargetMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3562,17): warning C4091: 'static ': ignored on left of 'MQ2TargetType::TargetMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3642,17): warning C4091: 'static ': ignored on left of 'MQ2XTargetType::xTargetMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2HUD.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3642,17): warning C4091: 'static ': ignored on left of 'MQ2XTargetType::xTargetMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         (compiling source file 'MQ2Spawns.cpp')
+         
+     2>C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2HUD.cpp(49,51): error C2039: 'Mana': is not a member of 'EQData::_SPAWNINFO' [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+             C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\EQData.h(1231,16):
+             see declaration of 'EQData::_SPAWNINFO'
+         
+     2>Done Building Project "C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj" (default targets) -- FAILED.
+     1>Done Building Project "C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\eq-core-dll-visualstudio2022.sln" (default targets) -- FAILED.
+
+Build FAILED.
+
+       "C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\eq-core-dll-visualstudio2022.sln" (default target) (1) ->
+       "C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj" (default target) (2) ->
+       (ClCompile target) -> 
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2Internal.h(105,17): warning C4091: 'static ': ignored on left of 'MQ2Internal::SearchItemFlag' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2Internal.h(105,17): warning C4091: 'static ': ignored on left of 'MQ2Internal::SearchItemFlag' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(167,17): warning C4091: 'static ': ignored on left of 'MQ2IntType::IntMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(207,17): warning C4091: 'static ': ignored on left of 'MQ2ArgbType::ArgbMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(167,17): warning C4091: 'static ': ignored on left of 'MQ2IntType::IntMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(284,17): warning C4091: 'static ': ignored on left of 'MQ2StringType::StringMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(207,17): warning C4091: 'static ': ignored on left of 'MQ2ArgbType::ArgbMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(360,17): warning C4091: 'static ': ignored on left of 'MQ2FloatType::FloatMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(284,17): warning C4091: 'static ': ignored on left of 'MQ2StringType::StringMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(408,17): warning C4091: 'static ': ignored on left of 'MQ2TicksType::TicksMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(360,17): warning C4091: 'static ': ignored on left of 'MQ2FloatType::FloatMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(459,17): warning C4091: 'static ': ignored on left of 'MQ2SpawnType::SpawnMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(559,17): warning C4091: 'static ': ignored on left of 'MQ2SpawnType::SpawnMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(408,17): warning C4091: 'static ': ignored on left of 'MQ2TicksType::TicksMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(459,17): warning C4091: 'static ': ignored on left of 'MQ2SpawnType::SpawnMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(559,17): warning C4091: 'static ': ignored on left of 'MQ2SpawnType::SpawnMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(729,17): warning C4091: 'static ': ignored on left of 'MQ2CharacterType::CharacterMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(917,17): warning C4091: 'static ': ignored on left of 'MQ2CharacterType::CharacterMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(729,17): warning C4091: 'static ': ignored on left of 'MQ2CharacterType::CharacterMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(917,17): warning C4091: 'static ': ignored on left of 'MQ2CharacterType::CharacterMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1158,17): warning C4091: 'static ': ignored on left of 'MQ2SpellType::SpellMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1188,17): warning C4091: 'static ': ignored on left of 'MQ2SpellType::SpellMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1158,17): warning C4091: 'static ': ignored on left of 'MQ2SpellType::SpellMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1262,17): warning C4091: 'static ': ignored on left of 'MQ2BuffType::BuffMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1188,17): warning C4091: 'static ': ignored on left of 'MQ2SpellType::SpellMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1272,17): warning C4091: 'static ': ignored on left of 'MQ2BuffType::BuffMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1336,17): warning C4091: 'static ': ignored on left of 'MQ2ItemType::ItemMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1469,17): warning C4091: 'static ': ignored on left of 'MQ2ItemType::ItemMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1262,17): warning C4091: 'static ': ignored on left of 'MQ2BuffType::BuffMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1272,17): warning C4091: 'static ': ignored on left of 'MQ2BuffType::BuffMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1336,17): warning C4091: 'static ': ignored on left of 'MQ2ItemType::ItemMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1469,17): warning C4091: 'static ': ignored on left of 'MQ2ItemType::ItemMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1647,17): warning C4091: 'static ': ignored on left of 'MQ2SwitchType::SwitchMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1670,17): warning C4091: 'static ': ignored on left of 'MQ2SwitchType::SwitchMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1735,17): warning C4091: 'static ': ignored on left of 'MQ2GroundType::GroundMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1750,17): warning C4091: 'static ': ignored on left of 'MQ2GroundType::GroundMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1647,17): warning C4091: 'static ': ignored on left of 'MQ2SwitchType::SwitchMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1670,17): warning C4091: 'static ': ignored on left of 'MQ2SwitchType::SwitchMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1811,17): warning C4091: 'static ': ignored on left of 'MQ2CorpseType::CorpseMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1817,17): warning C4091: 'static ': ignored on left of 'MQ2CorpseType::CorpseMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1735,17): warning C4091: 'static ': ignored on left of 'MQ2GroundType::GroundMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1750,17): warning C4091: 'static ': ignored on left of 'MQ2GroundType::GroundMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1860,17): warning C4091: 'static ': ignored on left of 'MQ2MerchantType::MerchantMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1868,17): warning C4091: 'static ': ignored on left of 'MQ2MerchantType::MerchantMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1811,17): warning C4091: 'static ': ignored on left of 'MQ2CorpseType::CorpseMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1913,17): warning C4091: 'static ': ignored on left of 'MQ2WindowType::WindowMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1949,17): warning C4091: 'static ': ignored on left of 'MQ2WindowType::WindowMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1817,17): warning C4091: 'static ': ignored on left of 'MQ2CorpseType::CorpseMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1860,17): warning C4091: 'static ': ignored on left of 'MQ2MerchantType::MerchantMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1868,17): warning C4091: 'static ': ignored on left of 'MQ2MerchantType::MerchantMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2046,17): warning C4091: 'static ': ignored on left of 'MQ2MacroType::MacroMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1913,17): warning C4091: 'static ': ignored on left of 'MQ2WindowType::WindowMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(1949,17): warning C4091: 'static ': ignored on left of 'MQ2WindowType::WindowMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2094,17): warning C4091: 'static ': ignored on left of 'MQ2ZoneType::ZoneMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2141,17): warning C4091: 'static ': ignored on left of 'MQ2CurrentZoneType::CurrentZoneMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2046,17): warning C4091: 'static ': ignored on left of 'MQ2MacroType::MacroMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2203,17): warning C4091: 'static ': ignored on left of 'MQ2MacroQuestType::MacroQuestMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2094,17): warning C4091: 'static ': ignored on left of 'MQ2ZoneType::ZoneMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2228,17): warning C4091: 'static ': ignored on left of 'MQ2MacroQuestType::MacroQuestMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2141,17): warning C4091: 'static ': ignored on left of 'MQ2CurrentZoneType::CurrentZoneMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2281,17): warning C4091: 'static ': ignored on left of 'MQ2MathType::MathMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2203,17): warning C4091: 'static ': ignored on left of 'MQ2MacroQuestType::MacroQuestMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2339,17): warning C4091: 'static ': ignored on left of 'MQ2RaceType::RaceMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2228,17): warning C4091: 'static ': ignored on left of 'MQ2MacroQuestType::MacroQuestMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2377,17): warning C4091: 'static ': ignored on left of 'MQ2ClassType::ClassMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2281,17): warning C4091: 'static ': ignored on left of 'MQ2MathType::MathMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2432,17): warning C4091: 'static ': ignored on left of 'MQ2BodyType::BodyMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2339,17): warning C4091: 'static ': ignored on left of 'MQ2RaceType::RaceMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2469,17): warning C4091: 'static ': ignored on left of 'MQ2DeityType::DeityMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2377,17): warning C4091: 'static ': ignored on left of 'MQ2ClassType::ClassMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2509,17): warning C4091: 'static ': ignored on left of 'MQ2TimeType::TimeMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2432,17): warning C4091: 'static ': ignored on left of 'MQ2BodyType::BodyMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2584,17): warning C4091: 'static ': ignored on left of 'MQ2TypeType::TypeMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2469,17): warning C4091: 'static ': ignored on left of 'MQ2DeityType::DeityMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2509,17): warning C4091: 'static ': ignored on left of 'MQ2TimeType::TimeMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2622,17): warning C4091: 'static ': ignored on left of 'MQ2HeadingType::HeadingMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2630,17): warning C4091: 'static ': ignored on left of 'MQ2HeadingType::HeadingMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2584,17): warning C4091: 'static ': ignored on left of 'MQ2TypeType::TypeMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2676,17): warning C4091: 'static ': ignored on left of 'MQ2InvSlotType::InvSlotMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2684,17): warning C4091: 'static ': ignored on left of 'MQ2InvSlotType::InvSlotMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2622,17): warning C4091: 'static ': ignored on left of 'MQ2HeadingType::HeadingMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2630,17): warning C4091: 'static ': ignored on left of 'MQ2HeadingType::HeadingMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2676,17): warning C4091: 'static ': ignored on left of 'MQ2InvSlotType::InvSlotMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2684,17): warning C4091: 'static ': ignored on left of 'MQ2InvSlotType::InvSlotMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2738,17): warning C4091: 'static ': ignored on left of 'MQ2PluginType::PluginMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2780,17): warning C4091: 'static ': ignored on left of 'MQ2BenchmarkType::BenchmarkMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2738,17): warning C4091: 'static ': ignored on left of 'MQ2PluginType::PluginMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2826,17): warning C4091: 'static ': ignored on left of 'MQ2SkillType::SkillMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2836,17): warning C4091: 'static ': ignored on left of 'MQ2SkillType::SkillMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2780,17): warning C4091: 'static ': ignored on left of 'MQ2BenchmarkType::BenchmarkMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2826,17): warning C4091: 'static ': ignored on left of 'MQ2SkillType::SkillMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2836,17): warning C4091: 'static ': ignored on left of 'MQ2SkillType::SkillMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2885,17): warning C4091: 'static ': ignored on left of 'MQ2AltAbilityType::AltAbilityMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2902,17): warning C4091: 'static ': ignored on left of 'MQ2AltAbilityType::AltAbilityMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2885,17): warning C4091: 'static ': ignored on left of 'MQ2AltAbilityType::AltAbilityMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2902,17): warning C4091: 'static ': ignored on left of 'MQ2AltAbilityType::AltAbilityMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2947,17): warning C4091: 'static ': ignored on left of 'MQ2TimerType::TimerMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2952,17): warning C4091: 'static ': ignored on left of 'MQ2TimerType::TimerMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2947,17): warning C4091: 'static ': ignored on left of 'MQ2TimerType::TimerMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(2952,17): warning C4091: 'static ': ignored on left of 'MQ2TimerType::TimerMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3049,17): warning C4091: 'static ': ignored on left of 'MQ2ArrayType::ArrayMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3049,17): warning C4091: 'static ': ignored on left of 'MQ2ArrayType::ArrayMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3094,17): warning C4091: 'static ': ignored on left of 'MQ2GroupType::GroupMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3104,17): warning C4091: 'static ': ignored on left of 'MQ2GroupType::GroupMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3094,17): warning C4091: 'static ': ignored on left of 'MQ2GroupType::GroupMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3104,17): warning C4091: 'static ': ignored on left of 'MQ2GroupType::GroupMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3139,17): warning C4091: 'static ': ignored on left of 'MQ2GroupMemberType::GroupMemberMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3151,17): warning C4091: 'static ': ignored on left of 'MQ2GroupMemberType::GroupMemberMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3139,17): warning C4091: 'static ': ignored on left of 'MQ2GroupMemberType::GroupMemberMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3151,17): warning C4091: 'static ': ignored on left of 'MQ2GroupMemberType::GroupMemberMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3193,17): warning C4091: 'static ': ignored on left of 'MQ2RaidType::RaidMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3208,17): warning C4091: 'static ': ignored on left of 'MQ2RaidType::RaidMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3193,17): warning C4091: 'static ': ignored on left of 'MQ2RaidType::RaidMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3208,17): warning C4091: 'static ': ignored on left of 'MQ2RaidType::RaidMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3252,17): warning C4091: 'static ': ignored on left of 'MQ2RaidMemberType::RaidMemberMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3263,17): warning C4091: 'static ': ignored on left of 'MQ2RaidMemberType::RaidMemberMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3252,17): warning C4091: 'static ': ignored on left of 'MQ2RaidMemberType::RaidMemberMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3263,17): warning C4091: 'static ': ignored on left of 'MQ2RaidMemberType::RaidMemberMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3312,17): warning C4091: 'static ': ignored on left of 'MQ2EvolvingItemType::EvolvingItemMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3312,17): warning C4091: 'static ': ignored on left of 'MQ2EvolvingItemType::EvolvingItemMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3354,17): warning C4091: 'static ': ignored on left of 'MQ2DynamicZoneType::DynamicZoneMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3354,17): warning C4091: 'static ': ignored on left of 'MQ2DynamicZoneType::DynamicZoneMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3396,17): warning C4091: 'static ': ignored on left of 'MQ2DZMemberType::DZMemberTypeMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3396,17): warning C4091: 'static ': ignored on left of 'MQ2DZMemberType::DZMemberTypeMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3428,17): warning C4091: 'static ': ignored on left of 'MQ2FellowshipType::FellowshipTypeMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3428,17): warning C4091: 'static ': ignored on left of 'MQ2FellowshipType::FellowshipTypeMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3481,17): warning C4091: 'static ': ignored on left of 'MQ2FellowshipMemberType::FMTypeMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3481,17): warning C4091: 'static ': ignored on left of 'MQ2FellowshipMemberType::FMTypeMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3519,17): warning C4091: 'static ': ignored on left of 'MQ2FriendsType::FriendsMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3523,17): warning C4091: 'static ': ignored on left of 'MQ2FriendsType::FriendsMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3519,17): warning C4091: 'static ': ignored on left of 'MQ2FriendsType::FriendsMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3523,17): warning C4091: 'static ': ignored on left of 'MQ2FriendsType::FriendsMethods' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3562,17): warning C4091: 'static ': ignored on left of 'MQ2TargetType::TargetMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3562,17): warning C4091: 'static ': ignored on left of 'MQ2TargetType::TargetMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3642,17): warning C4091: 'static ': ignored on left of 'MQ2XTargetType::xTargetMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2DataTypes.h(3642,17): warning C4091: 'static ': ignored on left of 'MQ2XTargetType::xTargetMembers' when no variable is declared [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+
+
+       "C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\eq-core-dll-visualstudio2022.sln" (default target) (1) ->
+       "C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj" (default target) (2) ->
+       (ClCompile target) -> 
+         C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\MQ2HUD.cpp(49,51): error C2039: 'Mana': is not a member of 'EQData::_SPAWNINFO' [C:\Users\marsh\OneDrive\Documents\GitHub\EQ_Server\extras\eq-core-dll-main\src\eq-core-dll-vs2022.vcxproj]
+
+    136 Warning(s)
+    1 Error(s)
+
+Time Elapsed 00:00:01.09

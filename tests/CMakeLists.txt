@@ -17,6 +17,8 @@ SET(tests_headers
 	string_util_test.h
 	skills_util_test.h
 	task_state_test.h
+	dynamic_item_fuse_test.h
+	slot_multiplier_test.h
 )
 
 ADD_EXECUTABLE(tests ${tests_sources} ${tests_headers})

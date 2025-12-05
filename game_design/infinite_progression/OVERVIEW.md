@@ -44,12 +44,20 @@ Example:
 
 **Current Scaling:**
 - **ALL items gain ALL stats** when upgraded (even if base is 0)
-- AC: +1/level tier 0, +1 bonus per tier
-- HP: +4/level tier 0, +4 bonus per tier
-- Mana: +1/level tier 0, +1 bonus per tier
-- Stats (STR/STA/AGI/DEX/WIS/INT/CHA): +1/level tier 0, +1 bonus per tier
-- Attack (weapons): +2/level tier 0, +2 bonus per tier
-- **Weapon Damage**: +4/level tier 0, +4 bonus per tier
+- Tiered linear base (increments rise every 10 levels) multiplied by JSON curves for Primary/Attributes/Mod2/Weapon.
+- Attributes cap at 127; overflow goes to Heroic.
+- Weapons use **ratio-based damage scaling** (keeps fast/slow weapons proportional), then apply `WeaponCurves` + slot multipliers; minimum of base damage + 1 so tiny weapons still advance.
+- Attack, primary stats, resists, and mod2s apply their JSON curves plus slot multipliers.
+
+## Distribution & Config-Driven Scaling
+To provide more nuanced growth, several new JSON-config driven features are implemented:
+- **AttributePool**: Attributes are no longer strictly scaled independently. The server can either allocate from a computed auto budget (sum of raw scaled attribute increases) or from a static budget set in `item_scaling.json`. The distribution uses `AttributePreferences` weights (presence vs absence multipliers) to bias allocation toward an item's existing stats.
+- **Global Attribute Curve**: An `AttributeCurve` is applied to all attribute scaling to tune the overall per-level intensity.
+- **Weapon & Mod2 Curves**: `WeaponCurves` and `Mod2Curves` allow fine-tuning of weapon damage/attack and mod2-like stats (Shielding, StrikeThrough, SpellShield, etc.) across levels.
+- **Derived Caster Stats**: Spell damage and Heal amounts are optionally derived from INT and WIS (respectively) using divisor or curve modes (`SpellDmgFromInt` and `HealFromWis` in JSON).
+- **No Equip-time Class Multipliers**: Class-specific multipliers on equip have been removed; the server favors AAs and other designed systems for class-specific power.
+
+See `game_design/infinite_progression/item_scaling.json` for sample configuration and tuning.
 
 **Stat Capping:**
 - Base stats cap at 127 (EQ client limit)
@@ -111,6 +119,14 @@ Level 100: Endgame
 Find Blade of Tactics (better base: 14 damage vs 4)
 Fuse Short Sword +100 into Blade of Tactics
 → Result: Blade of Tactics +100 (14 base damage + 2,000 scaled = 2,014 damage!)
+
+## Game Design Guidelines
+These rules ensure progression is meaningful and fun:
+- **Make power clearly visible:** Do not hide progression in -percent modifiers. Players should feel increases in damage and survivability.
+- **Pacing matters:** Avoid runaway growth. Use `AttributeCurve` and `WeaponCurves` to ensure players reach small, frequent improvements early and larger, rarer upgrades mid-late game.
+- **Keep fusion consequential:** Fusion should be a designed choice that costs resources, but also unlocks meaningful upgrades. Reward players for making the choice.
+- **Analytics-driven tuning:** Add simple logging (e.g., `fusion_log`, `drop_level_log`) to measure the average item level by player level and adjust curves over time.
+- **Non-linear power delivery:** Introduce milestone effects (heroics, regen, haste at key levels) to create 'moments of power' while still retaining long-term scaling.
 ```
 
 ## Technical Implementation

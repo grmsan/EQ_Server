@@ -31,8 +31,8 @@ GNU General Public License for more details.
 DWORD WINAPI MQ2Start(LPVOID lpParameter);
 #if !defined(ISXEQ) && !defined(ISXEQ_LEGACY)
 
-BOOL APIENTRY DllMain( HANDLE hModule, 
-                      DWORD  ul_reason_for_call, 
+BOOL APIENTRY DllMain( HANDLE hModule,
+                      DWORD  ul_reason_for_call,
                       LPVOID lpReserved
                       )
 {
@@ -160,7 +160,7 @@ BOOL ParseINIFile(PCHAR lpINIPath)
             GetPrivateProfileString("Captions","Corpse",gszSpawnCorpseName,gszSpawnCorpseName,MAX_STRING,Filename);
             GetPrivateProfileString("Captions","Pet",gszSpawnPetName,gszSpawnPetName,MAX_STRING,Filename);
             gMaxSpawnCaptions=GetPrivateProfileInt("Captions","Update",gMaxSpawnCaptions,Filename);
-            gMQCaptions = 1==GetPrivateProfileInt("Captions","MQCaptions",1,Filename); 
+            gMQCaptions = 1==GetPrivateProfileInt("Captions","MQCaptions",1,Filename);
             ConvertCR(gszSpawnNPCName);
             ConvertCR(gszSpawnPlayerName[1]);
             ConvertCR(gszSpawnPlayerName[2]);
@@ -177,7 +177,7 @@ BOOL ParseINIFile(PCHAR lpINIPath)
             gFilterSWho.Level    = GetPrivateProfileInt("SWho Filter","Level",1,Filename);
             gFilterSWho.GM        = GetPrivateProfileInt("SWho Filter","GM",1,Filename);
             gFilterSWho.Guild    = GetPrivateProfileInt("SWho Filter","Guild",1,Filename);
-            gFilterSWho.Sneak   = GetPrivateProfileInt("SWho Filter","Sneak",1,Filename); 
+            gFilterSWho.Sneak   = GetPrivateProfileInt("SWho Filter","Sneak",1,Filename);
             gFilterSWho.LD        = GetPrivateProfileInt("SWho Filter","LD",1,Filename);
             gFilterSWho.LFG        = GetPrivateProfileInt("SWho Filter","LFG",1,Filename);
             gFilterSWho.NPCTag    = GetPrivateProfileInt("SWho Filter","NPCTag",1,Filename);
@@ -292,8 +292,8 @@ bool __cdecl MQ2Initialize()
     szEQMappableCommands[nEQMappableCommands -  5]="UNKNOWN0x11f";
     szEQMappableCommands[nEQMappableCommands -  4]="UNKNOWN0x120";
     szEQMappableCommands[nEQMappableCommands -  3]="UNKNOWN0x121";
-    szEQMappableCommands[nEQMappableCommands -  2]="UNKNOWN0x122"; 
-    szEQMappableCommands[nEQMappableCommands -  1]="UNKNOWN0x123"; 
+    szEQMappableCommands[nEQMappableCommands -  2]="UNKNOWN0x122";
+    szEQMappableCommands[nEQMappableCommands -  1]="UNKNOWN0x123";
 
     for (nColorAdjective=0 ; szColorAdjective[nColorAdjective] ; nColorAdjective++){}
     for (nColorAdjectiveYou=0 ; szColorAdjectiveYou[nColorAdjectiveYou] ; nColorAdjectiveYou++) {}
@@ -348,6 +348,21 @@ void __cdecl MQ2Shutdown()
 #ifndef ISXEQ
 // ***************************************************************************
 // Function:    MQ2Start
+// Forward declaration of the custom HUD draw function implemented in MQ2HUD.cpp
+EQLIB_API VOID DrawCustomHUD();
+
+// Intermediary to call plugin draw hooks & built-in HUD drawers
+EQLIB_API VOID PluginsDrawHUD()
+{
+    PMQPLUGIN pPlugin = pPlugins;
+    while (pPlugin) {
+        if (pPlugin->DrawHUD)
+            pPlugin->DrawHUD();
+        pPlugin = pPlugin->pNext;
+    }
+    // Call built-in custom HUD draw if implemented
+    DrawCustomHUD();
+}
 // Description: Where we start execution during the insertion
 // ***************************************************************************
 DWORD WINAPI MQ2Start(LPVOID lpParameter)
@@ -360,7 +375,7 @@ DWORD WINAPI MQ2Start(LPVOID lpParameter)
     if (!MQ2Initialize())
         return 1;
 
-    while (gGameState != GAMESTATE_CHARSELECT && gGameState != GAMESTATE_INGAME) 
+    while (gGameState != GAMESTATE_CHARSELECT && gGameState != GAMESTATE_INGAME)
         Sleep(500);
     InitializeMQ2DInput();
     if (gGameState == GAMESTATE_INGAME)
@@ -436,7 +451,7 @@ public:
     }
 
     int WndNotification(CXWnd *pWnd, unsigned int Message, void *unknown)
-    {    
+    {
         if (pWnd==0)
         {
             if (Message==XWM_CLOSE)
@@ -503,7 +518,7 @@ VOID InsertMQ2News()
     FILE *file=fopen(Filename,"rb");
     if (!file)
     {
-        DeleteMQ2NewsWindow();    
+        DeleteMQ2NewsWindow();
         return;
     }
     AddNewsLine("If you need help, refer to www.macroquest2.com/wiki",CONCOLOR_RED);

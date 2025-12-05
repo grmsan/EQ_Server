@@ -98,6 +98,8 @@ public:
 
 	// Item fusion
 	EQ::ItemInstance* FuseItems(EQ::ItemInstance* donor, EQ::ItemInstance* receiver);
+	// Fuse using a charge level (e.g., a 'fusion charge' consumable that captures donor level)
+	EQ::ItemInstance* FuseWithCharge(int donorLevel, EQ::ItemInstance* receiver);
 
 	// Configuration
 	ScalingConfig& GetConfig() { return m_config; }

@@ -162,6 +162,29 @@ Show current equipment stats summary.
 ## GM Debug Commands
 
 ### #itemdebug (TODO)
+### #tune itemscale (GM-only)
+Utility commands to preview and reload item scaling configuration.
+
+**Syntax:**
+```
+#tune itemscale reload
+#tune itemscale spelldmg <int_value> <level>
+#tune itemscale heal <wis_value> <level>
+#tune itemscale pref <AttrName> present|absent
+#tune itemscale preview <STR> <STA> <AGI> <DEX> <INT> <WIS> <CHA> <level>
+#tune itemscale fuse_charge <receiver_base_id> <donor_level>
+```
+
+**Examples:**
+```
+#tune itemscale reload
+#tune itemscale spelldmg 40 100
+#tune itemscale heal 50 80
+#tune itemscale preview 30 0 0 0 0 0 0 100
+```
+
+This mirrors in-server logic for computing attribute pool distribution and derived SpellDmg/Heal values. Use `reload` after editing `item_scaling.json` to test changes.
+
 Toggle debug output for item system.
 
 **Proposed:**

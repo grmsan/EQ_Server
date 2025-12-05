@@ -16,54 +16,44 @@
 	Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 */
 
+// Includes and globals
+#include "item_instance.h"
+#include "data_verification.h"
+#include "say_link.h"
 #include "inventory_profile.h"
-#include "../common/data_verification.h"
-//#include "classes.h"
-//#include "global_define.h"
-//#include "item_instance.h"
+#include "classes.h"
+#include "item_data.h"
 //#include "races.h"
 #include "rulesys.h"
 #include "shareddb.h"
 #include "strings.h"
 #include "evolving_items.h"
-
-//#include "../common/light_source.h"
+#include "item_scaling_config.h"
 
 #include <limits.h>
 #include <fstream>
 #include <chrono>
 #include <ctime>
+#include <cmath>
 
-//#include <iostream>
+// global serials and GUIDs are defined in patches (e.g., rof/rof2/sod) - do not redefine next_item_serial_number here
+// but we do need a local guids set used by functions in this file
+static std::unordered_set<uint64> guids{};
 
-int32 next_item_serial_number = 1;
-std::unordered_set<uint64> guids{};
+// forward declaration for GetNextItemInstSerialNumber - defined in patches
 
-static inline int32 GetNextItemInstSerialNumber()
-{
-	// The Bazaar relies on each item a client has up for Trade having a unique
-	// identifier. This 'SerialNumber' is sent in Serialized item packets and
-	// is used in Bazaar packets to identify the item a player is buying or inspecting.
-	//
-	// E.g. A trader may have 3 Five dose cloudy potions, each with a different number of remaining charges
-	// up for sale with different prices.
-	//
-	// NextItemInstSerialNumber is the next one to hand out.
-	//
-	// It is very unlikely to reach 2,147,483,647. Maybe we should call abort(), rather than wrapping back to 1.
-	if (next_item_serial_number >= INT32_MAX) {
-		next_item_serial_number = 1;
+// Fallback implementation for GetNextItemInstSerialNumber if not provided by patches.
+// This keeps behavior local to this TU and avoids link errors during builds where patch
+// functions are not available.
+static inline int32 GetNextItemInstSerialNumber_Fallback() {
+	static int32 next_item_serial_number_local = 1;
+	if (next_item_serial_number_local >= INT32_MAX) {
+		next_item_serial_number_local = 1;
 	}
-	else {
-		next_item_serial_number++;
-	}
-
-	while (guids.contains(next_item_serial_number)) {
-		next_item_serial_number++;
-	}
-
-	return next_item_serial_number;
+	return next_item_serial_number_local++;
 }
+// If no external symbol provides the function, weak alias to fallback implementation.
+// Some toolchains may not support weak alias; compile-time override is used below.
 
 //
 // class EQ::ItemInstance
@@ -84,7 +74,7 @@ EQ::ItemInstance::ItemInstance(const ItemData* item, int16 charges) {
 		SetTimer("evolve", RuleI(EvolvingItems, DelayUponEquipping));
 	}
 
-	m_SerialNumber  = GetNextItemInstSerialNumber();
+	m_SerialNumber  = GetNextItemInstSerialNumber_Fallback();
 }
 
 EQ::ItemInstance::ItemInstance(SharedDatabase *db, uint32 item_id, int16 charges) {
@@ -114,7 +104,7 @@ EQ::ItemInstance::ItemInstance(SharedDatabase *db, uint32 item_id, int16 charges
 		SetTimer("evolve", RuleI(EvolvingItems, DelayUponEquipping));
 	}
 
-	m_SerialNumber  = GetNextItemInstSerialNumber();
+	m_SerialNumber  = GetNextItemInstSerialNumber_Fallback();
 }
 EQ::ItemInstance::ItemInstance(ItemInstTypes use_type) {
 	m_use_type     = use_type;
@@ -1005,23 +995,132 @@ void EQ::ItemInstance::ScaleItem() {
 
 	float Mult = (float)(GetExp()) / 10000;	// scaling is determined by exp, with 10,000 being full stats
 
-	m_scaledItem->AStr = (int8)((float)m_item->AStr*Mult);
-	m_scaledItem->ASta = (int8)((float)m_item->ASta*Mult);
-	m_scaledItem->AAgi = (int8)((float)m_item->AAgi*Mult);
-	m_scaledItem->ADex = (int8)((float)m_item->ADex*Mult);
-	m_scaledItem->AInt = (int8)((float)m_item->AInt*Mult);
-	m_scaledItem->AWis = (int8)((float)m_item->AWis*Mult);
-	m_scaledItem->ACha = (int8)((float)m_item->ACha*Mult);
+	// Pool-distribution of attributes: compute scaled raw values, then redistribute using weights
+	{
+		struct AttrSlot { const char *name; int baseValue; int scaledRaw; double weight; int allocated; };
+		AttrSlot slots[7] = {
+			{ "AStr", m_item->AStr, 0, 0.0, 0 },
+			{ "ASta", m_item->ASta, 0, 0.0, 0 },
+			{ "AAgi", m_item->AAgi, 0, 0.0, 0 },
+			{ "ADex", m_item->ADex, 0, 0.0, 0 },
+			{ "AInt", m_item->AInt, 0, 0.0, 0 },
+			{ "AWis", m_item->AWis, 0, 0.0, 0 },
+			{ "ACha", m_item->ACha, 0, 0.0, 0 }
+		};
+		int pseudoLevel = static_cast<int>(Mult * 100.0f);
+		// compute raw scaled values (global curve applied) and weights
+		for (int i = 0; i < 7; ++i) {
+			int base = slots[i].baseValue;
+			if (base <= 0) {
+				slots[i].scaledRaw = 0;
+			} else {
+				double curveMult = ItemScaling::Config::Get().GetGlobalAttrCurve(pseudoLevel);
+				slots[i].scaledRaw = static_cast<int>(std::round(base * Mult * curveMult));
+			}
+			bool present = slots[i].baseValue > 0;
+			slots[i].weight = ItemScaling::Config::Get().GetAttributePresenceMultiplier(slots[i].name, present, pseudoLevel);
+		}
+		// total pool
+		int totalPool = 0;
+		for (int i = 0; i < 7; ++i) totalPool += slots[i].scaledRaw;
+		std::string mode = ItemScaling::Config::Get().GetAttributeBudgetMode();
+		if (mode == "static") {
+			int sb = ItemScaling::Config::Get().GetAttributeStaticBudget();
+			if (sb > 0) totalPool = sb;
+		}
+		// Apply per-slot multiplier (Chest = 1.5, Wrist = 0.75 etc.) to modify total pool
+		double slotMult = ItemScaling::Config::Get().GetSlotMultiplierByMask(m_item ? m_item->Slots : 0);
+		if (slotMult > 0.0 && slotMult != 1.0) {
+			totalPool = static_cast<int>(std::round(totalPool * slotMult));
+		}
+		if (totalPool <= 0) {
+			// legacy: set each to computed scaledRaw (but still apply cap and presence multiplier)
+			auto ApplyStatCapLambda = [](int8 &base_stat, int32 &heroic_stat, int raw_value) {
+				const int CAP = 127;
+				if (raw_value > CAP) { base_stat = CAP; heroic_stat += (raw_value - CAP); }
+				else base_stat = static_cast<int8>(raw_value);
+			};
+			// set all attributes from scaledRaw * presence multiplier
+			double pm; int finalVal;
+			pm = ItemScaling::Config::Get().GetAttributePresenceMultiplier("AStr", m_item->AStr > 0, pseudoLevel);
+			finalVal = static_cast<int>(std::round(slots[0].scaledRaw * pm)); ApplyStatCapLambda(m_scaledItem->AStr, m_scaledItem->HeroicStr, finalVal);
+			pm = ItemScaling::Config::Get().GetAttributePresenceMultiplier("ASta", m_item->ASta > 0, pseudoLevel);
+			finalVal = static_cast<int>(std::round(slots[1].scaledRaw * pm)); ApplyStatCapLambda(m_scaledItem->ASta, m_scaledItem->HeroicSta, finalVal);
+			pm = ItemScaling::Config::Get().GetAttributePresenceMultiplier("AAgi", m_item->AAgi > 0, pseudoLevel);
+			finalVal = static_cast<int>(std::round(slots[2].scaledRaw * pm)); ApplyStatCapLambda(m_scaledItem->AAgi, m_scaledItem->HeroicAgi, finalVal);
+			pm = ItemScaling::Config::Get().GetAttributePresenceMultiplier("ADex", m_item->ADex > 0, pseudoLevel);
+			finalVal = static_cast<int>(std::round(slots[3].scaledRaw * pm)); ApplyStatCapLambda(m_scaledItem->ADex, m_scaledItem->HeroicDex, finalVal);
+			pm = ItemScaling::Config::Get().GetAttributePresenceMultiplier("AInt", m_item->AInt > 0, pseudoLevel);
+			finalVal = static_cast<int>(std::round(slots[4].scaledRaw * pm)); ApplyStatCapLambda(m_scaledItem->AInt, m_scaledItem->HeroicInt, finalVal);
+			pm = ItemScaling::Config::Get().GetAttributePresenceMultiplier("AWis", m_item->AWis > 0, pseudoLevel);
+			finalVal = static_cast<int>(std::round(slots[5].scaledRaw * pm)); ApplyStatCapLambda(m_scaledItem->AWis, m_scaledItem->HeroicWis, finalVal);
+			pm = ItemScaling::Config::Get().GetAttributePresenceMultiplier("ACha", m_item->ACha > 0, pseudoLevel);
+			finalVal = static_cast<int>(std::round(slots[6].scaledRaw * pm)); ApplyStatCapLambda(m_scaledItem->ACha, m_scaledItem->HeroicCha, finalVal);
+		} else {
+			// allocate pool with weights
+			double totalWeight = 0.0;
+			for (int i = 0; i < 7; ++i) totalWeight += slots[i].weight;
+			if (totalWeight <= 0.0) {
+				// fallback: equal weights
+				totalWeight = 7.0;
+				for (int i = 0; i < 7; ++i) slots[i].weight = 1.0;
+			}
+			int remaining = totalPool;
+			for (int i = 0; i < 7; ++i) {
+				double share = (slots[i].weight / totalWeight) * totalPool;
+				int value = static_cast<int>(std::round(share));
+				if (i == 6) {
+					// last attribute: ensure total sums to totalPool
+					value = remaining;
+				} else {
+					remaining -= value;
+				}
+				slots[i].allocated = value;
+			}
+			// apply stat cap and store values
+			auto ApplyStatCapLambda = [](int8 &base_stat, int32 &heroic_stat, int raw_value) {
+				const int CAP = 127;
+				if (raw_value > CAP) { base_stat = CAP; heroic_stat += (raw_value - CAP); }
+				else base_stat = static_cast<int8>(raw_value);
+			};
+			ApplyStatCapLambda(m_scaledItem->AStr, m_scaledItem->HeroicStr, slots[0].allocated);
+			ApplyStatCapLambda(m_scaledItem->ASta, m_scaledItem->HeroicSta, slots[1].allocated);
+			ApplyStatCapLambda(m_scaledItem->AAgi, m_scaledItem->HeroicAgi, slots[2].allocated);
+			ApplyStatCapLambda(m_scaledItem->ADex, m_scaledItem->HeroicDex, slots[3].allocated);
+			ApplyStatCapLambda(m_scaledItem->AInt, m_scaledItem->HeroicInt, slots[4].allocated);
+			ApplyStatCapLambda(m_scaledItem->AWis, m_scaledItem->HeroicWis, slots[5].allocated);
+			ApplyStatCapLambda(m_scaledItem->ACha, m_scaledItem->HeroicCha, slots[6].allocated);
+		}
+	}
 
-	m_scaledItem->MR = (int8)((float)m_item->MR*Mult);
-	m_scaledItem->PR = (int8)((float)m_item->PR*Mult);
-	m_scaledItem->DR = (int8)((float)m_item->DR*Mult);
-	m_scaledItem->CR = (int8)((float)m_item->CR*Mult);
-	m_scaledItem->FR = (int8)((float)m_item->FR*Mult);
+
+	// Resistances: apply per-slot resist multipliers if configured
+	uint32_t slots_mask = m_item ? m_item->Slots : 0;
+	double resDefault = ItemScaling::Config::Get().GetSlotMultiplierByMask(slots_mask, "Resists");
+	double frSlot = ItemScaling::Config::Get().GetSlotMultiplierByMask(slots_mask, "FR");
+	double mrSlot = ItemScaling::Config::Get().GetSlotMultiplierByMask(slots_mask, "MR");
+	double prSlot = ItemScaling::Config::Get().GetSlotMultiplierByMask(slots_mask, "PR");
+	double crSlot = ItemScaling::Config::Get().GetSlotMultiplierByMask(slots_mask, "CR");
+	double drSlot = ItemScaling::Config::Get().GetSlotMultiplierByMask(slots_mask, "DR");
+	m_scaledItem->MR = static_cast<int8>((float)m_item->MR * Mult * (mrSlot > 0.0 ? mrSlot : resDefault));
+	m_scaledItem->PR = static_cast<int8>((float)m_item->PR * Mult * (prSlot > 0.0 ? prSlot : resDefault));
+	m_scaledItem->DR = static_cast<int8>((float)m_item->DR * Mult * (drSlot > 0.0 ? drSlot : resDefault));
+	m_scaledItem->CR = static_cast<int8>((float)m_item->CR * Mult * (crSlot > 0.0 ? crSlot : resDefault));
+	m_scaledItem->FR = static_cast<int8>((float)m_item->FR * Mult * (frSlot > 0.0 ? frSlot : resDefault));
 
 	m_scaledItem->HP = (int32)((float)m_item->HP*Mult);
+	// Apply per-slot HP multiplier
+	double hpSlot = ItemScaling::Config::Get().GetSlotMultiplierByMask(slots_mask, "HP");
+	if (hpSlot != 1.0) {
+		m_scaledItem->HP = static_cast<int32>(std::round(static_cast<double>(m_scaledItem->HP) * hpSlot));
+	}
 	m_scaledItem->Mana = (int32)((float)m_item->Mana*Mult);
 	m_scaledItem->AC = (int32)((float)m_item->AC*Mult);
+	// Apply per-slot AC multiplier
+	double acSlot = ItemScaling::Config::Get().GetSlotMultiplierByMask(slots_mask, "AC");
+	if (acSlot != 1.0) {
+		m_scaledItem->AC = static_cast<int32>(std::round(static_cast<double>(m_scaledItem->AC) * acSlot));
+	}
 
 	// check these..some may not need to be modified (really need to check all stats/bonuses)
 	//m_scaledItem->SkillModValue = (int32)((float)m_item->SkillModValue*Mult);
@@ -1029,11 +1128,37 @@ void EQ::ItemInstance::ScaleItem() {
 	m_scaledItem->BardValue = (int32)((float)m_item->BardValue*Mult);		// watch (no entries with charmfileid)
 	m_scaledItem->ElemDmgAmt = (uint8)((float)m_item->ElemDmgAmt*Mult);		// watch (no entries with charmfileid)
 	m_scaledItem->Damage = (uint32)((float)m_item->Damage*Mult);			// watch
+	{
+		int pseudoLevel = static_cast<int>(Mult * 100.0f);
+		double wmult = ItemScaling::Config::Get().GetWeaponDamageCurve(pseudoLevel);
+		m_scaledItem->Damage = static_cast<uint32>(static_cast<float>(m_item->Damage) * static_cast<float>(Mult * wmult));
+		// Apply per-slot Damage multiplier
+		double dmgSlot = ItemScaling::Config::Get().GetSlotMultiplierByMask(slots_mask, "Damage");
+		if (dmgSlot != 1.0) {
+			m_scaledItem->Damage = static_cast<uint32>(std::round(static_cast<double>(m_scaledItem->Damage) * dmgSlot));
+			if (m_scaledItem->Damage < 1) m_scaledItem->Damage = 1;
+		}
+	}
 
 	m_scaledItem->CombatEffects = (int8)((float)m_item->CombatEffects*Mult);
 	m_scaledItem->Shielding = (int8)((float)m_item->Shielding*Mult);
+	{
+		int pseudoLevel = static_cast<int>(Mult * 100.0f);
+		double mm = ItemScaling::Config::Get().GetMod2Curve("Shielding", pseudoLevel);
+		m_scaledItem->Shielding = static_cast<int8>(static_cast<int>(m_item->Shielding * Mult * mm));
+		// Apply per-slot Shielding multiplier
+		double shieldSlot = ItemScaling::Config::Get().GetSlotMultiplierByMask(slots_mask, "Shielding");
+		if (shieldSlot != 1.0) {
+			m_scaledItem->Shielding = static_cast<int8>(std::round(static_cast<double>(m_scaledItem->Shielding) * shieldSlot));
+		}
+	}
 	m_scaledItem->StunResist = (int8)((float)m_item->StunResist*Mult);
 	m_scaledItem->StrikeThrough = (int8)((float)m_item->StrikeThrough*Mult);
+	{
+		int pseudoLevel = static_cast<int>(Mult * 100.0f);
+		double mm = ItemScaling::Config::Get().GetMod2Curve("StrikeThrough", pseudoLevel);
+		m_scaledItem->StrikeThrough = static_cast<int8>(static_cast<int>(m_item->StrikeThrough * Mult * mm));
+	}
 	m_scaledItem->ExtraDmgAmt = (uint32)((float)m_item->ExtraDmgAmt*Mult);
 	m_scaledItem->SpellShield = (int8)((float)m_item->SpellShield*Mult);
 	m_scaledItem->Avoidance = (int8)((float)m_item->Avoidance*Mult);
@@ -1046,7 +1171,23 @@ void EQ::ItemInstance::ScaleItem() {
 
 	m_scaledItem->Endur = (uint32)((float)m_item->Endur*Mult);
 	m_scaledItem->DotShielding = (uint32)((float)m_item->DotShielding*Mult);
+	if (m_scaledItem->DotShielding > 0) {
+		double dsSlot = ItemScaling::Config::Get().GetSlotMultiplierByMask(slots_mask, "DotShielding");
+		if (dsSlot != 1.0) {
+			m_scaledItem->DotShielding = static_cast<int32>(std::round(static_cast<double>(m_scaledItem->DotShielding) * dsSlot));
+		}
+	}
 	m_scaledItem->Attack = (uint32)((float)m_item->Attack*Mult);
+	{
+		int pseudoLevel = static_cast<int>(Mult * 100.0f);
+		double wmult = ItemScaling::Config::Get().GetWeaponAttackCurve(pseudoLevel);
+		m_scaledItem->Attack = static_cast<uint32>(static_cast<float>(m_item->Attack) * static_cast<float>(Mult * wmult));
+		// Apply per-slot Attack multiplier
+		double atkSlot = ItemScaling::Config::Get().GetSlotMultiplierByMask(slots_mask, "Attack");
+		if (atkSlot != 1.0) {
+			m_scaledItem->Attack = static_cast<uint32>(std::round(static_cast<double>(m_scaledItem->Attack) * atkSlot));
+		}
+	}
 	m_scaledItem->Regen = (uint32)((float)m_item->Regen*Mult);
 	m_scaledItem->ManaRegen = (uint32)((float)m_item->ManaRegen*Mult);
 	m_scaledItem->EnduranceRegen = (uint32)((float)m_item->EnduranceRegen*Mult);
@@ -1072,6 +1213,40 @@ void EQ::ItemInstance::ScaleItem() {
 	m_scaledItem->HealAmt = (int32)((float)m_item->HealAmt*Mult);
 	m_scaledItem->SpellDmg = (int32)((float)m_item->SpellDmg*Mult);
 	m_scaledItem->Clairvoyance = (uint32)((float)m_item->Clairvoyance*Mult);
+
+	// Derived caster stats: derive SpellDmg from INT, HealAmt from WIS
+	// Use the ItemScaling Config to compute derived values (supports 'divisor' and 'curve' modes)
+	int pseudoLevel = static_cast<int>(Mult * 100.0f);
+	if (m_scaledItem->AInt > 0) {
+		int32 derivedSpell = ItemScaling::Config::Get().ComputeSpellDmgFromInt(static_cast<int>(m_scaledItem->AInt), pseudoLevel);
+		if (derivedSpell > 0) m_scaledItem->SpellDmg += derivedSpell;
+	}
+	if (m_scaledItem->AWis > 0) {
+		int32 derivedHeal = ItemScaling::Config::Get().ComputeHealFromWis(static_cast<int>(m_scaledItem->AWis), pseudoLevel);
+		if (derivedHeal > 0) m_scaledItem->HealAmt += derivedHeal;
+	}
+
+	// Apply per-slot SpellDmg & HealAmt multipliers
+	double spellSlot = ItemScaling::Config::Get().GetSlotMultiplierByMask(slots_mask, "SpellDmg");
+	double healSlot = ItemScaling::Config::Get().GetSlotMultiplierByMask(slots_mask, "HealAmt");
+	if (spellSlot != 1.0) {
+		m_scaledItem->SpellDmg = static_cast<int32>(std::round(static_cast<double>(m_scaledItem->SpellDmg) * spellSlot));
+	}
+	if (healSlot != 1.0) {
+		m_scaledItem->HealAmt = static_cast<int32>(std::round(static_cast<double>(m_scaledItem->HealAmt) * healSlot));
+	}
+
+	// Log derived values for debugging
+	{
+		std::ofstream logfile("logs/inf/item_scaling.log", std::ios::app);
+		if (logfile.is_open()) {
+			logfile << "ScaleItem: ItemID=" << (m_item ? m_item->ID : 0)
+			<< " PseudoLevel=" << static_cast<int>(Mult * 100.0f)
+			<< " SpellDmg=" << m_scaledItem->SpellDmg << " HealAmt=" << m_scaledItem->HealAmt << std::endl;
+			logfile.close();
+		}
+	}
+
 
 	m_scaledItem->CharmFileID = 0;	// this stops the client from trying to scale the item itself.
 }
@@ -1137,40 +1312,136 @@ void EQ::ItemInstance::ScaleDynamicItem(int level) {
 		}
 	};
 
-	// Primary stats with tiered scaling
-	m_scaledItem->AC = CalculateTieredStat(m_item->AC, level, 2, 2);  // ac_base_increment=2, ac_tier_bonus=2
-	m_scaledItem->HP = CalculateTieredStat(m_item->HP, level, 4, 4);  // hp_base_increment=4, hp_tier_bonus=4
-	m_scaledItem->Mana = CalculateTieredStat(m_item->Mana, level, 4, 4);  // Same as HP
-	m_scaledItem->Endur = CalculateTieredStat(m_item->Endur, level, 4, 4);  // Same as HP
+	// Primary stats with tiered scaling * JSON curves * slot multipliers (mirrors DynamicItemManager)
+	uint32_t slots_mask = m_item ? m_item->Slots : 0;
+	auto primaryCurve = [&](const std::string &key) { return ItemScaling::Config::Get().GetMod2Curve(key, level); };
+	double ac_base_factor = 1.0 + (static_cast<double>(m_item->AC) / 200.0); // emphasize base AC
+	m_scaledItem->AC = static_cast<int32>(std::round(CalculateTieredStat(m_item->AC, level, 1, 1) * primaryCurve("AC") * ac_base_factor));
+	double hp_base_factor = 1.0 + (static_cast<double>(m_item->HP) / 500.0); // emphasize base HP
+	m_scaledItem->HP = static_cast<int32>(std::round(CalculateTieredStat(m_item->HP, level, 4, 4) * primaryCurve("HP") * hp_base_factor));
+	m_scaledItem->Mana = static_cast<int32>(std::round(CalculateTieredStat(m_item->Mana, level, 1, 1) * primaryCurve("Mana")));
+	m_scaledItem->Endur = static_cast<int32>(std::round(CalculateTieredStat(m_item->Endur, level, 4, 4) * primaryCurve("Endur")));
+	// Apply per-slot primary multipliers (AC, HP, Mana, Endur)
+	double hpSlotMult = ItemScaling::Config::Get().GetSlotMultiplierByMask(slots_mask, "HP");
+	double acSlotMult = ItemScaling::Config::Get().GetSlotMultiplierByMask(slots_mask, "AC");
+	double manaSlotMult = ItemScaling::Config::Get().GetSlotMultiplierByMask(slots_mask, "Mana");
+	double endurSlotMult = ItemScaling::Config::Get().GetSlotMultiplierByMask(slots_mask, "Endur");
+	if (hpSlotMult != 1.0) m_scaledItem->HP = static_cast<int32>(std::round(static_cast<double>(m_scaledItem->HP) * hpSlotMult));
+	if (acSlotMult != 1.0) m_scaledItem->AC = static_cast<int32>(std::round(static_cast<double>(m_scaledItem->AC) * acSlotMult));
+	if (manaSlotMult != 1.0) m_scaledItem->Mana = static_cast<int32>(std::round(static_cast<double>(m_scaledItem->Mana) * manaSlotMult));
+	if (endurSlotMult != 1.0) m_scaledItem->Endur = static_cast<int32>(std::round(static_cast<double>(m_scaledItem->Endur) * endurSlotMult));
 
 	// Attribute stats with 127 cap + heroic overflow
-	if (m_item->AStr > 0) {
-		int raw_str = CalculateTieredStat(m_item->AStr, level, 1, 1);
-		ApplyStatCap(m_scaledItem->AStr, m_scaledItem->HeroicStr, raw_str);
+	{
+		// compute raw scaled values per attribute and allocate via configured pool mode
+		struct AttrSlot { const char *name; int baseValue; int rawScaled; double weight; int allocated; };
+		AttrSlot slots[7] = {
+			{ "AStr", m_item->AStr, 0, 0.0, 0 },
+			{ "ASta", m_item->ASta, 0, 0.0, 0 },
+			{ "AAgi", m_item->AAgi, 0, 0.0, 0 },
+			{ "ADex", m_item->ADex, 0, 0.0, 0 },
+			{ "AInt", m_item->AInt, 0, 0.0, 0 },
+			{ "AWis", m_item->AWis, 0, 0.0, 0 },
+			{ "ACha", m_item->ACha, 0, 0.0, 0 }
+		};
+		for (int i = 0; i < 7; ++i) {
+			int raw = CalculateTieredStat(slots[i].baseValue, level, 1, 1);
+			double curveMult = ItemScaling::Config::Get().GetGlobalAttrCurve(level);
+			double pref = ItemScaling::Config::Get().GetAttributePresenceMultiplier(slots[i].name, slots[i].baseValue > 0, level);
+			double baseFactor = 1.0 + (static_cast<double>(slots[i].baseValue) / 60.0);
+			slots[i].rawScaled = static_cast<int>(std::round(raw * curveMult * pref * baseFactor));
+			bool present = slots[i].baseValue > 0;
+			slots[i].weight = ItemScaling::Config::Get().GetAttributePresenceMultiplier(slots[i].name, present, level);
+		}
+		int totalPool = 0;
+		for (int i = 0; i < 7; ++i) totalPool += slots[i].rawScaled;
+		std::string mode = ItemScaling::Config::Get().GetAttributeBudgetMode();
+		if (mode == "static") {
+			int sb = ItemScaling::Config::Get().GetAttributeStaticBudget();
+			if (sb > 0) totalPool = sb;
+		}
+		// Apply per-slot multiplier using the base item's slot mask
+		uint32_t slots_mask = m_item ? m_item->Slots : 0;
+		double slotMult = ItemScaling::Config::Get().GetSlotMultiplierByMask(slots_mask);
+		if (slotMult > 0.0 && slotMult != 1.0) {
+			totalPool = static_cast<int>(std::round(totalPool * slotMult));
+		}
+		if (totalPool <= 0) {
+			// legacy behavior: assign computed rawScaled * presence multiplier
+			auto ApplyStatCapLambda = [](int8 &base_stat, int32 &heroic_stat, int raw_value) {
+				const int CAP = 127;
+				if (raw_value > CAP) { base_stat = CAP; heroic_stat += (raw_value - CAP); }
+				else base_stat = static_cast<int8>(raw_value);
+			};
+			double pm; int finalVal;
+			pm = ItemScaling::Config::Get().GetAttributePresenceMultiplier("AStr", m_item->AStr > 0, level);
+			finalVal = static_cast<int>(std::round(slots[0].rawScaled * pm)); ApplyStatCapLambda(m_scaledItem->AStr, m_scaledItem->HeroicStr, finalVal);
+			pm = ItemScaling::Config::Get().GetAttributePresenceMultiplier("ASta", m_item->ASta > 0, level);
+			finalVal = static_cast<int>(std::round(slots[1].rawScaled * pm)); ApplyStatCapLambda(m_scaledItem->ASta, m_scaledItem->HeroicSta, finalVal);
+			pm = ItemScaling::Config::Get().GetAttributePresenceMultiplier("AAgi", m_item->AAgi > 0, level);
+			finalVal = static_cast<int>(std::round(slots[2].rawScaled * pm)); ApplyStatCapLambda(m_scaledItem->AAgi, m_scaledItem->HeroicAgi, finalVal);
+			pm = ItemScaling::Config::Get().GetAttributePresenceMultiplier("ADex", m_item->ADex > 0, level);
+			finalVal = static_cast<int>(std::round(slots[3].rawScaled * pm)); ApplyStatCapLambda(m_scaledItem->ADex, m_scaledItem->HeroicDex, finalVal);
+			pm = ItemScaling::Config::Get().GetAttributePresenceMultiplier("AInt", m_item->AInt > 0, level);
+			finalVal = static_cast<int>(std::round(slots[4].rawScaled * pm)); ApplyStatCapLambda(m_scaledItem->AInt, m_scaledItem->HeroicInt, finalVal);
+			pm = ItemScaling::Config::Get().GetAttributePresenceMultiplier("AWis", m_item->AWis > 0, level);
+			finalVal = static_cast<int>(std::round(slots[5].rawScaled * pm)); ApplyStatCapLambda(m_scaledItem->AWis, m_scaledItem->HeroicWis, finalVal);
+			pm = ItemScaling::Config::Get().GetAttributePresenceMultiplier("ACha", m_item->ACha > 0, level);
+			finalVal = static_cast<int>(std::round(slots[6].rawScaled * pm)); ApplyStatCapLambda(m_scaledItem->ACha, m_scaledItem->HeroicCha, finalVal);
+		} else {
+			double totalWeight = 0.0;
+			for (int i = 0; i < 7; ++i) totalWeight += slots[i].weight;
+			if (totalWeight <= 0.0) { totalWeight = 7.0; for (int i = 0; i < 7; ++i) slots[i].weight = 1.0; }
+			int remaining = totalPool;
+			for (int i = 0; i < 7; ++i) {
+				double share = (slots[i].weight / totalWeight) * totalPool;
+				int val = static_cast<int>(std::round(share));
+				if (i == 6) { val = remaining; } else { remaining -= val; }
+				slots[i].allocated = val;
+			}
+			auto ApplyStatCapLambda = [](int8 &base_stat, int32 &heroic_stat, int raw_value) {
+				const int CAP = 127;
+				if (raw_value > CAP) { base_stat = CAP; heroic_stat += (raw_value - CAP); }
+				else base_stat = static_cast<int8>(raw_value);
+			};
+			ApplyStatCapLambda(m_scaledItem->AStr, m_scaledItem->HeroicStr, slots[0].allocated);
+			ApplyStatCapLambda(m_scaledItem->ASta, m_scaledItem->HeroicSta, slots[1].allocated);
+			ApplyStatCapLambda(m_scaledItem->AAgi, m_scaledItem->HeroicAgi, slots[2].allocated);
+			ApplyStatCapLambda(m_scaledItem->ADex, m_scaledItem->HeroicDex, slots[3].allocated);
+			ApplyStatCapLambda(m_scaledItem->AInt, m_scaledItem->HeroicInt, slots[4].allocated);
+			ApplyStatCapLambda(m_scaledItem->AWis, m_scaledItem->HeroicWis, slots[5].allocated);
+			ApplyStatCapLambda(m_scaledItem->ACha, m_scaledItem->HeroicCha, slots[6].allocated);
+		}
 	}
-	if (m_item->ASta > 0) {
-		int raw_sta = CalculateTieredStat(m_item->ASta, level, 1, 1);
-		ApplyStatCap(m_scaledItem->ASta, m_scaledItem->HeroicSta, raw_sta);
-	}
-	if (m_item->AAgi > 0) {
-		int raw_agi = CalculateTieredStat(m_item->AAgi, level, 1, 1);
-		ApplyStatCap(m_scaledItem->AAgi, m_scaledItem->HeroicAgi, raw_agi);
-	}
-	if (m_item->ADex > 0) {
-		int raw_dex = CalculateTieredStat(m_item->ADex, level, 1, 1);
-		ApplyStatCap(m_scaledItem->ADex, m_scaledItem->HeroicDex, raw_dex);
-	}
+
+	// Derived caster stats for dynamic items - use configured curve/divisor
 	if (m_item->AInt > 0) {
-		int raw_int = CalculateTieredStat(m_item->AInt, level, 1, 1);
-		ApplyStatCap(m_scaledItem->AInt, m_scaledItem->HeroicInt, raw_int);
+		int32 derivedSpell = ItemScaling::Config::Get().ComputeSpellDmgFromInt(static_cast<int>(m_scaledItem->AInt), level);
+		if (derivedSpell > 0) m_scaledItem->SpellDmg += derivedSpell;
 	}
 	if (m_item->AWis > 0) {
-		int raw_wis = CalculateTieredStat(m_item->AWis, level, 1, 1);
-		ApplyStatCap(m_scaledItem->AWis, m_scaledItem->HeroicWis, raw_wis);
+		int32 derivedHeal = ItemScaling::Config::Get().ComputeHealFromWis(static_cast<int>(m_scaledItem->AWis), level);
+		if (derivedHeal > 0) m_scaledItem->HealAmt += derivedHeal;
 	}
-	if (m_item->ACha > 0) {
-		int raw_cha = CalculateTieredStat(m_item->ACha, level, 1, 1);
-		ApplyStatCap(m_scaledItem->ACha, m_scaledItem->HeroicCha, raw_cha);
+    // Apply per-slot SpellDmg and HealAmt multipliers
+    double spellMult = ItemScaling::Config::Get().GetSlotMultiplierByMask(slots_mask, "SpellDmg");
+    if (spellMult != 1.0 && m_scaledItem->SpellDmg > 0) {
+        m_scaledItem->SpellDmg = static_cast<int32>(std::round(static_cast<double>(m_scaledItem->SpellDmg) * spellMult));
+    }
+    double healMult = ItemScaling::Config::Get().GetSlotMultiplierByMask(slots_mask, "HealAmt");
+    if (healMult != 1.0 && m_scaledItem->HealAmt > 0) {
+        m_scaledItem->HealAmt = static_cast<int32>(std::round(static_cast<double>(m_scaledItem->HealAmt) * healMult));
+    }
+
+	// Log derived values for debugging
+	{
+		std::ofstream logfile("logs/inf/item_scaling.log", std::ios::app);
+		if (logfile.is_open()) {
+			logfile << "ScaleDynamicItem: ItemID=" << (m_item ? m_item->ID : 0)
+			<< " Level=" << level
+			<< " SpellDmg=" << m_scaledItem->SpellDmg << " HealAmt=" << m_scaledItem->HealAmt << std::endl;
+			logfile.close();
+		}
 	}
 
 	// === Weapon Stats ===
@@ -1192,21 +1463,36 @@ void EQ::ItemInstance::ScaleDynamicItem(int level) {
 			// At level 100: ~8x multiplier (30dmg -> 240dmg)
 			// At level 250: ~65x multiplier (30dmg -> 1950dmg)
 			// Formula: 1 + (level * 0.26) gives us the scaling curve we want
-			float ratio_multiplier = 1.0f + (level * 0.26f);  // 26% per level
+			float ratio_multiplier = 1.0f + (level * 0.10f);  // softened to pair with JSON curve
+			double wmult = ItemScaling::Config::Get().GetWeaponDamageCurve(level);
 
 			// Calculate new damage based on scaled ratio
-			float new_damage = base_ratio * ratio_multiplier * m_item->Delay;
+			float new_damage = base_ratio * static_cast<float>(ratio_multiplier * wmult) * m_item->Delay;
 
 			// Round to nearest integer (important for low-damage weapons)
 			m_scaledItem->Damage = static_cast<uint32>(new_damage + 0.5f);
 
-			// Ensure minimum of 1 damage
-			if (m_scaledItem->Damage < 1) m_scaledItem->Damage = 1;
+			// Ensure minimum: at least base damage + 1 so tiny weapons still grow
+			uint32 floorVal = static_cast<uint32>(m_item->Damage + 1);
+			if (m_scaledItem->Damage < floorVal) m_scaledItem->Damage = floorVal;
+			// Apply per-slot Damage multiplier for weapons
+			double dmgSlot = ItemScaling::Config::Get().GetSlotMultiplierByMask(slots_mask, "Damage");
+			if (dmgSlot != 1.0) {
+				m_scaledItem->Damage = static_cast<uint32>(std::round(static_cast<double>(m_scaledItem->Damage) * dmgSlot));
+				if (m_scaledItem->Damage < floorVal) m_scaledItem->Damage = floorVal;
+			}
 		}
 
 		// Scale Attack stat (ATK bonus) - modest scaling
 		if (m_item->Attack > 0) {
-			m_scaledItem->Attack = CalculateTieredStat(m_item->Attack, level, 1, 1);
+			int raw = CalculateTieredStat(m_item->Attack, level, 1, 1);
+			double amult = ItemScaling::Config::Get().GetWeaponAttackCurve(level);
+			m_scaledItem->Attack = static_cast<uint32>(static_cast<int>(raw * amult));
+			// Per-slot Attack multiplier
+			double atkSlot = ItemScaling::Config::Get().GetSlotMultiplierByMask(slots_mask, "Attack");
+			if (atkSlot != 1.0) {
+				m_scaledItem->Attack = static_cast<uint32>(std::round(static_cast<double>(m_scaledItem->Attack) * atkSlot));
+			}
 		}
 
 		// DON'T scale elemental/bane damage - these have specific types/targets
@@ -1257,19 +1543,44 @@ void EQ::ItemInstance::ScaleDynamicItem(int level) {
 	// Resistances with cap
 	const int resist_cap = 500;
 	if (m_item->FR > 0) {
-		m_scaledItem->FR = std::min(CalculateTieredStat(m_item->FR, level, 1, 1), resist_cap);
+		int raw = CalculateTieredStat(m_item->FR, level, 1, 1);
+		double frSlot = ItemScaling::Config::Get().GetSlotMultiplierByMask(slots_mask, "FR");
+		double resistSlotDefault = ItemScaling::Config::Get().GetSlotMultiplierByMask(slots_mask, "Resists");
+		double useMult = (frSlot != 0.0 ? frSlot : resistSlotDefault);
+		if (useMult != 1.0) raw = static_cast<int>(std::round(raw * useMult));
+		m_scaledItem->FR = std::min(raw, resist_cap);
 	}
 	if (m_item->CR > 0) {
-		m_scaledItem->CR = std::min(CalculateTieredStat(m_item->CR, level, 1, 1), resist_cap);
+		int raw = CalculateTieredStat(m_item->CR, level, 1, 1);
+		double crSlot = ItemScaling::Config::Get().GetSlotMultiplierByMask(slots_mask, "CR");
+		double resistSlotDefault = ItemScaling::Config::Get().GetSlotMultiplierByMask(slots_mask, "Resists");
+		double useMult = (crSlot != 0.0 ? crSlot : resistSlotDefault);
+		if (useMult != 1.0) raw = static_cast<int>(std::round(raw * useMult));
+		m_scaledItem->CR = std::min(raw, resist_cap);
 	}
 	if (m_item->MR > 0) {
-		m_scaledItem->MR = std::min(CalculateTieredStat(m_item->MR, level, 1, 1), resist_cap);
+		int raw = CalculateTieredStat(m_item->MR, level, 1, 1);
+		double mrSlot = ItemScaling::Config::Get().GetSlotMultiplierByMask(slots_mask, "MR");
+		double resistSlotDefault = ItemScaling::Config::Get().GetSlotMultiplierByMask(slots_mask, "Resists");
+		double useMult = (mrSlot != 0.0 ? mrSlot : resistSlotDefault);
+		if (useMult != 1.0) raw = static_cast<int>(std::round(raw * useMult));
+		m_scaledItem->MR = std::min(raw, resist_cap);
 	}
 	if (m_item->PR > 0) {
-		m_scaledItem->PR = std::min(CalculateTieredStat(m_item->PR, level, 1, 1), resist_cap);
+		int raw = CalculateTieredStat(m_item->PR, level, 1, 1);
+		double prSlot = ItemScaling::Config::Get().GetSlotMultiplierByMask(slots_mask, "PR");
+		double resistSlotDefault = ItemScaling::Config::Get().GetSlotMultiplierByMask(slots_mask, "Resists");
+		double useMult = (prSlot != 0.0 ? prSlot : resistSlotDefault);
+		if (useMult != 1.0) raw = static_cast<int>(std::round(raw * useMult));
+		m_scaledItem->PR = std::min(raw, resist_cap);
 	}
 	if (m_item->DR > 0) {
-		m_scaledItem->DR = std::min(CalculateTieredStat(m_item->DR, level, 1, 1), resist_cap);
+		int raw = CalculateTieredStat(m_item->DR, level, 1, 1);
+		double drSlot = ItemScaling::Config::Get().GetSlotMultiplierByMask(slots_mask, "DR");
+		double resistSlotDefault = ItemScaling::Config::Get().GetSlotMultiplierByMask(slots_mask, "Resists");
+		double useMult = (drSlot != 0.0 ? drSlot : resistSlotDefault);
+		if (useMult != 1.0) raw = static_cast<int>(std::round(raw * useMult));
+		m_scaledItem->DR = std::min(raw, resist_cap);
 	}
 
 	// Caster stats (aggressive scaling ~5 per level)
@@ -1279,6 +1590,11 @@ void EQ::ItemInstance::ScaleDynamicItem(int level) {
 	if (m_item->SpellDmg > 0) {
 		m_scaledItem->SpellDmg = CalculateTieredStat(m_item->SpellDmg, level, 5, 5);
 	}
+		// Apply per-slot caster multipliers
+		double spellSlot = ItemScaling::Config::Get().GetSlotMultiplierByMask(slots_mask, "SpellDmg");
+		if (spellSlot != 1.0 && m_scaledItem->SpellDmg > 0) m_scaledItem->SpellDmg = static_cast<int32>(std::round(static_cast<double>(m_scaledItem->SpellDmg) * spellSlot));
+		double healSlot = ItemScaling::Config::Get().GetSlotMultiplierByMask(slots_mask, "HealAmt");
+		if (healSlot != 1.0 && m_scaledItem->HealAmt > 0) m_scaledItem->HealAmt = static_cast<int32>(std::round(static_cast<double>(m_scaledItem->HealAmt) * healSlot));
 
 	// Damage Shield and Dot Shielding (moderate scaling)
 	if (m_item->DamageShield > 0) {

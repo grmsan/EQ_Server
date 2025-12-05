@@ -54,6 +54,7 @@ SET(common_sources
     ip_util.cpp
     item_data.cpp
     item_instance.cpp
+    item_scaling_config.cpp
     json_config.cpp
     light_source.cpp
     md5.cpp

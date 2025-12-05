@@ -16,21 +16,36 @@ GNU General Public License for more details.
 //#error /DCINTERFACE
 #endif
 
+// (moved) Intermediary to call plugin draw hooks & built-in HUD drawers - added later after includes
+
 #define DBG_SPEW
 
 //#define DEBUG_TRY 1
 #include "MQ2Main.h"
 
+// Intermediary to call plugin draw hooks & built-in HUD drawers
+EQLIB_API VOID PluginsDrawHUD()
+{
+    PMQPLUGIN pPlugin = pPlugins;
+    while (pPlugin) {
+        if (pPlugin->DrawHUD)
+            pPlugin->DrawHUD();
+        pPlugin = pPlugin->pNext;
+    }
+    // Call built-in custom HUD draw if implemented
+    DrawCustomHUD();
+}
+
 char *OurCaption = "Core is loading...";
 
-class CDisplayHook 
-{ 
-public: 
-    VOID CleanUI_Trampoline(VOID); 
-    VOID CleanUI_Detour(VOID) 
-    { 
+class CDisplayHook
+{
+public:
+    VOID CleanUI_Trampoline(VOID);
+    VOID CleanUI_Detour(VOID)
+    {
         DebugTry(CleanUI_Trampoline());
-    } 
+    }
 
     VOID ReloadUI_Trampoline(BOOL);
     VOID ReloadUI_Detour(BOOL UseINI)
@@ -38,7 +53,7 @@ public:
         DebugTry(ReloadUI_Trampoline(UseINI));
     }
 
-    /* This function is still in the client; however, it was phased out as of 
+    /* This function is still in the client; however, it was phased out as of
     the Omens of War Expansion
 
     bool GetWorldFilePath_Trampoline(char *, char *);
@@ -57,13 +72,13 @@ public:
         return Ret;
     }
     */
-}; 
+};
 
 #ifndef ISXEQ
 
-DWORD __cdecl DrawHUD_Trampoline(DWORD,DWORD,DWORD,DWORD); 
-DWORD __cdecl DrawHUD_Detour(DWORD a,DWORD b,DWORD c,DWORD d) 
-{ 
+DWORD __cdecl DrawHUD_Trampoline(DWORD,DWORD,DWORD,DWORD);
+DWORD __cdecl DrawHUD_Detour(DWORD a,DWORD b,DWORD c,DWORD d)
+{
     DrawHUDParams[0]=a;
     DrawHUDParams[1]=b;
     DrawHUDParams[2]=c;
@@ -71,14 +86,14 @@ DWORD __cdecl DrawHUD_Detour(DWORD a,DWORD b,DWORD c,DWORD d)
     if (gbHUDUnderUI || gbAlwaysDrawMQHUD)
         return 0;
     int Ret= DrawHUD_Trampoline(a,b,c,d);
-    //PluginsDrawHUD();
+    PluginsDrawHUD();
     if (HMODULE hmEQPlayNice=GetModuleHandle("EQPlayNice.dll"))
     {
         if (fMQPulse pEQPlayNicePulse=(fMQPulse)GetProcAddress(hmEQPlayNice,"Compat_DrawIndicator"))
             pEQPlayNicePulse();
     }
     return Ret;
-} 
+}
 
 void DrawHUD()
 {
@@ -134,11 +149,11 @@ public:
     }
 };
 
-//DETOUR_TRAMPOLINE_EMPTY(bool CDisplayHook::GetWorldFilePath_Trampoline(char *, char *)); 
-DETOUR_TRAMPOLINE_EMPTY(VOID EQ_LoadingSHook::SetProgressBar_Trampoline(int, char const *)); 
-DETOUR_TRAMPOLINE_EMPTY(DWORD DrawHUD_Trampoline(DWORD,DWORD,DWORD,DWORD)); 
-DETOUR_TRAMPOLINE_EMPTY(VOID CDisplayHook::CleanUI_Trampoline(VOID)); 
-DETOUR_TRAMPOLINE_EMPTY(VOID CDisplayHook::ReloadUI_Trampoline(BOOL)); 
+//DETOUR_TRAMPOLINE_EMPTY(bool CDisplayHook::GetWorldFilePath_Trampoline(char *, char *));
+DETOUR_TRAMPOLINE_EMPTY(VOID EQ_LoadingSHook::SetProgressBar_Trampoline(int, char const *));
+DETOUR_TRAMPOLINE_EMPTY(DWORD DrawHUD_Trampoline(DWORD,DWORD,DWORD,DWORD));
+DETOUR_TRAMPOLINE_EMPTY(VOID CDisplayHook::CleanUI_Trampoline(VOID));
+DETOUR_TRAMPOLINE_EMPTY(VOID CDisplayHook::ReloadUI_Trampoline(BOOL));
 
 VOID InitializeDisplayHook()
 {

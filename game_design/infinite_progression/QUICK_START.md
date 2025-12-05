@@ -1,27 +1,30 @@
 # Infinite Progression - Quick Start Guide
 
-## Current Status: 90% Complete ✅
+## Current Status: 90% Complete
 
 ### What's Working NOW:
-1. ✅ **Core C++ scaling system** - All tiered formulas implemented
-2. ✅ **Dynamic ID encoding/decoding** - 1LLLIIIIII format (1 billion + level + base ID)
-3. ✅ **Stat capping with heroic overflow** - 127 cap handled correctly
-4. ✅ **Tiered linear scaling** - All stats scale (AC, HP, damage, all attributes)
-5. ✅ **Weapon damage scaling** - Fully implemented (+4/level tier 0, +4 bonus/tier)
-6. ✅ **Universal stat scaling** - ALL items gain ALL stats (even if base is 0)
-7. ✅ **Item generation & caching** - Two-tier cache (shared memory + per-process)
-8. ✅ **Cross-zone persistence** - On-demand loading from database
-9. ✅ **Automatic upgrades** - 5% chance on mob kill, 100% on named/rare
-10. ✅ **GM Commands** - #upgrade working via Lua SendGMCommand
-11. ✅ **Natural progression** - Players don't use commands, just kill mobs
-12. ✅ **Database integration** - Items stored in `items` table with full stats
+1. **Core C++ scaling system** - Tiered formulas for AC/HP/Mana/Endur, damage/attack, attributes with heroic overflow
+2. **Dynamic ID encoding/decoding** - 1LLLIIIIII format (1 billion + level + base ID)
+3. **Stat capping with heroic overflow** - 127 cap handled correctly
+4. **Slot multipliers + derived caster stats from JSON** - `item_scaling.json` feeds slot multipliers and INT->SpellDmg / WIS->HealAmt curves
+5. **Weapon damage scaling** - +4/level tier 0, +4 bonus/tier
+6. **Universal attribute scaling** - ALL items gain ALL stats (even if base is 0)
+7. **No equip-time class multipliers** - Class-specific power is tuned via AAs; items remain canonical definitions
+8. **Item generation & caching** - Two-tier cache (shared memory + per-process)
+9. **Cross-zone persistence** - On-demand loading from database
+10. **Automatic upgrades** - 5% chance on mob kill, 100% on named/rare
+11. **GM Commands** - #upgrade working via Lua SendGMCommand
+12. **Natural progression** - Players don't use commands, just kill mobs
+13. **Database integration** - Items stored in `items` table with full stats
 
 ### Remaining Work (10%):
-1. ⏳ **Haste formula** - Config exists, needs to be applied in ApplyMilestoneBonus
-2. ⏳ **Focus effects** - Milestones defined, not yet implemented
-3. ⏳ **Player fusion access** - Currently GM-only, need to expose safely
-4. ⏳ **Random stats** - Framework exists, needs milestone triggers
-5. ⏳ **Combat stats** - Shielding, StrikeThrough, etc. scaling disabled for now
+1. **Focus effects** - Milestones defined, not yet implemented
+2. **Player fusion access** - Currently GM-only, need to expose safely
+3. **Random stats** - Framework exists, needs milestone triggers
+4. **Combat stats** - Shielding, StrikeThrough, etc. scaling disabled for now
+5. **Full JSON curve adoption** - Preview tool applies curves; C++ still uses tiered formulas for most stats
+
+
 
 ---
 
@@ -51,18 +54,27 @@ Example: 1,200,009,998
 ```
 
 ### Stat Scaling (What Actually Happens)
-```
-Short Sword +100:
-  Base: 4 damage, 0 AC, 0 stats
+- Tiered linear growth (increments rise every 10 levels) + slot multipliers.
+- Attributes always grow; base stats cap at 127 with overflow to Heroic.
+- Weapons: ratio-based damage scaling (keeps fast/slow weapons proportional), then multiplied by `WeaponCurves` and slot multipliers; minimum of base damage + 1 so tiny weapons still advance.
+- Primary/Mod2/Attributes: tiered base multiplied by JSON curves (Primary/Weapon/Mod2/AttributeCurve) plus slot multipliers.
+- Derived caster stats use JSON: INT->SpellDmg, WIS->HealAmt (divisor or curve mode).
+- Preview tool applies the same curves so you can visualize/tune locally.
 
-  After scaling:
-  - Damage: 2,004 (+4/level tier 0, +4/tier bonus → ~2000 added)
-  - AC: 2,750 (+1/level → ~2750 added)
-  - STR/STA/AGI/DEX/WIS/INT/CHA: 127 base + 473 heroic (capped at 127)
-  - Attack: 2,200
-  - HP: ~5500
-  - Mana: ~2750
-```
+### Examples (current config, rounded)
+- Cloth Helm (2 AC, Head slot):
+  - Level 1: AC 3, HP 4, stats ~1 each
+  - Level 50: AC ~304, HP ~1,800, stats ~412 each
+  - Level 100: AC ~1,656, HP ~12,100, stats ~2,750 each
+- Simple Wrist (4 STR, 9 DEX, Wrist slot):
+  - Level 1: STR 4, DEX 8
+  - Level 50: STR ~254, DEX ~262
+  - Level 100: STR ~1,662, DEX ~1,677
+- Heavy Chest (40 STR/STA/AGI/DEX, 110 AC, 200 HP, 150 Endur, 25 ATK, 3 Shielding):
+  - Level 1: AC ~111, HP ~204, stats ~62, ATK ~27, Shielding ~2
+  - Level 50: AC ~520, HP ~2,400, stats ~627, ATK ~520, Shielding ~3
+  - Level 100: AC ~1,980, HP ~13,200, stats ~3,540, ATK ~2,700, Shielding ~4
+
 
 ---
 
@@ -97,6 +109,38 @@ python start_server.py
 **Note:** Regular players don't need these - auto-upgrades handle everything!
 
 ---
+
+### Scale Preview Tool (Local)
+
+A developer-friendly tool is available to preview item scaling locally using a simple GUI. It uses `item_scaling.json` for slot multipliers and curve defaults (if present).
+
+Run the preview UI locally with:
+
+```pwsh
+python tools\item_scale_preview.py
+```
+
+The UI lets you:
+- Enter base stats for any single item.
+- Select a `Slot` (to apply slot multipliers), and a `Level` to scale it to.
+- Choose `Pool Mode`: `Auto`, `Static` or `None` to preview attribute pool allocation.
+- Use `Equip All Slots` to scale a preset starting gear set and view combined totals.
+- Export the scaled text output to clipboard.
+
+Database import (optional)
+--------------------------
+The preview UI includes a 'Load From DB' option to import base item stats directly from your `items` table. For this to work the tool requires the `mysql-connector-python` package and a working `eqemu_config.json` in the project root.
+
+Install the dependency:
+
+```pwsh
+pip install mysql-connector-python
+```
+
+Then enter a valid item ID in the `Item ID load` field and click `Load From DB`. This will prefill the base stats in the UI so you can scale the real item.
+
+You can also search by name: type part of an item name into `Search name` (e.g., `raex`) and click `Search DB`. The GUI will return up to 20 matching items; double-click an entry (or select and click `Load Selected`) to load it into the preview fields.
+
 
 ## Formulas Reference (Current Implementation)
 
@@ -167,6 +211,7 @@ end
 ---
 
 ## Architecture Details (CURRENT)
+
 
 ### Two-Tier Cache System
 **Problem:** Dynamic items (ID >= 1B) caused shared memory ACCESS_VIOLATION

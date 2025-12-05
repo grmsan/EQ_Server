@@ -32,6 +32,8 @@
 #include "data_verification_test.h"
 #include "skills_util_test.h"
 #include "task_state_test.h"
+#include "item_scaling_test.h"
+#include "slot_multiplier_test.h"
 
 const EQEmuConfig *Config;
 
@@ -56,6 +58,8 @@ int main()
 		tests.add(new DataVerificationTest());
 		tests.add(new SkillsUtilsTest());
 		tests.add(new TaskStateTest());
+		tests.add(new ItemScalingTest());
+		tests.add(new SlotMultiplierTest());
 		tests.run(*output, true);
 	}
 	catch (std::exception &ex) {

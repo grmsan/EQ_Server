@@ -237,6 +237,16 @@ if (receiver_level > donor_level) {
 
 ## UI/UX
 
+## Charge-based Fusion (Preview + Server API)
+A player-friendly flow can be implemented using consumable "fusion charges" and NPC integration. This repo implements `DynamicItemManager::FuseWithCharge(int donorLevel, ItemInstance* receiver)` which creates a fused item by applying a donor level to a receiver. The NPC or quest script should handle inventory checks, payment, and confirmations.
+
+Preview usage (GM-only):
+- `#tune itemscale fuse_charge <receiver_base_id> <donor_level>` — preview the fused result using a donor-level charge and a receiver base item.
+
+Design notes:
+- The charge approach avoids directly destroying donor items until the player confirms. It also supports split flows where extractors (NPC or implementable consumables) store donor levels as consumables.
+- The server API (`FuseWithCharge`) only handles creation of the fused item; NPC/quest code must handle validation, item deletion, and replication for persistence.
+
 ### Current GM Command Syntax
 ```
 #fuse                    -- ✅ WORKING: Fuse cursor item into target

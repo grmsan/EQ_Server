@@ -19,6 +19,8 @@ GNU General Public License for more details.
 
 //#define DEBUG_TRY 1
 #include "MQ2Main.h"
+#include <string>
+#include <algorithm>
 #ifndef ISXEQ_LEGACY
 
 BOOL ProcessPending=false;
@@ -62,7 +64,7 @@ public:
     void dEQPlayer_Trampoline(void);
     void dEQPlayer_Detour(void)
     {
-        void (EQPlayerHook::*tmp)(void) = &EQPlayerHook::dEQPlayer_Trampoline; 
+        void (EQPlayerHook::*tmp)(void) = &EQPlayerHook::dEQPlayer_Trampoline;
         __asm {
             push ecx;
             push ecx;
@@ -107,6 +109,9 @@ FUNCTION_AT_VIRTUAL_ADDRESS(void CActorEx::SetNameColor(DWORD &Color),0x190);
 FUNCTION_AT_VIRTUAL_ADDRESS(void CActorEx::ChangeBoneStringSprite(int, int, char *),0x18c);
 #endif
 
+// MQ2HUD functions are now implemented in MQ2HUD.cpp
+
+
 typedef struct _CAPTIONCOLOR {
     PCHAR szName;
     PCHAR szDescription;
@@ -127,8 +132,8 @@ typedef struct _CAPTIONCOLOR {
 #define CC_NPCClassColor    9
 #define CC_NPCMerchant      10
 #define CC_NPCBanker        11
-#define CC_NPCAssist        12 
-#define CC_NPCMark          13 
+#define CC_NPCAssist        12
+#define CC_NPCMark          13
 #define CC_PetNPC           14
 #define CC_PetPC            15
 #define CC_PetConColor      16
@@ -328,8 +333,8 @@ VOID SetNameSpriteTint(PSPAWNINFO pSpawn)
         #define CC_NPCClassColor      9
         #define CC_NPCMerchant        10
         #define CC_NPCBanker          11
-        #define CC_NPCAssist          12 
-        #define CC_NPCMark            13 
+        #define CC_NPCAssist          12
+        #define CC_NPCMark            13
         /**/
         if (CaptionColors[CC_NPCMark].Enabled && IsMarkedNPC(pSpawn))
             NewColor=CaptionColors[CC_NPCMark].Color;
@@ -446,8 +451,8 @@ VOID UpdateSpawnCaptions()
 
 DETOUR_TRAMPOLINE_EMPTY(bool EQPlayerHook::SetNameSpriteTint_Trampoline(void));
 DETOUR_TRAMPOLINE_EMPTY(int EQPlayerHook::SetNameSpriteState_Trampoline(bool Show));
-DETOUR_TRAMPOLINE_EMPTY(VOID EQPlayerHook::dEQPlayer_Trampoline(VOID)); 
-DETOUR_TRAMPOLINE_EMPTY(VOID EQPlayerHook::EQPlayer_Trampoline(DWORD,DWORD,DWORD,DWORD,DWORD,DWORD,DWORD)); 
+DETOUR_TRAMPOLINE_EMPTY(VOID EQPlayerHook::dEQPlayer_Trampoline(VOID));
+DETOUR_TRAMPOLINE_EMPTY(VOID EQPlayerHook::EQPlayer_Trampoline(DWORD,DWORD,DWORD,DWORD,DWORD,DWORD,DWORD));
 
 VOID InitializeMQ2Spawns()
 {

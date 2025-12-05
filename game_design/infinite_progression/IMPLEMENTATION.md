@@ -1,5 +1,7 @@
 # Technical Implementation Guide
 
+> Status note (Dec 2025): Dynamic items now apply JSON curves (Primary/Attribute/Weapon/Mod2) on top of tiered base scaling, and weapon damage uses ratio-based scaling with a base+1 floor, then `WeaponCurves` + slot multipliers. Attack uses `WeaponCurves.Attack`. Numbers shown elsewhere in this doc reflect tier baselines; use the preview tool (`tools/item_scale_preview.py`) to see live values.
+
 ## Architecture Overview
 
 ### Component Structure
@@ -154,6 +156,25 @@ void DynamicItemManager::ApplyLevelScaling(EQ::ItemData* item, int level) {
   ApplyMilestoneBonus(item, level);
 }
 ```
+
+### Attribute Pool Distribution (Auto / Static / None)
+
+To provide flexible and tunable attribute allocation we implemented an attribute pool distribution system in `ScaleItem()` (equip/exp-based) and `ScaleDynamicItem()` (dynamic items):
+
+1. Compute a per-attribute rawScaled value using the tiered scaling formula and the `AttributeCurve` (piecewise linear curve configurable in `item_scaling.json`).
+2. Determine the `totalPool` value:
+   - mode == `auto`: totalPool = sum(rawScaled_i)
+   - mode == `static`: totalPool = `static_budget` (configured)
+   - mode == `none`: fallback to legacy per-attribute scaling
+3. Compute weights using `GetAttributePresenceMultiplier(attrName, present, level)` (configured per-attribute presence and absence multipliers, optional per-attribute curve).
+4. Distribute `totalPool` to attributes proportionally to weights and apply base stat cap and heroic overflow.
+
+This logic is implemented in `common/item_instance.cpp` in both `ScaleItem()` and `ScaleDynamicItem()`. The weights, curves, and modes are configured via `game_design/infinite_progression/item_scaling.json` and parsed by `common/item_scaling_config.{h,cpp}`.
+
+Design notes:
+- We optionally apply `GetAttributePresenceMultiplier` per attribute at compute time so bias can be tuned for different item archetypes (armor vs weapon vs jewelry). Use per-attribute curves to tune for level ranges.
+- The `auto` mode ensures that items that start with many attributes receive more pool than those with fewer stats. Use `static` to apply a consistent budget across different base items for parity.
+
 
 ### Milestone System
 ```cpp

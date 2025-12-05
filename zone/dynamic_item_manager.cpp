@@ -1,4 +1,5 @@
 #include "dynamic_item_manager.h"
+#include "../common/item_scaling_config.h"
 #include "../common/database.h"
 #include "../common/repositories/items_repository.h"
 #include "../common/strings.h"
@@ -154,51 +155,88 @@ void DynamicItemManager::ApplyStatCap(int& base_stat, int& heroic_stat, int raw_
 void DynamicItemManager::ApplyLevelScaling(EQ::ItemData* item, const EQ::ItemData* base_item, int level) {
 	if (!item || !base_item || level <= 0) return;
 
-	// Primary stats with tiered scaling
-	item->AC = CalculateTieredStat(base_item->AC, level, m_config.ac_base_increment, m_config.ac_tier_bonus);
-	item->HP = CalculateTieredStat(base_item->HP, level, m_config.hp_base_increment, m_config.hp_tier_bonus);
-	item->Mana = CalculateTieredStat(base_item->Mana, level, m_config.mana_base_increment, m_config.mana_tier_bonus);
-	item->Endur = CalculateTieredStat(base_item->Endur, level, m_config.hp_base_increment, m_config.hp_tier_bonus);
+	// Primary stats with tiered scaling, then curve multiplier
+	auto primaryMult = [&](const std::string &key) {
+		return ItemScaling::Config::Get().GetMod2Curve(key, level);
+	};
+	double ac_base_factor = 1.0 + (static_cast<double>(base_item->AC) / 200.0); // emphasize base AC
+	item->AC = static_cast<int32>(std::round(
+		CalculateTieredStat(base_item->AC, level, m_config.ac_base_increment, m_config.ac_tier_bonus) *
+		primaryMult("AC") * ac_base_factor));
+	double hp_base_factor = 1.0 + (static_cast<double>(base_item->HP) / 500.0); // emphasize base HP
+	item->HP = static_cast<int32>(std::round(
+		CalculateTieredStat(base_item->HP, level, m_config.hp_base_increment, m_config.hp_tier_bonus) *
+		primaryMult("HP") * hp_base_factor));
+	item->Mana = static_cast<int32>(std::round(
+		CalculateTieredStat(base_item->Mana, level, m_config.mana_base_increment, m_config.mana_tier_bonus) *
+		primaryMult("Mana")));
+	item->Endur = static_cast<int32>(std::round(
+		CalculateTieredStat(base_item->Endur, level, m_config.hp_base_increment, m_config.hp_tier_bonus) *
+		primaryMult("Endur")));
+	// Apply per-slot multipliers (AC, HP, Mana, Endur)
+	double acSlot = ItemScaling::Config::Get().GetSlotMultiplierByMask(item->Slots, "AC");
+	double hpSlot = ItemScaling::Config::Get().GetSlotMultiplierByMask(item->Slots, "HP");
+	double manaSlot = ItemScaling::Config::Get().GetSlotMultiplierByMask(item->Slots, "Mana");
+	double endurSlot = ItemScaling::Config::Get().GetSlotMultiplierByMask(item->Slots, "Endur");
+	if (acSlot != 1.0) item->AC = static_cast<int32>(std::round(item->AC * acSlot));
+	if (hpSlot != 1.0) item->HP = static_cast<int32>(std::round(item->HP * hpSlot));
+	if (manaSlot != 1.0) item->Mana = static_cast<int32>(std::round(item->Mana * manaSlot));
+	if (endurSlot != 1.0) item->Endur = static_cast<int32>(std::round(item->Endur * endurSlot));
 
 	// Attribute stats with 127 cap + heroic overflow
 	// All items gain stats on upgrade, even if base is 0
-	int raw_str = CalculateTieredStat(base_item->AStr, level, m_config.stat_base_increment, m_config.stat_tier_bonus);
+	double attrMult = ItemScaling::Config::Get().GetGlobalAttrCurve(level);
+	double strPref = ItemScaling::Config::Get().GetAttributePresenceMultiplier("AStr", base_item->AStr > 0, level);
+	double strBaseFactor = 1.0 + (static_cast<double>(base_item->AStr) / 60.0);
+	int raw_str = static_cast<int>(std::round(CalculateTieredStat(base_item->AStr, level, m_config.stat_base_increment, m_config.stat_tier_bonus) * attrMult * strPref * strBaseFactor));
 	int base_str = 0, heroic_str = 0;
 	ApplyStatCap(base_str, heroic_str, raw_str);
 	item->AStr = static_cast<int8>(base_str);
 	item->HeroicStr = static_cast<int16>(heroic_str);
 
-	int raw_sta = CalculateTieredStat(base_item->ASta, level, m_config.stat_base_increment, m_config.stat_tier_bonus);
+	double staPref = ItemScaling::Config::Get().GetAttributePresenceMultiplier("ASta", base_item->ASta > 0, level);
+	double staBaseFactor = 1.0 + (static_cast<double>(base_item->ASta) / 60.0);
+	int raw_sta = static_cast<int>(std::round(CalculateTieredStat(base_item->ASta, level, m_config.stat_base_increment, m_config.stat_tier_bonus) * attrMult * staPref * staBaseFactor));
 	int base_sta = 0, heroic_sta = 0;
 	ApplyStatCap(base_sta, heroic_sta, raw_sta);
 	item->ASta = static_cast<int8>(base_sta);
 	item->HeroicSta = static_cast<int16>(heroic_sta);
 
-	int raw_agi = CalculateTieredStat(base_item->AAgi, level, m_config.stat_base_increment, m_config.stat_tier_bonus);
+	double agiPref = ItemScaling::Config::Get().GetAttributePresenceMultiplier("AAgi", base_item->AAgi > 0, level);
+	double agiBaseFactor = 1.0 + (static_cast<double>(base_item->AAgi) / 60.0);
+	int raw_agi = static_cast<int>(std::round(CalculateTieredStat(base_item->AAgi, level, m_config.stat_base_increment, m_config.stat_tier_bonus) * attrMult * agiPref * agiBaseFactor));
 	int base_agi = 0, heroic_agi = 0;
 	ApplyStatCap(base_agi, heroic_agi, raw_agi);
 	item->AAgi = static_cast<int8>(base_agi);
 	item->HeroicAgi = static_cast<int16>(heroic_agi);
 
-	int raw_dex = CalculateTieredStat(base_item->ADex, level, m_config.stat_base_increment, m_config.stat_tier_bonus);
+	double dexPref = ItemScaling::Config::Get().GetAttributePresenceMultiplier("ADex", base_item->ADex > 0, level);
+	double dexBaseFactor = 1.0 + (static_cast<double>(base_item->ADex) / 60.0);
+	int raw_dex = static_cast<int>(std::round(CalculateTieredStat(base_item->ADex, level, m_config.stat_base_increment, m_config.stat_tier_bonus) * attrMult * dexPref * dexBaseFactor));
 	int base_dex = 0, heroic_dex = 0;
 	ApplyStatCap(base_dex, heroic_dex, raw_dex);
 	item->ADex = static_cast<int8>(base_dex);
 	item->HeroicDex = static_cast<int16>(heroic_dex);
 
-	int raw_int = CalculateTieredStat(base_item->AInt, level, m_config.stat_base_increment, m_config.stat_tier_bonus);
+	double intPref = ItemScaling::Config::Get().GetAttributePresenceMultiplier("AInt", base_item->AInt > 0, level);
+	double intBaseFactor = 1.0 + (static_cast<double>(base_item->AInt) / 60.0);
+	int raw_int = static_cast<int>(std::round(CalculateTieredStat(base_item->AInt, level, m_config.stat_base_increment, m_config.stat_tier_bonus) * attrMult * intPref * intBaseFactor));
 	int base_int = 0, heroic_int = 0;
 	ApplyStatCap(base_int, heroic_int, raw_int);
 	item->AInt = static_cast<int8>(base_int);
 	item->HeroicInt = static_cast<int16>(heroic_int);
 
-	int raw_wis = CalculateTieredStat(base_item->AWis, level, m_config.stat_base_increment, m_config.stat_tier_bonus);
+	double wisPref = ItemScaling::Config::Get().GetAttributePresenceMultiplier("AWis", base_item->AWis > 0, level);
+	double wisBaseFactor = 1.0 + (static_cast<double>(base_item->AWis) / 60.0);
+	int raw_wis = static_cast<int>(std::round(CalculateTieredStat(base_item->AWis, level, m_config.stat_base_increment, m_config.stat_tier_bonus) * attrMult * wisPref * wisBaseFactor));
 	int base_wis = 0, heroic_wis = 0;
 	ApplyStatCap(base_wis, heroic_wis, raw_wis);
 	item->AWis = static_cast<int8>(base_wis);
 	item->HeroicWis = static_cast<int16>(heroic_wis);
 
-	int raw_cha = CalculateTieredStat(base_item->ACha, level, m_config.stat_base_increment, m_config.stat_tier_bonus);
+	double chaPref = ItemScaling::Config::Get().GetAttributePresenceMultiplier("ACha", base_item->ACha > 0, level);
+	double chaBaseFactor = 1.0 + (static_cast<double>(base_item->ACha) / 60.0);
+	int raw_cha = static_cast<int>(std::round(CalculateTieredStat(base_item->ACha, level, m_config.stat_base_increment, m_config.stat_tier_bonus) * attrMult * chaPref * chaBaseFactor));
 	int base_cha = 0, heroic_cha = 0;
 	ApplyStatCap(base_cha, heroic_cha, raw_cha);
 	item->ACha = static_cast<int8>(base_cha);
@@ -206,36 +244,135 @@ void DynamicItemManager::ApplyLevelScaling(EQ::ItemData* item, const EQ::ItemDat
 
 	// Weapon damage and Attack (weapons only)
 	if (base_item->Damage > 0) {
-		item->Damage = CalculateTieredStat(base_item->Damage, level, m_config.damage_base_increment, m_config.damage_tier_bonus);
-		item->Attack = CalculateTieredStat(base_item->Attack, level, m_config.attack_base_increment, m_config.attack_tier_bonus);
+		// Ratio-based damage scaling with curve and slot multipliers
+		double delay = std::max(1, static_cast<int>(base_item->Delay));
+		double base_ratio = static_cast<double>(base_item->Damage) / delay;
+		// Softer ratio growth to pair with JSON curve (keeps late game in check)
+		double ratio_mult = 1.0 + (level * 0.10);
+		double curve_mult = ItemScaling::Config::Get().GetWeaponDamageCurve(level);
+		double dmg_val = base_ratio * ratio_mult * curve_mult * delay;
+		int rounded = static_cast<int>(std::round(dmg_val));
+		// Prevent tiny weapons from getting stuck at 1 damage
+		int floor_val = base_item->Damage + 1;
+		if (rounded < floor_val) {
+			rounded = floor_val;
+		}
+		item->Damage = rounded;
+
+		// Attack uses tiered base plus curve
+		int raw_atk = CalculateTieredStat(base_item->Attack, level, m_config.attack_base_increment, m_config.attack_tier_bonus);
+		double atk_curve = ItemScaling::Config::Get().GetWeaponAttackCurve(level);
+		item->Attack = static_cast<int32>(std::round(raw_atk * atk_curve));
+
+		// Apply per-slot dmg/attack multipliers
+		double damageSlot = ItemScaling::Config::Get().GetSlotMultiplierByMask(item->Slots, "Damage");
+		double attackSlot = ItemScaling::Config::Get().GetSlotMultiplierByMask(item->Slots, "Attack");
+		if (damageSlot != 1.0) item->Damage = static_cast<int32>(std::round(item->Damage * damageSlot));
+		if (attackSlot != 1.0) item->Attack = static_cast<int32>(std::round(item->Attack * attackSlot));
+		if (item->Damage < 1) item->Damage = 1;
 	}
 
 	// Resistances with cap
 	if (base_item->FR > 0) {
-		item->FR = std::min(CalculateTieredStat(base_item->FR, level, m_config.stat_base_increment, m_config.stat_tier_bonus), m_config.resist_cap);
+		int raw = CalculateTieredStat(base_item->FR, level, m_config.stat_base_increment, m_config.stat_tier_bonus);
+		raw = static_cast<int>(std::round(raw * ItemScaling::Config::Get().GetMod2Curve("FR", level)));
+		double frSlot = ItemScaling::Config::Get().GetSlotMultiplierByMask(item->Slots, "FR");
+		double resDefault = ItemScaling::Config::Get().GetSlotMultiplierByMask(item->Slots, "Resists");
+		double useMult = (frSlot != 0.0 ? frSlot : resDefault);
+		if (useMult != 1.0) raw = static_cast<int>(std::round(raw * useMult));
+		item->FR = std::min(raw, m_config.resist_cap);
 	}
 	if (base_item->CR > 0) {
-		item->CR = std::min(CalculateTieredStat(base_item->CR, level, m_config.stat_base_increment, m_config.stat_tier_bonus), m_config.resist_cap);
+		int raw = CalculateTieredStat(base_item->CR, level, m_config.stat_base_increment, m_config.stat_tier_bonus);
+		raw = static_cast<int>(std::round(raw * ItemScaling::Config::Get().GetMod2Curve("CR", level)));
+		double crSlot = ItemScaling::Config::Get().GetSlotMultiplierByMask(item->Slots, "CR");
+		double resDefault = ItemScaling::Config::Get().GetSlotMultiplierByMask(item->Slots, "Resists");
+		double useMult = (crSlot != 0.0 ? crSlot : resDefault);
+		if (useMult != 1.0) raw = static_cast<int>(std::round(raw * useMult));
+		item->CR = std::min(raw, m_config.resist_cap);
 	}
 	if (base_item->MR > 0) {
-		item->MR = std::min(CalculateTieredStat(base_item->MR, level, m_config.stat_base_increment, m_config.stat_tier_bonus), m_config.resist_cap);
+		int raw = CalculateTieredStat(base_item->MR, level, m_config.stat_base_increment, m_config.stat_tier_bonus);
+		raw = static_cast<int>(std::round(raw * ItemScaling::Config::Get().GetMod2Curve("MR", level)));
+		double mrSlot = ItemScaling::Config::Get().GetSlotMultiplierByMask(item->Slots, "MR");
+		double resDefault = ItemScaling::Config::Get().GetSlotMultiplierByMask(item->Slots, "Resists");
+		double useMult = (mrSlot != 0.0 ? mrSlot : resDefault);
+		if (useMult != 1.0) raw = static_cast<int>(std::round(raw * useMult));
+		item->MR = std::min(raw, m_config.resist_cap);
 	}
 	if (base_item->PR > 0) {
-		item->PR = std::min(CalculateTieredStat(base_item->PR, level, m_config.stat_base_increment, m_config.stat_tier_bonus), m_config.resist_cap);
+		int raw = CalculateTieredStat(base_item->PR, level, m_config.stat_base_increment, m_config.stat_tier_bonus);
+		raw = static_cast<int>(std::round(raw * ItemScaling::Config::Get().GetMod2Curve("PR", level)));
+		double prSlot = ItemScaling::Config::Get().GetSlotMultiplierByMask(item->Slots, "PR");
+		double resDefault = ItemScaling::Config::Get().GetSlotMultiplierByMask(item->Slots, "Resists");
+		double useMult = (prSlot != 0.0 ? prSlot : resDefault);
+		if (useMult != 1.0) raw = static_cast<int>(std::round(raw * useMult));
+		item->PR = std::min(raw, m_config.resist_cap);
 	}
 	if (base_item->DR > 0) {
-		item->DR = std::min(CalculateTieredStat(base_item->DR, level, m_config.stat_base_increment, m_config.stat_tier_bonus), m_config.resist_cap);
+		int raw = CalculateTieredStat(base_item->DR, level, m_config.stat_base_increment, m_config.stat_tier_bonus);
+		raw = static_cast<int>(std::round(raw * ItemScaling::Config::Get().GetMod2Curve("DR", level)));
+		double drSlot = ItemScaling::Config::Get().GetSlotMultiplierByMask(item->Slots, "DR");
+		double resDefault = ItemScaling::Config::Get().GetSlotMultiplierByMask(item->Slots, "Resists");
+		double useMult = (drSlot != 0.0 ? drSlot : resDefault);
+		if (useMult != 1.0) raw = static_cast<int>(std::round(raw * useMult));
+		item->DR = std::min(raw, m_config.resist_cap);
 	}
 
-	// Combat stats (slow scaling via milestones in ApplyMilestoneBonus)
-	// Shielding, StrikeThrough, StunResist, SpellShield, Avoidance, Accuracy, CombatEffects
+	// Combat/mod2 stats
+	if (base_item->Shielding > 0) {
+		int raw = CalculateTieredStat(base_item->Shielding, level, m_config.combat_base_increment, m_config.combat_tier_bonus);
+		double cm = ItemScaling::Config::Get().GetMod2Curve("Shielding", level);
+		item->Shielding = static_cast<int32>(std::round(raw * cm));
+	}
+	if (base_item->StrikeThrough > 0) {
+		int raw = CalculateTieredStat(base_item->StrikeThrough, level, m_config.combat_base_increment + 2, m_config.combat_tier_bonus + 1);
+		double cm = ItemScaling::Config::Get().GetMod2Curve("StrikeThrough", level);
+		item->StrikeThrough = static_cast<int32>(std::round(raw * cm));
+	}
+	if (base_item->StunResist > 0) {
+		int raw = CalculateTieredStat(base_item->StunResist, level, m_config.combat_base_increment, m_config.combat_tier_bonus);
+		double cm = ItemScaling::Config::Get().GetMod2Curve("StunResist", level);
+		item->StunResist = static_cast<int32>(std::round(raw * cm));
+	}
+	if (base_item->SpellShield > 0) {
+		int raw = CalculateTieredStat(base_item->SpellShield, level, m_config.combat_base_increment, m_config.combat_tier_bonus);
+		double cm = ItemScaling::Config::Get().GetMod2Curve("SpellShield", level);
+		item->SpellShield = static_cast<int32>(std::round(raw * cm));
+	}
+	if (base_item->Avoidance > 0) {
+		int raw = CalculateTieredStat(base_item->Avoidance, level, m_config.combat_base_increment, m_config.combat_tier_bonus);
+		double cm = ItemScaling::Config::Get().GetMod2Curve("Avoidance", level);
+		item->Avoidance = static_cast<int32>(std::round(raw * cm));
+	}
+	if (base_item->Accuracy > 0) {
+		int raw = CalculateTieredStat(base_item->Accuracy, level, m_config.combat_base_increment, m_config.combat_tier_bonus);
+		double cm = ItemScaling::Config::Get().GetMod2Curve("Accuracy", level);
+		item->Accuracy = static_cast<int32>(std::round(raw * cm));
+	}
+	if (base_item->CombatEffects > 0) {
+		int raw = CalculateTieredStat(base_item->CombatEffects, level, m_config.combat_base_increment, m_config.combat_tier_bonus);
+		double cm = ItemScaling::Config::Get().GetMod2Curve("CombatEffects", level);
+		item->CombatEffects = static_cast<int32>(std::round(raw * cm));
+	}
 
 	// Caster stats (aggressive scaling ~1000 at level 100)
 	if (base_item->HealAmt > 0) {
-		item->HealAmt = CalculateTieredStat(base_item->HealAmt, level, m_config.caster_base_increment, m_config.caster_tier_bonus);
+		int raw = CalculateTieredStat(base_item->HealAmt, level, m_config.caster_base_increment, m_config.caster_tier_bonus);
+		double cm = ItemScaling::Config::Get().GetMod2Curve("HealAmt", level);
+		item->HealAmt = static_cast<int32>(std::round(raw * cm));
 	}
 	if (base_item->SpellDmg > 0) {
-		item->SpellDmg = CalculateTieredStat(base_item->SpellDmg, level, m_config.caster_base_increment, m_config.caster_tier_bonus);
+		int raw = CalculateTieredStat(base_item->SpellDmg, level, m_config.caster_base_increment, m_config.caster_tier_bonus);
+		double cm = ItemScaling::Config::Get().GetMod2Curve("SpellDmg", level);
+		item->SpellDmg = static_cast<int32>(std::round(raw * cm));
+	}
+	// Apply per-slot caster multipliers (spell damage / heal)
+	{
+		double spellSlot = ItemScaling::Config::Get().GetSlotMultiplierByMask(item->Slots, "SpellDmg");
+		double healSlot = ItemScaling::Config::Get().GetSlotMultiplierByMask(item->Slots, "HealAmt");
+		if (spellSlot != 1.0 && item->SpellDmg > 0) item->SpellDmg = static_cast<int32>(std::round(item->SpellDmg * spellSlot));
+		if (healSlot != 1.0 && item->HealAmt > 0) item->HealAmt = static_cast<int32>(std::round(item->HealAmt * healSlot));
 	}
 
 	// Damage Shield and Dot Shielding (moderate scaling)
@@ -244,6 +381,11 @@ void DynamicItemManager::ApplyLevelScaling(EQ::ItemData* item, const EQ::ItemDat
 	}
 	if (base_item->DotShielding > 0) {
 		item->DotShielding = CalculateTieredStat(base_item->DotShielding, level, m_config.combat_base_increment + 1, m_config.combat_tier_bonus + 1);
+	}
+	// Apply per-slot dot shielding multiplier
+	if (item->DotShielding > 0) {
+		double dotMult = ItemScaling::Config::Get().GetSlotMultiplierByMask(item->Slots, "DotShielding");
+		if (dotMult != 1.0) item->DotShielding = static_cast<int32>(std::round(item->DotShielding * dotMult));
 	}
 
 	// Regen stats (moderate scaling ~100-200 at level 100)
@@ -434,6 +576,25 @@ EQ::ItemInstance* DynamicItemManager::FuseItems(EQ::ItemInstance* donor, EQ::Ite
 		Log(Logs::General, Logs::Error, "FuseItems: FAILED - Could not create result instance");
 	}
 
+	return result;
+}
+
+// Fuse using a level charge (e.g., charge item stores donor level)
+EQ::ItemInstance* DynamicItemManager::FuseWithCharge(int donorLevel, EQ::ItemInstance* receiver) {
+	if (donorLevel <= 0 || !receiver) {
+		Log(Logs::General, Logs::Error, "FuseWithCharge: FAILED - invalid donorLevel=%d or null receiver", donorLevel);
+		return nullptr;
+	}
+
+	uint32 receiver_base_id = GetBaseItemID(receiver->GetID());
+	Log(Logs::General, Logs::Quests, "FuseWithCharge: START - donorLevel=%d, Receiver: id=%u (base=%u)", donorLevel, receiver->GetID(), receiver_base_id);
+
+	auto* result = CreateDynamicInstance(receiver_base_id, donorLevel);
+	if (result) {
+		Log(Logs::General, Logs::Quests, "FuseWithCharge: SUCCESS - Created %s with %d levels from charge", result->GetItem()->Name, donorLevel);
+	} else {
+		Log(Logs::General, Logs::Error, "FuseWithCharge: FAILED - Could not create result instance");
+	}
 	return result;
 }
 

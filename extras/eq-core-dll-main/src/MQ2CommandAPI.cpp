@@ -87,14 +87,14 @@ VOID HideDoCommand(PSPAWNINFO pChar, PCHAR szLine, BOOL delayed)
             }
             //          DebugSpew("DoCommand - handing {} off to FailIf");
         } else {
-            // handle this: 
+            // handle this:
             //            /if () {
             //            } else /echo stuff
             GetArg(szCmd,szLine,2);
             if (!stricmp(szCmd,"else")) {
                 // check here to fail this:
                 //            /if () {
-                //            } else 
+                //            } else
                 //                /echo stuff
                 GetArg(szCmd,szLine,3);
                 if (!stricmp(szCmd,"")) {
@@ -132,7 +132,7 @@ VOID HideDoCommand(PSPAWNINFO pChar, PCHAR szLine, BOOL delayed)
         {
             if (pCommand->Parse && bAllowCommandParse)
             {
-                pCommand->Function(pChar,ParseMacroParameter(pChar,szParam)); 
+                pCommand->Function(pChar,ParseMacroParameter(pChar,szParam));
             }
             else
                 pCommand->Function(pChar,szParam);
@@ -151,31 +151,31 @@ VOID HideDoCommand(PSPAWNINFO pChar, PCHAR szLine, BOOL delayed)
 }
 
 
-class CCommandHook 
-{ 
-public: 
-    VOID Detour(PSPAWNINFO pChar, PCHAR szFullLine) 
-    { 
+class CCommandHook
+{
+public:
+    VOID Detour(PSPAWNINFO pChar, PCHAR szFullLine)
+    {
         DebugSpew("CCommandHook::Detour(%s)",szFullLine);
-        CHAR szFullCommand[MAX_STRING] = {0}; 
-        CHAR szCommand[MAX_STRING] = {0}; 
-        CHAR szArgs[MAX_STRING] = {0}; 
+        CHAR szFullCommand[MAX_STRING] = {0};
+        CHAR szCommand[MAX_STRING] = {0};
+        CHAR szArgs[MAX_STRING] = {0};
         CHAR szOrig[MAX_STRING] = {0};
         CHAR szSub[MAX_STRING] = {0};
         string szSubFullCommand = "";
         unsigned int k=0;
         bool OneCharacterSub = false;
-        PALIAS pLoop = pAliases; 
+        PALIAS pLoop = pAliases;
         PSUB pSubLoop = pSubs;
 
-        if (szFullLine[0]!=0) { 
-            strcpy(szFullCommand,szFullLine); 
-            GetArg(szCommand,szFullCommand,1); 
+        if (szFullLine[0]!=0) {
+            strcpy(szFullCommand,szFullLine);
+            GetArg(szCommand,szFullCommand,1);
 
             szSubFullCommand = szFullCommand;
-            for (unsigned int i=0; i < sizeof(szFullCommand); i++ ) 
+            for (unsigned int i=0; i < sizeof(szFullCommand); i++ )
             {
-                if (szFullCommand[i] == '%') 
+                if (szFullCommand[i] == '%')
                 {
                     if (szFullCommand[i+2] == ' ' || szFullCommand[i+2] == '\0' ||
                         !isalnum(szFullCommand[i+2]) ) {
@@ -186,7 +186,7 @@ public:
                                 szFullCommand[i+1] == 's' || szFullCommand[i+1] == 'S' ||
                                 szFullCommand[i+1] == 't' || szFullCommand[i+1] == 'T' )
                                 continue;
-                            else { 
+                            else {
                                 szOrig[0] = szFullCommand[i+1];
                                 szOrig[1] = '\0';
                                 k = 1;
@@ -197,7 +197,7 @@ public:
                     if (!OneCharacterSub) {
                         for (unsigned int j=i+1; j < sizeof(szFullCommand); j++ )
                         {
-                            if (szFullCommand[j] == ' ' || szFullCommand[j] == '\0' ) 
+                            if (szFullCommand[j] == ' ' || szFullCommand[j] == '\0' )
                                 break;
                             else if (!isalnum(szFullCommand[j]))
                                 break;
@@ -207,7 +207,7 @@ public:
                     }
                     while (pSubLoop)
                     {
-                        if (!stricmp(szOrig, pSubLoop->szOrig)) 
+                        if (!stricmp(szOrig, pSubLoop->szOrig))
                         {
                             sprintf( szSub, "%s", pSubLoop->szSub );
                             break;
@@ -216,7 +216,7 @@ public:
                     }
                     if (szSub[0] != '\0' ) {
                         szSubFullCommand.replace(i,k+1,szSub);
-                        sprintf( szFullCommand, "%s",szSubFullCommand.c_str() ); 
+                        sprintf( szFullCommand, "%s",szSubFullCommand.c_str() );
                     }
                     szOrig[0] = '\0';
                     szSub[0] = '\0';
@@ -227,16 +227,16 @@ public:
             }
             sprintf(szFullCommand, "%s", szSubFullCommand.c_str() );
 
-            while (pLoop) { 
-                if (!stricmp(szCommand,pLoop->szName)) { 
-                    sprintf(szCommand,"%s%s",pLoop->szCommand,szFullCommand+strlen(pLoop->szName)); 
-                    strncpy(szFullCommand,szCommand,MAX_STRING); 
+            while (pLoop) {
+                if (!stricmp(szCommand,pLoop->szName)) {
+                    sprintf(szCommand,"%s%s",pLoop->szCommand,szFullCommand+strlen(pLoop->szName));
+                    strncpy(szFullCommand,szCommand,MAX_STRING);
                     break;
-                } 
-                pLoop = pLoop->pNext; 
-            } 
-            GetArg(szCommand,szFullCommand,1); 
-            strcpy(szArgs, GetNextArg(szFullCommand)); 
+                }
+                pLoop = pLoop->pNext;
+            }
+            GetArg(szCommand,szFullCommand,1);
+            strcpy(szArgs, GetNextArg(szFullCommand));
 
             PMQCOMMAND pCommand=pCommands;
             while(pCommand)
@@ -254,12 +254,12 @@ public:
                 if (Pos==0)
                 {
                     if (pCommand->Parse && bAllowCommandParse)
-                        ParseMacroParameter(pChar,szArgs); 
+                        ParseMacroParameter(pChar,szArgs);
                     if (pCommand->EQ)
                     {
-                        strcat(szCommand," "); 
-                        strcat(szCommand,szArgs); 
-                        Trampoline(pChar,szCommand); 
+                        strcat(szCommand," ");
+                        strcat(szCommand,szArgs);
+                        Trampoline(pChar,szCommand);
                     }
                     else
                     {
@@ -271,15 +271,15 @@ public:
                 pCommand=pCommand->pNext;
             }
         }
-        Trampoline(pChar,szFullLine); 
+        Trampoline(pChar,szFullLine);
         strcpy(szLastCommand,szFullCommand);
-    } 
+    }
 
-    VOID Trampoline(PSPAWNINFO pChar, PCHAR szFullLine); 
+    VOID Trampoline(PSPAWNINFO pChar, PCHAR szFullLine);
 
-}; 
+};
 
-DETOUR_TRAMPOLINE_EMPTY(VOID CCommandHook::Trampoline(PSPAWNINFO pChar, PCHAR szFullLine)); 
+DETOUR_TRAMPOLINE_EMPTY(VOID CCommandHook::Trampoline(PSPAWNINFO pChar, PCHAR szFullLine));
 
 
 void AddCommand(PCHAR Command, fEQCommand Function, BOOL EQ, BOOL Parse, BOOL InGame)
@@ -528,7 +528,7 @@ void InitializeMQ2Commands()
             cmdCast = (fEQCommand)pCmdListOrig[i].fAddress;
         }
         AddCommand(pCmdListOrig[i].szName,pCmdListOrig[i].fAddress,TRUE,1,1);
-    }    
+    }
 
 
 
@@ -544,6 +544,11 @@ void InitializeMQ2Commands()
         RemoveCommand(NewCommands[i].szCommand);
         AddCommand(NewCommands[i].szCommand,NewCommands[i].pFunc,0,NewCommands[i].Parse,NewCommands[i].InGame);
     }
+
+    // Custom HUD toggle command
+    AddCommand("/customhud", CustomHUDCmd, 0, 1, 1);
+    // HUD mode command (normal | underui | always)
+    AddCommand("/hud", HudCmd, 0, 1, 1);
 
     /* ALIASES FOR OUT OF ORDER SHORTHAND COMMANDS */
     AddAlias("/d","/duel");

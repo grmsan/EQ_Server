@@ -1,5 +1,7 @@
 # Item Scaling Formulas
 
+> Update (Dec 2025): Dynamic items now multiply the tiered baselines by JSON curves (Primary/Attribute/Weapon/Mod2) and use ratio-based weapon damage with a base+1 floor before applying `WeaponCurves` + slot multipliers. Attack also uses `WeaponCurves.Attack`. The tier math below describes the baseline increments; see the preview tool for live numbers with curves applied.
+
 ## Base Formula Structure
 
 Scaling uses **tiered linear progression**:
@@ -330,6 +332,112 @@ Example progression:
   Level 100: +127 Fire, +127 Magic, +127 Cold (all capped)
 
 Note: Resists cap at 127 in the client
+
+### Item scaling JSON configuration
+Configured curves for attribute-derived stats (SpellDmg/Heal) can be controlled via `game_design/infinite_progression/item_scaling.json`.
+This JSON allows selecting a simple divisor approach (e.g., 1 per 10 attribute points) or a piecewise linear curve mapping a level to a per-10-attribute derived value.
+By default the system preserves current behavior (divisor=10) but supports custom curves for early rapid growth followed by tapering.
+
+**JSON keys of interest:**
+- `SpellDmgFromInt`: Controls how SpellDamage is computed from item INT; fields: `enabled`, `mode` (`divisor` or `curve`), `divisor` (int), and `curve` (points array).
+- `HealFromWis`: Similar configuration for HealAmt derived from WIS.
+- `AttributeCurve`: Global per-level multiplier applied to raw attribute growth.
+- `AttributePreferences`: `presence_mult` and `absence_mult` for each attribute; optional per-attribute `curve`.
+- `AttributePool`: `mode` (`auto`, `static`, `none`) and `static_budget`.
+ - `SlotMultipliers`: object mapping slot category names to multipliers (e.g., `Chest:1.5`, `Wrist:0.75`). These multipliers are applied to the attribute pool for items that can be equipped in the given slot, increasing or decreasing total attribute budget at generation time.
+- `WeaponCurves`, `Mod2Curves`, `Mod2CurvesExtras`, and `PrimaryCurves` for weapon damage, attack, mod2 and primary stat per-level modifiers.
+
+Example: If `SpellDmgFromInt.mode` is set to `divisor` with `divisor = 8`, then each 8 INT generates `+1 SpellDmg`.
+If instead `mode = curve` with points `[[1,0.8], [100, 8.0]]`, EvaluateCurve(level) multiplies per-10 attribute points by that value.
+
+### Attribute Preferences and Class Multipliers
+The JSON supports `AttributePreferences` which defines two multipliers per attribute: `presence_mult` and `absence_mult`.
+When an item starts with a base value for the attribute, `presence_mult` is applied to the scaled value (so base-focused items grow stronger in their primary stats).
+If the base attribute is absent, `absence_mult` is applied to the scaled value to keep a modest amount of growth on filler stats.
+
+`ClassMultipliers` supports optional per-class adjustments. For example, a class-specific multiplier can increase `SpellDmg` for `Wizard` while leaving it lower for melee classes.
+These multipliers are applied when the Mob equips the item (not in the base item data) so the item remains a single canonical definition for all players.
+
+Examples can be configured in `item_scaling.json` with section `AttributePreferences` and `AttributeCurve`.
+Note: Equip-time class multipliers have been removed; class-specific power should be implemented via AAs if desired. The `ClassMultipliers` section is deprecated.
+### Pool Distribution vs Static Budget (Examples)
+Pool distribution spreads attribute growth across attributes based on base stat weights (presence vs absence multipliers) and a total budget derived from scaled attribute gains (Option A - Auto) or a static budget provided by the administrator (Option B - Static).
+
+Example input items at Level 100
+
+- Helm1: AC=2 (no other stats)
+- Helm2: AC=90, HP=300, STR=30, STA=30, AGI=30, DEX=30, INT=30, WIS=30, CHA=30, resists=20 each, Shielding=5, StrikeThrough=20
+
+We used a small preview script `tools/item_scale_preview.py` to simulate both methods with default presence/absence multipliers.
+
+Results (script output):
+
+Helm1 [base AC=2]
+- Option A (Auto):    minimal attribute budget — AC grows, but attributes remain unchanged
+- Option B (Static=100): attributes get distributed from static pool: DEX/STR/STA/AGI/INT/WIS/CHA ~ 7 each; AC=37
+
+Helm2 [base AC=90, HP=300, STR=30...]
+- Option A (Auto): larger attribute budget computed from scaled values: attributes distributed proportionally to presence: INT/WIS favored due to higher multipliers — final values roughly STR=49, STA=47, AGI=48, DEX=50, INT=WIS=~55, CHA=46, AC=138, HP=461, Shielding=7, StrikeThrough=30
+- Option B (Static=100): static budget allocation produces smaller attribute increases across the board, lower AC/HP increases compared to auto approach
+
+The script `tools/item_scale_preview.py` reproduces these values and demonstrates how weights shift items toward attributes they already contain.
+
+### JSON Configuration: AttributePool
+Add an `AttributePool` object to `item_scaling.json` to switch modes and set a static budget:
+```json
+"AttributePool": {
+  "mode": "auto", // auto | static | none
+  "static_budget": 10
+}
+```
+
+- `mode`:
+  - `auto`: total pool is the sum of per-attribute scaled increases (default). Weights derived from AttributePreferences determine distribution.
+  - `static`: total pool is the `static_budget` integer value; this budget is distributed using AttributePreferences as weights.
+  - `none`: legacy behavior; each attribute is multiplied by presence/absence multipliers.
+### Design Considerations & Pacing Guidance
+
+This system contains many moving parts. The following design tips help make tuning consistent and give players a satisfying growth rate:
+
+- **Control when stats hit cap:** Because base formulas and `AttributeCurve` multiply aggressively, attributes can reach the client cap of 127 quickly. To avoid capping too early, lower the `AttributeCurve` early (levels 1-40) and let it grow later. Example: at level 40 keep curve near 2.0, and at level 100 near 10.0 (default sample). You can also use per-attribute curves to keep some stats lower or higher.
+- **Set a pacing target:** Define expected average dynamic item level by player level for each content tier (zone). e.g. Recommended target: average dynamic item level of ~60 by player level 40 for mid-game; this can be achieved by tuning `AttributeCurve` and `WeaponCurves` or using `static` budget set to `floor(player_level * 1.5)` in drop logic.
+  **How to implement the target:**
+  1. Adjust `AttributeCurve` such that early-level values are lower and ramp up later.
+  2. Alternatively use `AttributePool.mode=static` and set `static_budget` dynamically in your drop logic or zone spawn script (for instance `static_budget = floor(player_level * 1.5)` or `= level * 2`) to meet a desired per-level increase.
+  3. Finally, tune the `WeaponCurves` and `PrimaryCurves` to adjust weapon and core stat growth separately (this helps keep weapons from scaling too fast compared with primary attribute growth).
+- **Use `static` budgets to normalize gear:** If items with large base values unintentionally generate large `auto` pools (making them dominate progression), use a static budget to provide parity between item types (e.g., jewelry vs armor).
+- **Bias growth with `AttributePreferences`:** Use presence vs absence multipliers to keep items aimed toward their intended role; ARMs and weapons should favor relevant stats and avoid turning a sword into a spellcaster weapon via raw attribute allocation.
+- **Derived caster stat tuning:** Choose `divisor` or `curve` modes for `SpellDmgFromInt` / `HealFromWis` to achieve consistent caster power progression and avoid rapid inflation in spell damage for mixed-stat items.
+- **Avoid equip-time class multipliers:** They were removed. If class flavoring is desired, implement AAs or per-class bonuses applied in player-specific code rather than changing item canonical base definitions.
+
+These guardrails help keep player growth balanced while still allowing players to experience 'power spikes' through well-designed content (e.g., dragon helm fusion).
+
+### Example default tuning (Quick start)
+Below are starting values to use as a baseline while you tune content and observe telemetry:
+
+- `AttributePool.mode`: `auto` — begin with auto so items with more base stats have larger budgets.
+- `AttributePool.static_budget`: `10` — only used if you switch to `static` mode.
+- `AttributeCurve` sample: `[[1,1.0],[20,1.2],[40,2.0],[80,6.0],[100,10.0]]` — gentle early growth, faster later.
+- `WeaponCurves.Damage`: `[[1,1.0],[50,4.0],[100,8.0]]` — use weapon curves to adjust damage vs attributes.
+- `SpellDmgFromInt.mode`: `divisor` with `divisor=10` for simple parity, or `mode=curve` for more control.
+- `AttributePreferences` default `presence_mult=1.25` and `absence_mult=0.5` — encourages growth in existing attributes and lesser growth on filler stats.
+
+Use these sample values as a baseline and test with the `#tune itemscale preview` command and the Python preview tool. Iterate on `AttributeCurve` and `WeaponCurves` to reach a pacing target you like (e.g., average item level ≈ 60 by player level 40).
+
+- `static_budget`: integer budget to allocate across primary attributes when `mode` is `static`.
+
+### Gaps & Proposed Enhancements
+The following items are proposed changes or gaps to address during tuning and future development:
+
+- **Zone-based drop scaling & pacing telemetry**: Establish configuration in zone spawn scripts so average item level tracks player progression reliably (e.g., ensure mid-tier zones reward item levels appropriate to player level). Add analytics logging (fusion_log, level progression metrics) to measure actual player averages and tune curves accordingly.
+- **Per-slot budgets and caps**: Consider `static_budget` per-slot (weapons vs armor vs rings) to better balance pocket items vs main-hand weapons.
+- **Normalization for 'auto' budgets**: Provide clamping to prevent an item with high base stats from producing runaway `auto` pools. A `max_pool_multiplier` or `slot-based clamping` could keep it fair.
+- **SpellDmg/Heal parity**: Ensure derived SpellDmg/Heal curves don't allow mixed-stat melee items to overshadow hybrid or pure caster designs; per-class adjustments via AAs or per-class curves may be better than introducing class multipliers.
+- **Default pacing benchmark**: Add recommended default curves in the sample JSON and record this in analytics until validated with player testing.
+
+
+
+
 ```
 
 ## ⏳ TODO: Focus Effects (Milestones Defined)

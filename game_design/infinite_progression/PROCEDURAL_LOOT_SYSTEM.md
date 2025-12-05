@@ -1,5 +1,7 @@
 # Procedural Loot & Item Upgrade System
 
+> Archived note: This document captures an experimental drop/upgrade idea and is not part of the current live implementation. The active progression system is the dynamic item scaling/fusion flow described in the main docs.
+
 ## Overview
 This system allows for the dynamic creation of upgraded items based on existing items in the game. Currently, it is configured so that when a player kills any NPC, there is a 100% chance to receive a clone of their current chest armor with upgraded stats (+5 STR, +50 HP).
 

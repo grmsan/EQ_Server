@@ -47,7 +47,7 @@ GNU General Public License for more details.
 #include <chrono>
 using namespace std;
 
-#define PLUGIN_API 
+#define PLUGIN_API
 
 #if !defined(ISXEQ) && !defined(ISXEQ_LEGACY)
 // MQ2
@@ -289,10 +289,11 @@ EQLIB_API VOID PluginsCleanUI();
 EQLIB_API VOID PluginsReloadUI();
 EQLIB_API VOID PluginsSetGameState(DWORD GameState);
 EQLIB_API VOID PluginsDrawHUD();
+EQLIB_API VOID DrawCustomHUD();
 EQLIB_API VOID PluginsAddGroundItem(PGROUNDITEM pNewGroundItem);
 EQLIB_API VOID PluginsRemoveGroundItem(PGROUNDITEM pGroundItem);
-EQLIB_API VOID PluginsBeginZone(VOID); 
-EQLIB_API VOID PluginsEndZone(VOID); 
+EQLIB_API VOID PluginsBeginZone(VOID);
+EQLIB_API VOID PluginsEndZone(VOID);
 
 /* DIRECT INPUT */
 #ifndef ISXEQ
@@ -318,6 +319,7 @@ LEGACY_API VOID AddAlias(PCHAR ShortCommand, PCHAR LongCommand);
 LEGACY_API BOOL RemoveAlias(PCHAR ShortCommand);
 LEGACY_API VOID AddSubstitute(PCHAR Original, PCHAR Substitution);
 LEGACY_API BOOL RemoveSubstitute(PCHAR Original);
+EQLIB_API VOID CustomHUDCmd(PSPAWNINFO pChar, PCHAR szLine);
 LEGACY_API BOOL RemoveCommand(PCHAR Command);
 LEGACY_API VOID DoTimedCommands();
 LEGACY_API VOID TimedCommand(PCHAR Command, DWORD msDelay);
@@ -394,8 +396,8 @@ EQLIB_API PCHAR GetEQPath(PCHAR szBuffer);
 LEGACY_API VOID HideDoCommand(PSPAWNINFO pChar, PCHAR szLine, BOOL delayed);
 #define EzCommand(commandtoexecute) DoCommand((PSPAWNINFO)pLocalPlayer,commandtoexecute)
 
-EQLIB_API VOID AppendCXStr(PCXSTR *cxstr, PCHAR text); 
-EQLIB_API VOID SetCXStr(PCXSTR *cxstr, PCHAR text); 
+EQLIB_API VOID AppendCXStr(PCXSTR *cxstr, PCHAR text);
+EQLIB_API VOID SetCXStr(PCXSTR *cxstr, PCHAR text);
 EQLIB_API DWORD GetCXStr(PCXSTR pCXStr, PCHAR szBuffer, DWORD maxlen=MAX_STRING);
 EQLIB_API DWORD MQToSTML(PCHAR in, PCHAR out, DWORD maxlen=MAX_STRING, DWORD ColorOverride=0xFFFFFF);
 EQLIB_API VOID StripMQChat(PCHAR in, PCHAR out);
@@ -474,13 +476,13 @@ EQLIB_API bool BuffStackTest(PSPELL aSpell, PSPELL bSpell);
 EQLIB_API DWORD GetItemTimer(PCONTENTS pItem);
 EQLIB_API PCONTENTS GetItemContentsBySlotID(DWORD dwSlotID);
 EQLIB_API PCONTENTS GetItemContentsByName(CHAR *ItemName);
-EQLIB_API bool LoH_HT_Ready(); 
+EQLIB_API bool LoH_HT_Ready();
 
 /* MQ2DATAVARS */
 #ifndef ISXEQ
 LEGACY_API PDATAVAR FindMQ2DataVariable(PCHAR Name);
 LEGACY_API BOOL AddMQ2DataVariable(PCHAR Name, PCHAR Index, MQ2Type *pType, PDATAVAR *ppHead, PCHAR Default);
-LEGACY_API BOOL AddMQ2DataVariableFromData(PCHAR Name, PCHAR Index, MQ2Type *pType, PDATAVAR *ppHead, MQ2TYPEVAR Default); 
+LEGACY_API BOOL AddMQ2DataVariableFromData(PCHAR Name, PCHAR Index, MQ2Type *pType, PDATAVAR *ppHead, MQ2TYPEVAR Default);
 LEGACY_API PDATAVAR *FindVariableScope(PCHAR Name);
 LEGACY_API BOOL DeleteMQ2DataVariable(PCHAR Name);
 LEGACY_API VOID ClearMQ2DataVariables(PDATAVAR *ppHead);
@@ -628,6 +630,6 @@ LEGACY_API BOOL Calculate(PCHAR szFormula, DOUBLE& Dest);
 #define MQ2AUTH(z) EQLIB_API VOID z(DWORD x);
 #endif
 
-EQLIB_API VOID memchecks_tramp(PCHAR,DWORD,PVOID,DWORD,BOOL); 
+EQLIB_API VOID memchecks_tramp(PCHAR,DWORD,PVOID,DWORD,BOOL);
 EQLIB_API VOID memchecks(PCHAR,DWORD,PVOID,DWORD,BOOL);
 

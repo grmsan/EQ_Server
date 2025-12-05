@@ -27,6 +27,7 @@
 #include "mob.h"
 
 #include "bot.h"
+#include "../../common/item_scaling_config.h"
 
 #include "quest_parser_collection.h"
 
@@ -304,6 +305,7 @@ void Mob::AddItemBonuses(const EQ::ItemInstance* inst, StatBonuses* b, bool is_a
 	b->Endurance += CalcItemBonus(item->Endur);
 	b->AC += CalcItemBonus(item->AC);
 
+	// Attributes apply directly from scaled item value (no class multipliers)
 	b->STR += CalcItemBonus(item->AStr + item->HeroicStr);
 	b->STA += CalcItemBonus(item->ASta + item->HeroicSta);
 	b->DEX += CalcItemBonus(item->ADex + item->HeroicDex);

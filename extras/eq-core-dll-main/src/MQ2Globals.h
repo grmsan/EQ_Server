@@ -34,7 +34,7 @@ EQLIB_API DWORD bmParseMacroParameter;
 EQLIB_API DWORD bmUpdateSpawnSort;
 EQLIB_API DWORD bmUpdateSpawnCaptions;
 EQLIB_API DWORD bmCalculate;
-EQLIB_API DWORD bmBeginZone; 
+EQLIB_API DWORD bmBeginZone;
 EQLIB_API DWORD bmEndZone;
 
 /* OTHER */
@@ -71,7 +71,7 @@ EQLIB_VAR DWORD gpHook;
 #ifndef ISXEQ
 LEGACY_VAR PMACROBLOCK gMacroBlock;
 LEGACY_VAR PMACROSTACK gMacroStack;
-LEGACY_VAR map<string,PMACROBLOCK> gMacroSubLookupMap; 
+LEGACY_VAR map<string,PMACROBLOCK> gMacroSubLookupMap;
 LEGACY_VAR PEVENTQUEUE gEventQueue;
 LEGACY_VAR PMACROBLOCK gEventFunc[NUM_EVENTS];
 #endif
@@ -100,6 +100,7 @@ EQLIB_VAR CHAR gszSpawnPetName[MAX_STRING];
 EQLIB_VAR CHAR gszSpawnCorpseName[MAX_STRING];
 
 EQLIB_VAR DWORD DrawHUDParams[4];
+EQLIB_VAR BOOL gCustomHUD; // Toggle for built-in custom HUD drawing
 
 EQLIB_VAR DWORD gEventChat;
 EQLIB_VAR DWORD gRunning;
@@ -304,7 +305,7 @@ EQLIB_VAR fEQGetMelee    get_melee_range;
 EQLIB_VAR PCHAR szItemName[];
 EQLIB_VAR PCHAR szItemName4xx[];
 EQLIB_VAR ACTORDEFENTRY ActorDefList[];
-//EQLIB_VAR PCHAR szTheme[]; 
+//EQLIB_VAR PCHAR szTheme[];
 EQLIB_VAR PCHAR szDmgBonusType[];
 EQLIB_VAR PCHAR szBodyType[];
 EQLIB_VAR PCHAR szAugRestrictions[];
@@ -452,7 +453,7 @@ EQLIB_VAR MERCENARYINFO **ppMercInfo;
 EQLIB_VAR AGGROINFO **ppAggroInfo;
 #define pAggroInfo (*ppAggroInfo)
 
-/* WINDOW INSTANCES */ 
+/* WINDOW INSTANCES */
 EQLIB_VAR CContextMenuManager **ppContextMenuManager;
 EQLIB_VAR CCursorAttachment **ppCursorAttachment;
 EQLIB_VAR CSocialEditWnd **ppSocialEditWnd;

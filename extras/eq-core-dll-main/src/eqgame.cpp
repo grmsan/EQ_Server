@@ -15,6 +15,7 @@
 #include <tlhelp32.h>
 #include <list>
 #include <Psapi.h>
+#include <cstdint>
 #include <vector>
 #include <set>
 #include <dinput.h>
@@ -622,7 +623,7 @@ unsigned char __fastcall HandleWorldMessage_Detour(DWORD *con, DWORD edx, unsign
 
                             char key_buf[33] = {0};
                             memcpy(key_buf, buf + pair_offset, 32);
-                            int32 value = *(int32*)(buf + pair_offset + 32);
+							int32_t value = *(int32_t*)(buf + pair_offset + 32);
 
                             if (strcmp(key_buf, "dynamic_level") == 0) {
                                 dynamic_level = value;

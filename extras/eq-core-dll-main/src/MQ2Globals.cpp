@@ -219,7 +219,7 @@ bool InitOffsets()
     pRaid = (PEQRAID)instCRaid;
     ppDZMember = (DZMEMBER**)pinstDZMember;
     ppDZTimerInfo = (DZTIMERINFO**)pinstDZTimerInfo;
-    ppTaskMember = (TASKMEMBER**)pinstTaskMember; 
+    ppTaskMember = (TASKMEMBER**)pinstTaskMember;
     pDynamicZone = (DYNAMICZONE*)instDynamicZone;
     ppMercInfo = (MERCENARYINFO**)pinstMercenaryData;
     ppAggroInfo = (AGGROINFO **)pinstAggroInfo;
@@ -264,7 +264,7 @@ DWORD bmParseMacroParameter=0;
 DWORD bmUpdateSpawnSort=0;
 DWORD bmUpdateSpawnCaptions=0;
 DWORD bmCalculate=0;
-DWORD bmBeginZone=0; 
+DWORD bmBeginZone=0;
 DWORD bmEndZone=0;
 
 #ifndef ISXEQ
@@ -292,7 +292,7 @@ DWORD gpHook = NULL;
 #ifndef ISXEQ
 PMACROBLOCK gMacroBlock = NULL;
 PMACROSTACK gMacroStack = NULL;
-map<string,PMACROBLOCK> gMacroSubLookupMap; 
+map<string,PMACROBLOCK> gMacroSubLookupMap;
 PEVENTQUEUE gEventQueue = NULL;
 PMACROBLOCK gEventFunc[NUM_EVENTS] = {NULL};
 #endif
@@ -321,13 +321,14 @@ CHAR gszSpawnPlayerName[7][MAX_STRING]={
 "${If[${NamingSpawn.Mark},\"${NamingSpawn.Mark} - \",]}${If[${NamingSpawn.Trader},\"Trader \",]}${If[${NamingSpawn.Invis},(${NamingSpawn.DisplayName}),${NamingSpawn.DisplayName}]}${If[${NamingSpawn.Surname.Length},\" ${NamingSpawn.Surname}\",]}${If[${NamingSpawn.AFK},\" AFK\",]}${If[${NamingSpawn.Linkdead},\" LD\",]}${If[${NamingSpawn.LFG},\" LFG\",]}${If[${NamingSpawn.GroupLeader},\" LDR\",]}${If[${NamingSpawn.Guild.Length},\n<${If[${NamingSpawn.GuildStatus.NotEqual[member]},\"${NamingSpawn.GuildStatus} of \",]}${NamingSpawn.Guild}>,]}",//3
 "${If[${NamingSpawn.Mark},\"${NamingSpawn.Mark} - \",]}${If[${NamingSpawn.Trader},\"Trader \",]}${If[${NamingSpawn.AARank},\"${NamingSpawn.AATitle} \",]}${If[${NamingSpawn.Invis},(${NamingSpawn.DisplayName}),${NamingSpawn.DisplayName}]}${If[${NamingSpawn.Surname.Length},\" ${NamingSpawn.Surname}\",]}${If[${NamingSpawn.Suffix.Length},\" ${NamingSpawn.Suffix}\",]}${If[${NamingSpawn.AFK},\" AFK\",]}${If[${NamingSpawn.Linkdead},\" LD\",]}${If[${NamingSpawn.LFG},\" LFG\",]}${If[${NamingSpawn.GroupLeader},\" LDR\",]}${If[${NamingSpawn.Guild.Length},\n<${If[${NamingSpawn.GuildStatus.NotEqual[member]},\"${NamingSpawn.GuildStatus} of \",]}${NamingSpawn.Guild}>,]}",//4
 "${If[${NamingSpawn.Mark},\"${NamingSpawn.Mark} - \",]}${If[${NamingSpawn.Trader},\"Trader \",]}${If[${NamingSpawn.AARank},\"${NamingSpawn.AATitle} \",]}${If[${NamingSpawn.Invis},(${NamingSpawn.DisplayName}),${NamingSpawn.DisplayName}]}${If[${NamingSpawn.Suffix.Length},\" ${NamingSpawn.Suffix}\",]}${If[${NamingSpawn.AFK},\" AFK\",]}${If[${NamingSpawn.Linkdead},\" LD\",]}${If[${NamingSpawn.LFG},\" LFG\",]}${If[${NamingSpawn.GroupLeader},\" LDR\",]}",//5
-"${If[${NamingSpawn.Mark},\"${NamingSpawn.Mark} - \",]}${If[${NamingSpawn.Trader},\"Trader \",]}${If[${NamingSpawn.AARank},\"${NamingSpawn.AATitle} \",]}${If[${NamingSpawn.Invis},(${NamingSpawn.DisplayName}),${NamingSpawn.DisplayName}]}${If[${NamingSpawn.Surname.Length},\" ${NamingSpawn.Surname}\",]}${If[${NamingSpawn.Suffix.Length},\" ${NamingSpawn.Suffix}\",]}${If[${NamingSpawn.AFK},\" AFK\",]}${If[${NamingSpawn.Linkdead},\" LD\",]}${If[${NamingSpawn.LFG},\" LFG\",]}${If[${NamingSpawn.GroupLeader},\" LDR\",]}",//6 
+"${If[${NamingSpawn.Mark},\"${NamingSpawn.Mark} - \",]}${If[${NamingSpawn.Trader},\"Trader \",]}${If[${NamingSpawn.AARank},\"${NamingSpawn.AATitle} \",]}${If[${NamingSpawn.Invis},(${NamingSpawn.DisplayName}),${NamingSpawn.DisplayName}]}${If[${NamingSpawn.Surname.Length},\" ${NamingSpawn.Surname}\",]}${If[${NamingSpawn.Suffix.Length},\" ${NamingSpawn.Suffix}\",]}${If[${NamingSpawn.AFK},\" AFK\",]}${If[${NamingSpawn.Linkdead},\" LD\",]}${If[${NamingSpawn.LFG},\" LFG\",]}${If[${NamingSpawn.GroupLeader},\" LDR\",]}",//6
 };
 CHAR gszSpawnNPCName[MAX_STRING]="${If[${NamingSpawn.Mark},\"${NamingSpawn.Mark} - \",]}${If[${NamingSpawn.Assist},\">> \",]}${NamingSpawn.DisplayName}${If[${NamingSpawn.Assist},\" - ${NamingSpawn.PctHPs}%<<\",]}${If[${NamingSpawn.Surname.Length},\n(${NamingSpawn.Surname}),]}";
 CHAR gszSpawnPetName[MAX_STRING]="${If[${NamingSpawn.Mark},\"${NamingSpawn.Mark} - \",]}${If[${NamingSpawn.Assist},\">> \",]}${NamingSpawn.DisplayName}${If[${NamingSpawn.Assist},\" - ${NamingSpawn.PctHPs}%<<\",]}${If[${NamingSpawn.Master.Type.Equal[PC]},\n(${NamingSpawn.Master}),]}";
 CHAR gszSpawnCorpseName[MAX_STRING]="${NamingSpawn.DisplayName}'s corpse";
 
 DWORD DrawHUDParams[4]={0,0,0,0};
+BOOL gCustomHUD = FALSE;
 
 #ifndef ISXEQ
 Blech *pMQ2Blech=0;
@@ -630,7 +631,7 @@ PCHAR szZoneExpansionName[] = {
     "Lost Dungeons of Norrath", //6
     "Gates of Discord",         //7
     "Omens of War",             //8
-}; 
+};
 
 #include "grounds.h"
 PCHAR szItemName[] = {
@@ -638,16 +639,16 @@ PCHAR szItemName[] = {
     NULL
 };
 
-PCHAR szDmgBonusType[] = { 
-    "None", 
-    "Magic", 
-    "Fire", 
-    "Cold", 
-    "Poison", 
-    "Disease" 
-}; 
+PCHAR szDmgBonusType[] = {
+    "None",
+    "Magic",
+    "Fire",
+    "Cold",
+    "Poison",
+    "Disease"
+};
 
-PCHAR szBodyType[] = { 
+PCHAR szBodyType[] = {
    "Object",//0       (catapults, tents, practice dummies, etc)
    "Humanoid", //1
    "Lycanthrope", //2
@@ -754,7 +755,7 @@ PCHAR szBodyType[] = {
     "Trigger",
 };
 
-PCHAR szAugRestrictions[] = { 
+PCHAR szAugRestrictions[] = {
     "None",
     "Armor Only",
     "Weapons Only",
@@ -769,7 +770,7 @@ PCHAR szAugRestrictions[] = {
     "2H Pierce Only",
     "Bows Only",
     "Shields Only"
-}; 
+};
 PCHAR szItemSlot[] = {
     "charm",        // 0
     "leftear",      // 1
@@ -1121,7 +1122,7 @@ KeypressHandler **ppKeypressHandler=0;
 PEQRAID pRaid=0;
 DZMEMBER **ppDZMember=0;
 DZTIMERINFO **ppDZTimerInfo=0;
-TASKMEMBER **ppTaskMember=0; 
+TASKMEMBER **ppTaskMember=0;
 DYNAMICZONE *pDynamicZone=0;
 MERCENARYINFO **ppMercInfo=0;
 AGGROINFO **ppAggroInfo=0;

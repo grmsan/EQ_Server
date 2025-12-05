@@ -15,10 +15,10 @@ DWORD HighlightColor=0xFF700070;
 CHAR MapSpecialClickString[16][MAX_STRING]=
 {
     "",// unused, will always target
-    "",//SHIFT 
+    "",//SHIFT
     "/maphide id %i",//CTRL
     "",//CTRL|SHIFT
-    "/highlight id %i",//LALT 
+    "/highlight id %i",//LALT
     "",//LALT|SHIFT
     "",//LALT|CTRL
     "",//LALT|SHIFT|CTRL
@@ -92,7 +92,7 @@ DWORD MapViewMap__OldHandleRButtonDown=0;
 
 DWORD __declspec(naked) CMyMapViewWnd__Destructor(const BOOL Deallocate)
 {
-    __asm {   
+    __asm {
         push ecx;
 		push edx;//maybe a compiler issue, but if we dont push edx as well here, we will crash on /loadskin... -eqmule Oct 23 2015
 		push eax;//it doesnt really matter what the reason is, because it wont hurt pushing it in older compilers
@@ -100,7 +100,7 @@ DWORD __declspec(naked) CMyMapViewWnd__Destructor(const BOOL Deallocate)
 				 //the important thing is that esp is the same both on entering this func and on exit...
 				 //(and it is now)
 
-    if (CMyMapViewWnd__OldvfTable && MapViewMap_OldvfTable) { 
+    if (CMyMapViewWnd__OldvfTable && MapViewMap_OldvfTable) {
         // make our own little stack frame here
         // operator delete assumes that it is there
         // it uses (unnecessarily) ebp-4
@@ -144,7 +144,7 @@ bool RButtonDown()
 //int MapViewMap::HandleRButtonDown(const CXPoint& point, UINT Flags) - should probably just change to this
 int __declspec(naked) MapViewMap__HandleRButtonDown(CXPoint& point, unsigned __int32 flags)
 {
-    __asm {   
+    __asm {
         push ecx;
         push eax;
     }
@@ -165,7 +165,7 @@ int __declspec(naked) MapViewMap__HandleRButtonDown(CXPoint& point, unsigned __i
             retn 8;
         }
     }
-} 
+}
 
 
 VOID __declspec(naked) CMyMapViewWnd__PostDraw()
@@ -196,9 +196,13 @@ public:
     DWORD Constructor_Trampoline(class CXWnd *);
     DWORD Constructor_Detour(class CXWnd *wnd)
     {
-		DWORD Ret = Constructor_Trampoline(wnd);
+        DWORD Ret = Constructor_Trampoline(wnd);
         CMapViewWnd *pWnd=(CMapViewWnd*)this;
 		PEQMAPWINDOW mwnd = (PEQMAPWINDOW)pWnd;
+        // If vftables were stolen previously and not correctly restored, restore to avoid leaks
+        if (CMyMapViewWnd__OldvfTable || MapViewMap_OldvfTable) {
+            CMyMapViewWnd::RestoreVFTable();
+        }
         PCSIDLWNDVFTABLE pvfTable = new CSIDLWNDVFTABLE;
         PCSIDLWNDVFTABLE pMapViewMapVfTable = new CSIDLWNDVFTABLE;
         *pvfTable=*pWnd->pvfTable;
@@ -221,6 +225,10 @@ public:
     {
         if (CMapViewWnd *pWnd=(CMapViewWnd*)pMapViewWnd)
         {
+            // If already stolen previously without a corresponding restore, restore first to avoid leaking vftable structures
+            if (CMyMapViewWnd__OldvfTable || MapViewMap_OldvfTable) {
+                RestoreVFTable();
+            }
             PCSIDLWNDVFTABLE pvfTable = new CSIDLWNDVFTABLE;
             PCSIDLWNDVFTABLE pMapViewMapVfTable = new CSIDLWNDVFTABLE;
             *pvfTable=*pWnd->pvfTable;
@@ -243,7 +251,7 @@ public:
     {
         if (CMapViewWnd *pWnd=(CMapViewWnd*)pMapViewWnd)
         {
-            if (CMyMapViewWnd__OldvfTable && MapViewMap_OldvfTable) { 
+            if (CMyMapViewWnd__OldvfTable && MapViewMap_OldvfTable) {
                 delete pWnd->pvfTable;
                 pWnd->pvfTable=CMyMapViewWnd__OldvfTable;
                 delete ((PEQMAPWINDOW)pWnd)->pMapViewMapVfTable;
@@ -253,7 +261,7 @@ public:
     }
 };
 
-DETOUR_TRAMPOLINE_EMPTY(DWORD CMyMapViewWnd::Constructor_Trampoline(class CXWnd *)); 
+DETOUR_TRAMPOLINE_EMPTY(DWORD CMyMapViewWnd::Constructor_Trampoline(class CXWnd *));
 
 bool Update=true;
 
@@ -264,6 +272,8 @@ EQLIB_API VOID InitializeMapPlugin(VOID)
 
     unsigned long i;
     CHAR szBuffer[MAX_STRING]={0};
+    // Ensure previous state is cleared to avoid leaking memory when plugin is reinitialized
+    MapClear();
     MapInit();
 
     // Do not use Custom, since the string isn't stored
@@ -294,7 +304,7 @@ PLUGIN_API VOID ShutdownMapPlugin(VOID)
 PLUGIN_API VOID OnAddSpawn(PSPAWNINFO pNewSpawn)
 {
 	    // your toon's spawn id changes and it's no longer zero to start
-	    // don't added it all 
+	    // don't added it all
 		if (pNewSpawn) {
 			if (PCHARINFO pMe = GetCharInfo()) {
 				if (Update && pNewSpawn->SpawnID != 0 && pMe->pSpawn != pNewSpawn) {

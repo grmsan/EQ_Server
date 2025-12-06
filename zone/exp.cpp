@@ -564,8 +564,9 @@ void Client::AddEXP(ExpSource exp_source, uint64 in_add_exp, uint8 conlevel, boo
 	}
 
 	// AA Sanity Checking for players who set aa exp and deleveled below allowed aa level.
-	if (GetLevel() <= 50 && m_epp.perAA > 0) {
-		Message(Chat::Yellow, "You are below the level allowed to gain AA Experience. AA Experience set to 0%");
+	const int min_aa_level = RuleI(Character, AAMinimumLevel);
+	if (GetLevel() < min_aa_level && m_epp.perAA > 0) {
+		Message(Chat::Yellow, fmt::format("You are below the level ({}) allowed to gain AA Experience. AA Experience set to 0%", min_aa_level).c_str());
 		aaexp = 0;
 		m_epp.perAA = 0;
 	}
@@ -579,6 +580,7 @@ void Client::SetEXP(ExpSource exp_source, uint64 set_exp, uint64 set_aaxp, bool 
 	uint64 current_aa_exp = GetAAXP();
 	uint64 total_current_exp = current_exp + current_aa_exp;
 	uint64 total_add_exp = set_exp + set_aaxp;
+	const int min_aa_level = RuleI(Character, AAMinimumLevel);
 
 #ifdef LUA_EQEMU
 	uint64 lua_ret = 0;
@@ -809,6 +811,10 @@ void Client::SetEXP(ExpSource exp_source, uint64 set_exp, uint64 set_aaxp, bool 
 		if (level_increase) {
 			if (level_count == 1) {
 				MessageString(Chat::Experience, GAIN_LEVEL, ConvertArray(check_level, val1));
+				// Notify when AA experience becomes available at the configured minimum level
+				if (check_level == RuleI(Character, AAMinimumLevel)) {
+					Message(Chat::Yellow, "You can now earn Alternate Advancement experience.");
+				}
 			} else {
 				Message(Chat::Yellow, "Welcome to level %i!", check_level);
 			}
@@ -853,8 +859,8 @@ void Client::SetEXP(ExpSource exp_source, uint64 set_exp, uint64 set_aaxp, bool 
 	m_pp.exp = set_exp;
 	m_pp.expAA = set_aaxp;
 
-	if (GetLevel() < 51) {
-		m_epp.perAA = 0;	// turn off aa exp if they drop below 51
+	if (GetLevel() < min_aa_level) {
+		m_epp.perAA = 0;	// turn off aa exp if they drop below minimum
 	} else {
 		SendAlternateAdvancementStats();    //otherwise, send them an AA update
 	}

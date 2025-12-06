@@ -187,7 +187,7 @@ void DynamicItemManager::ApplyLevelScaling(EQ::ItemData* item, const EQ::ItemDat
 	// All items gain stats on upgrade, even if base is 0
 	double attrMult = ItemScaling::Config::Get().GetGlobalAttrCurve(level);
 	double strPref = ItemScaling::Config::Get().GetAttributePresenceMultiplier("AStr", base_item->AStr > 0, level);
-	double strBaseFactor = 1.0 + (static_cast<double>(base_item->AStr) / 60.0);
+	double strBaseFactor = 1.0 + (static_cast<double>(base_item->AStr) / 22.0);
 	int raw_str = static_cast<int>(std::round(CalculateTieredStat(base_item->AStr, level, m_config.stat_base_increment, m_config.stat_tier_bonus) * attrMult * strPref * strBaseFactor));
 	int base_str = 0, heroic_str = 0;
 	ApplyStatCap(base_str, heroic_str, raw_str);
@@ -195,7 +195,7 @@ void DynamicItemManager::ApplyLevelScaling(EQ::ItemData* item, const EQ::ItemDat
 	item->HeroicStr = static_cast<int16>(heroic_str);
 
 	double staPref = ItemScaling::Config::Get().GetAttributePresenceMultiplier("ASta", base_item->ASta > 0, level);
-	double staBaseFactor = 1.0 + (static_cast<double>(base_item->ASta) / 60.0);
+	double staBaseFactor = 1.0 + (static_cast<double>(base_item->ASta) / 22.0);
 	int raw_sta = static_cast<int>(std::round(CalculateTieredStat(base_item->ASta, level, m_config.stat_base_increment, m_config.stat_tier_bonus) * attrMult * staPref * staBaseFactor));
 	int base_sta = 0, heroic_sta = 0;
 	ApplyStatCap(base_sta, heroic_sta, raw_sta);
@@ -203,7 +203,7 @@ void DynamicItemManager::ApplyLevelScaling(EQ::ItemData* item, const EQ::ItemDat
 	item->HeroicSta = static_cast<int16>(heroic_sta);
 
 	double agiPref = ItemScaling::Config::Get().GetAttributePresenceMultiplier("AAgi", base_item->AAgi > 0, level);
-	double agiBaseFactor = 1.0 + (static_cast<double>(base_item->AAgi) / 60.0);
+	double agiBaseFactor = 1.0 + (static_cast<double>(base_item->AAgi) / 22.0);
 	int raw_agi = static_cast<int>(std::round(CalculateTieredStat(base_item->AAgi, level, m_config.stat_base_increment, m_config.stat_tier_bonus) * attrMult * agiPref * agiBaseFactor));
 	int base_agi = 0, heroic_agi = 0;
 	ApplyStatCap(base_agi, heroic_agi, raw_agi);
@@ -211,7 +211,7 @@ void DynamicItemManager::ApplyLevelScaling(EQ::ItemData* item, const EQ::ItemDat
 	item->HeroicAgi = static_cast<int16>(heroic_agi);
 
 	double dexPref = ItemScaling::Config::Get().GetAttributePresenceMultiplier("ADex", base_item->ADex > 0, level);
-	double dexBaseFactor = 1.0 + (static_cast<double>(base_item->ADex) / 60.0);
+	double dexBaseFactor = 1.0 + (static_cast<double>(base_item->ADex) / 22.0);
 	int raw_dex = static_cast<int>(std::round(CalculateTieredStat(base_item->ADex, level, m_config.stat_base_increment, m_config.stat_tier_bonus) * attrMult * dexPref * dexBaseFactor));
 	int base_dex = 0, heroic_dex = 0;
 	ApplyStatCap(base_dex, heroic_dex, raw_dex);
@@ -219,7 +219,7 @@ void DynamicItemManager::ApplyLevelScaling(EQ::ItemData* item, const EQ::ItemDat
 	item->HeroicDex = static_cast<int16>(heroic_dex);
 
 	double intPref = ItemScaling::Config::Get().GetAttributePresenceMultiplier("AInt", base_item->AInt > 0, level);
-	double intBaseFactor = 1.0 + (static_cast<double>(base_item->AInt) / 60.0);
+	double intBaseFactor = 1.0 + (static_cast<double>(base_item->AInt) / 22.0);
 	int raw_int = static_cast<int>(std::round(CalculateTieredStat(base_item->AInt, level, m_config.stat_base_increment, m_config.stat_tier_bonus) * attrMult * intPref * intBaseFactor));
 	int base_int = 0, heroic_int = 0;
 	ApplyStatCap(base_int, heroic_int, raw_int);
@@ -227,7 +227,7 @@ void DynamicItemManager::ApplyLevelScaling(EQ::ItemData* item, const EQ::ItemDat
 	item->HeroicInt = static_cast<int16>(heroic_int);
 
 	double wisPref = ItemScaling::Config::Get().GetAttributePresenceMultiplier("AWis", base_item->AWis > 0, level);
-	double wisBaseFactor = 1.0 + (static_cast<double>(base_item->AWis) / 60.0);
+	double wisBaseFactor = 1.0 + (static_cast<double>(base_item->AWis) / 22.0);
 	int raw_wis = static_cast<int>(std::round(CalculateTieredStat(base_item->AWis, level, m_config.stat_base_increment, m_config.stat_tier_bonus) * attrMult * wisPref * wisBaseFactor));
 	int base_wis = 0, heroic_wis = 0;
 	ApplyStatCap(base_wis, heroic_wis, raw_wis);
@@ -235,7 +235,7 @@ void DynamicItemManager::ApplyLevelScaling(EQ::ItemData* item, const EQ::ItemDat
 	item->HeroicWis = static_cast<int16>(heroic_wis);
 
 	double chaPref = ItemScaling::Config::Get().GetAttributePresenceMultiplier("ACha", base_item->ACha > 0, level);
-	double chaBaseFactor = 1.0 + (static_cast<double>(base_item->ACha) / 60.0);
+	double chaBaseFactor = 1.0 + (static_cast<double>(base_item->ACha) / 22.0);
 	int raw_cha = static_cast<int>(std::round(CalculateTieredStat(base_item->ACha, level, m_config.stat_base_increment, m_config.stat_tier_bonus) * attrMult * chaPref * chaBaseFactor));
 	int base_cha = 0, heroic_cha = 0;
 	ApplyStatCap(base_cha, heroic_cha, raw_cha);
@@ -366,6 +366,26 @@ void DynamicItemManager::ApplyLevelScaling(EQ::ItemData* item, const EQ::ItemDat
 		int raw = CalculateTieredStat(base_item->SpellDmg, level, m_config.caster_base_increment, m_config.caster_tier_bonus);
 		double cm = ItemScaling::Config::Get().GetMod2Curve("SpellDmg", level);
 		item->SpellDmg = static_cast<int32>(std::round(raw * cm));
+	}
+	// Derived caster scaling: convert *scaled* INT/WIS (base + heroic) into SpellDmg/HealAmt when the stat exists
+	int total_int = static_cast<int>(item->AInt) + static_cast<int>(item->HeroicInt);
+	int total_wis = static_cast<int>(item->AWis) + static_cast<int>(item->HeroicWis);
+
+	if (total_int > 0) {
+		int32 derivedSpell = ItemScaling::Config::Get().ComputeSpellDmgFromInt(total_int, level);
+		if (derivedSpell > 0) {
+			item->SpellDmg += derivedSpell;
+		}
+	}
+	if (total_wis > 0) {
+		int32 derivedSpellWis = ItemScaling::Config::Get().ComputeSpellDmgFromInt(total_wis, level);
+		if (derivedSpellWis > 0) {
+			item->SpellDmg += derivedSpellWis;
+		}
+		int32 derivedHeal = ItemScaling::Config::Get().ComputeHealFromWis(total_wis, level);
+		if (derivedHeal > 0) {
+			item->HealAmt += derivedHeal;
+		}
 	}
 	// Apply per-slot caster multipliers (spell damage / heal)
 	{

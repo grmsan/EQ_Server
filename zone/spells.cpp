@@ -78,6 +78,7 @@ Copyright (C) 2001-2002 EQEMu Development Team (http://eqemu.org)
 #include "../common/misc_functions.h"
 #include "../common/events/player_event_logs.h"
 #include "../common/repositories/character_corpses_repository.h"
+#include "combat_balance_config.h"
 #include "../common/repositories/spell_buckets_repository.h"
 
 #include "../common/data_bucket.h"
@@ -5396,6 +5397,17 @@ float Mob::ResistSpell(uint8 resist_type, uint16 spell_id, Mob *caster, bool use
 	}
 
 	int target_resist = GetResist(resist_type);
+
+	// DEX-based resist penetration (applies to all spells when enabled)
+	if (RuleB(Combat, UseNewDexFormulas) && caster) {
+		int dex = caster->GetDEX();
+		float pen = static_cast<float>(dex) / CombatBalance::DEX_RESIST_PENETRATION_DIVISOR;
+		// pets get reduced benefit
+		if (caster->IsPet() && caster->GetOwner()) {
+			pen *= CombatBalance::PET_DEX_CRIT_SCALAR;
+		}
+		target_resist = std::max(0, target_resist - static_cast<int>(pen));
+	}
 
 	// JULY 24, 2002 changes
 	int level = GetLevel();

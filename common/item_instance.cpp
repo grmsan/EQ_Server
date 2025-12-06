@@ -1217,12 +1217,16 @@ void EQ::ItemInstance::ScaleItem() {
 	// Derived caster stats: derive SpellDmg from INT, HealAmt from WIS
 	// Use the ItemScaling Config to compute derived values (supports 'divisor' and 'curve' modes)
 	int pseudoLevel = static_cast<int>(Mult * 100.0f);
-	if (m_scaledItem->AInt > 0) {
-		int32 derivedSpell = ItemScaling::Config::Get().ComputeSpellDmgFromInt(static_cast<int>(m_scaledItem->AInt), pseudoLevel);
+	int total_int = static_cast<int>(m_scaledItem->AInt) + static_cast<int>(m_scaledItem->HeroicInt);
+	int total_wis = static_cast<int>(m_scaledItem->AWis) + static_cast<int>(m_scaledItem->HeroicWis);
+	if (total_int > 0) {
+		int32 derivedSpell = ItemScaling::Config::Get().ComputeSpellDmgFromInt(total_int, pseudoLevel);
 		if (derivedSpell > 0) m_scaledItem->SpellDmg += derivedSpell;
 	}
-	if (m_scaledItem->AWis > 0) {
-		int32 derivedHeal = ItemScaling::Config::Get().ComputeHealFromWis(static_cast<int>(m_scaledItem->AWis), pseudoLevel);
+	if (total_wis > 0) {
+		int32 derivedSpellWis = ItemScaling::Config::Get().ComputeSpellDmgFromInt(total_wis, pseudoLevel);
+		if (derivedSpellWis > 0) m_scaledItem->SpellDmg += derivedSpellWis;
+		int32 derivedHeal = ItemScaling::Config::Get().ComputeHealFromWis(total_wis, pseudoLevel);
 		if (derivedHeal > 0) m_scaledItem->HealAmt += derivedHeal;
 	}
 
@@ -1348,7 +1352,7 @@ void EQ::ItemInstance::ScaleDynamicItem(int level) {
 			int raw = CalculateTieredStat(slots[i].baseValue, level, 1, 1);
 			double curveMult = ItemScaling::Config::Get().GetGlobalAttrCurve(level);
 			double pref = ItemScaling::Config::Get().GetAttributePresenceMultiplier(slots[i].name, slots[i].baseValue > 0, level);
-			double baseFactor = 1.0 + (static_cast<double>(slots[i].baseValue) / 60.0);
+			double baseFactor = 1.0 + (static_cast<double>(slots[i].baseValue) / 22.0);
 			slots[i].rawScaled = static_cast<int>(std::round(raw * curveMult * pref * baseFactor));
 			bool present = slots[i].baseValue > 0;
 			slots[i].weight = ItemScaling::Config::Get().GetAttributePresenceMultiplier(slots[i].name, present, level);
@@ -1414,13 +1418,15 @@ void EQ::ItemInstance::ScaleDynamicItem(int level) {
 		}
 	}
 
-	// Derived caster stats for dynamic items - use configured curve/divisor
+	// Derived caster stats for dynamic items - use configured curve/divisor (base + heroic)
 	if (m_item->AInt > 0) {
-		int32 derivedSpell = ItemScaling::Config::Get().ComputeSpellDmgFromInt(static_cast<int>(m_scaledItem->AInt), level);
+		int total_int = static_cast<int>(m_scaledItem->AInt) + static_cast<int>(m_scaledItem->HeroicInt);
+		int32 derivedSpell = ItemScaling::Config::Get().ComputeSpellDmgFromInt(total_int, level);
 		if (derivedSpell > 0) m_scaledItem->SpellDmg += derivedSpell;
 	}
 	if (m_item->AWis > 0) {
-		int32 derivedHeal = ItemScaling::Config::Get().ComputeHealFromWis(static_cast<int>(m_scaledItem->AWis), level);
+		int total_wis = static_cast<int>(m_scaledItem->AWis) + static_cast<int>(m_scaledItem->HeroicWis);
+		int32 derivedHeal = ItemScaling::Config::Get().ComputeHealFromWis(total_wis, level);
 		if (derivedHeal > 0) m_scaledItem->HealAmt += derivedHeal;
 	}
     // Apply per-slot SpellDmg and HealAmt multipliers

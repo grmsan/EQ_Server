@@ -56,6 +56,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 #include "worldserver.h"
 #include "zone.h"
 #include "mob_movement_manager.h"
+#include "dynamic_item_manager.h"
 #include "../common/repositories/character_instance_safereturns_repository.h"
 #include "../common/repositories/criteria/content_filter_criteria.h"
 #include "../common/shared_tasks.h"
@@ -1375,6 +1376,37 @@ void Client::Handle_Connect_OP_ZoneEntry(const EQApplicationPacket *app)
 
 	if (RuleB(Character, SharedBankPlat))
 		m_pp.platinum_shared = database.GetSharedPlatinum(AccountID());
+
+	// Rebuild any missing dynamic items in inventory before loading it (handles curve changes or DB purges)
+	{
+		std::string query = fmt::format(
+			"SELECT i.itemid "
+			"FROM inventory i "
+			"LEFT JOIN items t ON t.id = i.itemid "
+			"WHERE i.character_id = {} AND i.itemid >= 1000000000 AND t.id IS NULL",
+			cid
+		);
+		auto regen_results = database.QueryDatabase(query);
+		if (regen_results.Success() && regen_results.RowCount() > 0) {
+			auto& mgr = EQ::DynamicItemManager::Get();
+			for (auto row : regen_results) {
+				uint32 dyn_id = Strings::ToUnsignedInt(row[0]);
+				uint32 base_id = dyn_id % 1000000;
+				uint32 level = (dyn_id / 1000000) % 100000;
+				if (base_id == 0 || level == 0) {
+					Log(Logs::General, Logs::Error, "Dynamic regen skipped: invalid dyn_id {} (base {}, level {})", dyn_id, base_id, level);
+					continue;
+				}
+				const EQ::ItemData* scaled = mgr.GenerateScaledItem(base_id, level);
+				if (!scaled) {
+					Log(Logs::General, Logs::Error, "Dynamic regen failed: base {} level {} for dyn_id {}", base_id, level, dyn_id);
+					continue;
+				}
+				mgr.InsertItemIntoDatabase(dyn_id, base_id, scaled);
+				Log(Logs::General, Logs::Status, "Dynamic regen: rebuilt missing item {} (base {} level {})", dyn_id, base_id, level);
+			}
+		}
+	}
 
 	database.ClearOldRecastTimestamps(cid); /* Clear out our old recast timestamps to keep the DB clean */
 	// set to full support in case they're a gm with items in disabled expansion slots...but, have their gm flag off...

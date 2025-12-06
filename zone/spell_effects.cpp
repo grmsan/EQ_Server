@@ -31,8 +31,10 @@
 #include "lua_parser.h"
 #include "string_ids.h"
 #include "worldserver.h"
+#include "combat_balance_config.h"
 
 #include <math.h>
+#include <unordered_map>
 
 #ifndef WIN32
 #include <stdlib.h>
@@ -43,6 +45,124 @@
 extern Zone* zone;
 extern volatile bool is_zone_loaded;
 extern WorldServer worldserver;
+
+// -----------------------------------------------------------------------------
+// Special Attack Scaling (reusable for AA/spells that should mimic weapon+stat)
+// -----------------------------------------------------------------------------
+enum class SpecialStat {
+	None,
+	Str,
+	Dex,
+	Sta,
+	Agi,
+};
+
+struct SpecialAttackConfig {
+	float primary_weapon_mult{1.0f};
+	float secondary_weapon_mult{0.0f};
+	SpecialStat stat{SpecialStat::None};
+	// level curve for stat term (defaults to STR curve knobs)
+	float level_divisor{CombatBalance::STR_LEVEL_DIVISOR};
+	float level_exponent{CombatBalance::STR_LEVEL_EXPONENT};
+	float level_min_multiplier{CombatBalance::STR_MIN_LEVEL_MULTIPLIER};
+	float flat_bonus{0.0f};
+	float min_damage{1.0f};
+	float damage_mult{1.0f}; // optional post-scale multiplier (e.g., crippling-style bonus)
+	float ac_debuff_pct_of_damage{0.0f}; // optional rider: AC debuff magnitude based on % of damage
+};
+
+static int GetPrimaryWeaponBaseDamage(const Mob* caster) {
+	if (!caster) return 0;
+	if (caster->IsClient()) {
+		const auto& inv = caster->CastToClient()->GetInv();
+		auto inst = inv.GetItem(EQ::invslot::slotPrimary);
+		if (inst && inst->GetItem()) {
+			return inst->GetItem()->Damage;
+		}
+	}
+	if (caster->IsNPC()) {
+		return caster->CastToNPC()->GetMaxDMG(); // best available proxy
+	}
+	return 0;
+}
+
+static int GetSecondaryWeaponBaseDamage(const Mob* caster) {
+	if (!caster) return 0;
+	if (caster->IsClient()) {
+		const auto& inv = caster->CastToClient()->GetInv();
+		auto inst = inv.GetItem(EQ::invslot::slotSecondary);
+		if (inst && inst->GetItem()) {
+			return inst->GetItem()->Damage;
+		}
+	}
+	if (caster->IsNPC()) {
+		return caster->CastToNPC()->GetMaxDMG() / 2; // rough estimate
+	}
+	return 0;
+}
+
+static float GetStatValue(const Mob* caster, SpecialStat stat) {
+	if (!caster) return 0.0f;
+	switch (stat) {
+	case SpecialStat::Str: return static_cast<float>(caster->GetSTR());
+	case SpecialStat::Dex: return static_cast<float>(caster->GetDEX());
+	case SpecialStat::Sta: return static_cast<float>(caster->GetSTA());
+	case SpecialStat::Agi: return static_cast<float>(caster->GetAGI());
+	default: return 0.0f;
+	}
+}
+
+static int64 ComputeSpecialAttackDamage(const Mob* caster, int caster_level, const SpecialAttackConfig& cfg) {
+	if (!caster) return 0;
+	float weapon_term = 0.0f;
+	if (cfg.primary_weapon_mult > 0.0f) {
+		weapon_term += static_cast<float>(GetPrimaryWeaponBaseDamage(caster)) * cfg.primary_weapon_mult;
+	}
+	if (cfg.secondary_weapon_mult > 0.0f) {
+		weapon_term += static_cast<float>(GetSecondaryWeaponBaseDamage(caster)) * cfg.secondary_weapon_mult;
+	}
+	float stat_term = 0.0f;
+	if (cfg.stat != SpecialStat::None) {
+		float stat_val = GetStatValue(caster, cfg.stat);
+		float level_factor = std::pow(static_cast<float>(caster_level), cfg.level_exponent) / cfg.level_divisor;
+		level_factor = std::max(level_factor, cfg.level_min_multiplier);
+		stat_term = stat_val * level_factor;
+	}
+	float dmg = weapon_term + stat_term + cfg.flat_bonus;
+	if (dmg < cfg.min_damage) {
+		dmg = cfg.min_damage;
+	}
+	dmg *= cfg.damage_mult;
+	return static_cast<int64>(dmg);
+}
+
+// Registry of special-attack style spells/AAs we scale automatically
+static const std::unordered_map<uint16, SpecialAttackConfig> kSpecialAttackSpells{
+	// Heroic Throw (custom AA spell ID 65000): primary weapon + STR curve, AC debuff rider
+	{65000, SpecialAttackConfig{
+		.primary_weapon_mult = 1.0f,
+		.secondary_weapon_mult = 0.0f,
+		.stat = SpecialStat::Str,
+		.level_divisor = CombatBalance::STR_LEVEL_DIVISOR,
+		.level_exponent = CombatBalance::STR_LEVEL_EXPONENT,
+		.level_min_multiplier = CombatBalance::STR_MIN_LEVEL_MULTIPLIER,
+		.flat_bonus = 0.0f,
+		.min_damage = 1.0f,
+		.ac_debuff_pct_of_damage = 0.10f // 10% of dealt damage becomes an AC debuff magnitude
+	}},
+	// Colossal Smash (Warrior AA, spell ID 65010): crippling-style swing with both weapons
+	{65010, SpecialAttackConfig{
+		.primary_weapon_mult = 1.0f,
+		.secondary_weapon_mult = 1.0f, // dual wielders hit with both; 2H only uses primary
+		.stat = SpecialStat::Str,
+		.level_divisor = CombatBalance::STR_LEVEL_DIVISOR,
+		.level_exponent = CombatBalance::STR_LEVEL_EXPONENT,
+		.level_min_multiplier = CombatBalance::STR_MIN_LEVEL_MULTIPLIER,
+		.flat_bonus = 0.0f,
+		.min_damage = 1.0f,
+		.damage_mult = 2.2f // approximate crippling blow bonus over a base hit
+	}}
+};
 
 
 // the spell can still fail here, if the buff can't stack
@@ -3458,6 +3578,47 @@ int64 Mob::CalcSpellEffectValue(uint16 spell_id, int effect_id, int caster_level
 	int max_value = spells[spell_id].max_value[effect_id];
 	int effect_value = 0;
 	int oval = 0;
+
+	// Generic special-attack style scaling (weapon + stat) with optional riders
+	auto special_it = kSpecialAttackSpells.find(spell_id);
+	if (special_it != kSpecialAttackSpells.end()) {
+		const auto& cfg = special_it->second;
+		// Damage override
+		if (spells[spell_id].effect_id[effect_id] == SpellEffect::CurrentHPOnce) {
+			int64 dmg = ComputeSpecialAttackDamage(caster, caster_level, cfg);
+			return -dmg; // detrimental is negative
+		}
+		// AC debuff rider (scaled off damage)
+		if (cfg.ac_debuff_pct_of_damage > 0.0f && spells[spell_id].effect_id[effect_id] == SpellEffect::ArmorClass) {
+			int64 dmg = ComputeSpecialAttackDamage(caster, caster_level, cfg);
+			int32 debuff = static_cast<int32>(dmg * cfg.ac_debuff_pct_of_damage);
+			if (debuff < 1) debuff = 1;
+			return -debuff; // debuff AC by this amount
+		}
+	}
+
+	// Heroic Throw (custom AA spell 65000): scale damage off STR and weapon
+	// rather than a flat base value so it feels like a thrown melee swing.
+	if (spell_id == 65000
+		&& spells[spell_id].effect_id[effect_id] == SpellEffect::CurrentHPOnce
+		&& caster) {
+		int weapon_dmg = 0;
+		if (caster->IsClient()) {
+			auto inst = caster->CastToClient()->GetInv().GetItem(EQ::invslot::slotPrimary);
+			if (inst && inst->GetItem()) {
+				weapon_dmg = inst->GetItem()->Damage;
+			}
+		}
+		int str = caster->GetSTR();
+		float level_term = std::pow(static_cast<float>(caster_level), CombatBalance::STR_LEVEL_EXPONENT) / CombatBalance::STR_LEVEL_DIVISOR;
+		level_term = std::max(level_term, CombatBalance::STR_MIN_LEVEL_MULTIPLIER);
+		int str_bonus = static_cast<int>(str * level_term);
+		int scaled = weapon_dmg + str_bonus;
+		if (scaled <= 0) {
+			scaled = -base_value; // fallback to defined base damage
+		}
+		return -scaled; // detrimental damage is negative in spell data
+	}
 
 	if (IsBlankSpellEffect(spell_id, effect_id))
 		return 0;

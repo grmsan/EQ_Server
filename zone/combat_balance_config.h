@@ -28,6 +28,77 @@
 namespace CombatBalance {
 
 	//=============================================================================
+	// DEXTERITY - PRECISION SCALING (CRIT/PROC/ARCHERY/SPELL)
+	//=============================================================================
+	// Toggle: RuleB(Combat, UseNewDexFormulas)
+	// These defaults are "first guesses" and intended to be tuned after playtests.
+	//=============================================================================
+	constexpr float DEX_CRIT_DIVISOR = 500.0f;          // main crit chance term: (DEX * Level) / divisor
+	constexpr float DEX_CRIT_MIN_DIVISOR = 3500.0f;     // floor term: DEX / divisor (keeps low-level crits alive)
+	constexpr float DEX_CRIT_STEP_PER_PERCENT = 50.0f;  // optional step: +1% per this many DEX (set to 0 to disable)
+	constexpr float DEX_CRIT_OVERFLOW_SCALAR = 1.0f;    // overflow chance above 100% converts to crit damage * scalar
+	constexpr float DEX_BASE_CRIT_DMG_DIVISOR = 20.0f;  // base crit damage from DEX: DEX / divisor
+
+	// Proc mastery
+	constexpr int   DEX_PROC_BAND = 500;                // +1 allowed proc per this many DEX (0-499=1, 500-999=2, etc.)
+	constexpr int   DEX_PROC_MAX_EXTRA = 4;             // safety cap on extra procs
+	constexpr int   DEX_PROC_DENOMS[4] = {100, 200, 400, 1500}; // per-chain chance: DEX / (DEX + denom)
+
+	// Multi-hit skill bonuses (small additive chance; per-skill divisors applied in code)
+	constexpr float DEX_MULTI_HIT_DIVISOR = 5000.0f;    // example: bonus chance = DEX / this (capped)
+	constexpr float DEX_MULTI_HIT_MAX_BONUS = 10.0f;    // max extra % added by DEX to multi-hit chances
+	// Double Attack / Dual Wield bonuses
+	constexpr float DEX_DOUBLE_ATTACK_DIVISOR = 8000.0f; // bonus % to double attack = DEX / this (capped)
+	constexpr float DEX_DUAL_WIELD_DIVISOR   = 8000.0f; // bonus % to dual wield = DEX / this (capped)
+	constexpr float DEX_HIT_CHANCE_DIVISOR   = 12000.0f; // bonus to hit chance % = DEX / this (capped)
+	constexpr float DEX_MELEE_BONUS_MAX      = 10.0f;    // cap for these melee bonuses
+	// Skill-specific multi-hit (backstab/frenzy/flurry) divisors
+	constexpr float DEX_BACKSTAB_EXTRA_DIVISOR = 8000.0f;  // bonus % to extra backstab hits = DEX / this (capped)
+	constexpr float DEX_FRENZY_EXTRA_DIVISOR   = 8000.0f;  // bonus % to extra frenzy swings
+	constexpr float DEX_FLURRY_EXTRA_DIVISOR   = 10000.0f; // bonus % to flurry/rapid strikes
+	constexpr float DEX_MULTI_HIT_SKILL_MAX    = 10.0f;    // cap for skill-specific bonus %
+	// Other multi-hit capable skills that can be nudged by DEX (set divisors >0 to enable)
+	constexpr float DEX_RIPOSTE_EXTRA_DIVISOR  = 12000.0f; // bonus % to trigger an extra riposte check
+	constexpr float DEX_WHIRLWIND_EXTRA_DIVISOR= 12000.0f; // bonus % to extra whirlwind/aoe melee hits
+
+	// Twincast from DEX
+	constexpr float DEX_TWINCAST_DIVISOR = 2000.0f;     // matches DEX.md
+
+	// Ranger bow scaling
+	constexpr float DEX_BOW_LEVEL_DIVISOR = 10.0f;
+	constexpr float DEX_BOW_CRIT_DMG_DIVISOR = 500.0f;
+
+	// Resist penetration (keep minor; raise divisor if stacking with CHA, etc.)
+	constexpr float DEX_RESIST_PENETRATION_DIVISOR = 10.0f;
+
+	// Pet scaling (reduced benefit)
+	constexpr float PET_DEX_CRIT_SCALAR = 0.5f;
+	constexpr float PET_DEX_TWINCAST_SCALAR = 0.5f;
+
+	// DOT twincast (duplicate tick) toggle/divisor
+	constexpr bool  ENABLE_DEX_DOT_TWINCAST = true;      // enabled for testing; tune or disable after balance pass
+	constexpr float DEX_DOT_TWINCAST_DIVISOR = 3000.0f;  // bonus % to DOT twincast = DEX / this (capped by 100)
+
+	//=============================================================================
+	// AGILITY - SPEED / AVOIDANCE SCALING
+	//=============================================================================
+	// Toggle: RuleB(Combat, UseNewAgiFormulas)
+	//=============================================================================
+	constexpr float AGI_HASTE_DIVISOR   = 400.0f;  // haste_pct = 100 * AGI / (AGI + divisor), folded into normal haste and capped by standard haste cap
+	constexpr float AGI_AVOID_DIVISOR   = 300.0f;  // avoidance base curve divisor
+	constexpr float AGI_AVOID_CAP       = 75.0f;   // base avoidance cap before class multiplier
+	constexpr float AGI_AVOID_SOFTCAP   = 85.0f;   // soft cap after class multiplier
+	constexpr float AGI_RUN_DIVISOR     = 200.0f;  // run speed cap curve divisor
+	constexpr float AGI_RUN_CAP         = 110.0f;  // % runspeed cap from AGI
+	constexpr float AGI_CAST_DIVISOR    = 500.0f;  // cast/GCD asymptotic divisor
+	constexpr float AGI_CAST_FLOOR_SEC  = 0.5f;    // minimum cast/GCD seconds floor
+
+	// Avoidance class multipliers
+	constexpr float AGI_AVOID_MULT_LIGHT   = 1.5f; // monks/beastlords/rogues/bards
+	constexpr float AGI_AVOID_MULT_TANK    = 1.0f; // warriors/paladins/SKs/rangers
+	constexpr float AGI_AVOID_MULT_CASTER  = 0.75f; // casters/healers
+
+	//=============================================================================
 	// STRENGTH DAMAGE SCALING - CORE FORMULA
 	//=============================================================================
 	//

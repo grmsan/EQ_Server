@@ -168,6 +168,12 @@ Example - Short Sword (base 0 STR):
   Level 50:  +127 STR, +23 Heroic STR (150 total)
   Level 100: +127 STR, +423 Heroic STR (550 total)
 ```
+**Current tuning (live JSON, Dec 2025):**
+- `AttributeCurve` is gentle: 1.0 @1, ~1.2 @50, 1.3 @100, 1.45 @150, 1.55 @200, 1.7 @300.
+- Presence/absence weighting: 0.97 if the stat exists on the base item, 0.90 if it does not.
+- Base emphasis: attributes get a bonus factor of `1 + (base_stat / 22.0)`, so items that already have a stat stay meaningfully ahead.
+- Slot multiplier still applies to the overall pool (e.g., Head 1.25×, Chest 1.5×).
+- Distribution uses the weighted pool directly (no base value added afterward), mirroring server code.
 
 ### ⏳ TODO: Random Stats (Framework Exists)
 Planned for milestone-based stat additions:

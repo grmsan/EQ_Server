@@ -65,6 +65,53 @@ public:
         DWORD index;
 
 		std::string eqtypesString = "";
+		static bool s_loggedOverride = false;
+		static bool s_fileLogged = false;
+
+        // safety: if character data isn't ready, don't override
+        if (!pCharData || !((PCHARINFO)pCharData)->pSpawn) {
+            Found = FALSE;
+        } else {
+		    auto eval_macro = [&](const char* macro_expr) -> bool {
+			    memset(Buffer, 0, sizeof(Buffer));
+			    strcpy_s(Buffer, macro_expr);
+			    ParseMacroParameter(((PCHARINFO)pCharData)->pSpawn, Buffer);
+			    if (!strcmp(Buffer, "NULL") || Buffer[0] == 0) {
+				    return false;
+			    }
+			    eqtypesString = Buffer;
+			    return !eqtypesString.empty();
+		    };
+
+		    // Override legacy EQTypes (5-11 stats, 17/18 HP) to pull uncapped server values via MQ2 data
+		    DWORD sidl = (DWORD)pThisLabel->SidlPiece;
+		    switch (sidl) {
+		    case 5:  Found = eval_macro("${Me.Strength}");      break;
+		    case 6:  Found = eval_macro("${Me.Stamina}");       break;
+		    case 7:  Found = eval_macro("${Me.Agility}");       break;
+		    case 8:  Found = eval_macro("${Me.Dexterity}");     break;
+		    case 9:  Found = eval_macro("${Me.Intelligence}");  break;
+		    case 10: Found = eval_macro("${Me.Wisdom}");        break;
+		    case 11: Found = eval_macro("${Me.Charisma}");      break;
+		    case 17: Found = eval_macro("${Me.CurrentHPs}");    break;
+		    case 18: Found = eval_macro("${Me.MaxHPs}");        break;
+		    default: break;
+		    }
+
+		    if (Found && !s_loggedOverride) {
+			    DebugSpewAlways("MQ2Labels: overriding legacy EQType %lu with server values (first occurrence)", sidl);
+                // also drop a breadcrumb to dinput8_debug.log in case MQ2 logging is disabled
+                if (!s_fileLogged) {
+                    FILE* f = nullptr;
+                    if (fopen_s(&f, "dinput8_debug.log", "a") == 0 && f) {
+                        fprintf(f, "MQ2Labels: legacy EQType override active (first occurrence sidl=%lu)\n", sidl);
+                        fclose(f);
+                        s_fileLogged = true;
+                    }
+                }
+			    s_loggedOverride = true;
+		    }
+        }
 
 
         if ((DWORD)pThisLabel->SidlPiece==9999) {
@@ -93,7 +140,9 @@ public:
                 }
             }
         }
-        if (Found) SetCXStr(&(pThisLabel->Wnd.WindowText),(PCHAR)eqtypesString.c_str());
+        if (Found && !eqtypesString.empty()) {
+            SetCXStr(&(pThisLabel->Wnd.WindowText),(PCHAR)eqtypesString.c_str());
+        }
     }
 }; 
 
@@ -113,15 +162,21 @@ PLUGIN_API VOID InitializeMQ2Labels(VOID)
  //   DebugSpewAlways("Initializing MQ2Labels");
 	eqTypesMap[1000] = testDisplayFunction; //and so forth 
 
-    // Add commands, macro parameters, hooks, etc.
-    //EasyClassDetour(CLabel__Draw,CLabelHook,Draw_Detour,VOID,(VOID),Draw_Trampoline);
-    EzDetour(CLabel__Draw,&CLabelHook::Draw_Detour,&CLabelHook::Draw_Trampoline);
-    EzDetour(CSidlManager__CreateLabel,&CSidlManagerHook::CreateLabel_Detour,&CSidlManagerHook::CreateLabel_Trampoline);
+	// Add commands, macro parameters, hooks, etc.
+	//EasyClassDetour(CLabel__Draw,CLabelHook,Draw_Detour,VOID,(VOID),Draw_Trampoline);
+	EzDetour(CLabel__Draw,&CLabelHook::Draw_Detour,&CLabelHook::Draw_Trampoline);
+	EzDetour(CSidlManager__CreateLabel,&CSidlManagerHook::CreateLabel_Detour,&CSidlManagerHook::CreateLabel_Trampoline);
 
+	// Drop a breadcrumb to dinput8_debug.log on load so we know the DLL is active
+	FILE* f = nullptr;
+	if (fopen_s(&f, "dinput8_debug.log", "a") == 0 && f) {
+		fprintf(f, "MQ2Labels: initialized and hooks installed\n");
+		fclose(f);
+	}
 
-    // currently in testing:
-    //    EasyClassDetour(CGauge__Draw,CGaugeHook,Draw_Detour,VOID,(VOID),Draw_Trampoline);
-    //    EasyDetour(__GetGaugeValueFromEQ,GetGaugeValueFromEQ_Hook,int,(int,class CXStr *,bool *),GetGaugeValueFromEQ_Trampoline);
+	// currently in testing:
+	//    EasyClassDetour(CGauge__Draw,CGaugeHook,Draw_Detour,VOID,(VOID),Draw_Trampoline);
+	//    EasyDetour(__GetGaugeValueFromEQ,GetGaugeValueFromEQ_Hook,int,(int,class CXStr *,bool *),GetGaugeValueFromEQ_Trampoline);
 }
 
 // Called once, when the plugin is to shutdown
@@ -135,4 +190,3 @@ PLUGIN_API VOID ShutdownLabelsPlugin(VOID)
     //RemoveDetour(CGaugeWnd__Draw);
     //RemoveDetour(__GetGaugeValueFromEQ);
 }
-

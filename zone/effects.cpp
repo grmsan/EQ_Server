@@ -16,6 +16,8 @@
 	Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 */
 
+#include <algorithm>
+
 #include "../common/global_define.h"
 #include "../common/eqemu_logsys.h"
 #include "../common/spdat.h"
@@ -29,6 +31,28 @@
 #include "worldserver.h"
 #include "zonedb.h"
 #include "position.h"
+#include "combat_balance_config.h"
+
+// Local helpers for new DEX formulas (mirrors attack.cpp helpers)
+static float DexCritChanceNew(const Mob* mob) {
+	if (!mob) return 0.0f;
+	int level = mob->GetLevel();
+	int dex = mob->GetDEX();
+	float main = (static_cast<float>(dex) * static_cast<float>(level)) / CombatBalance::DEX_CRIT_DIVISOR;
+	float floor_term = static_cast<float>(dex) / CombatBalance::DEX_CRIT_MIN_DIVISOR;
+	float step_term = 0.0f;
+	if (CombatBalance::DEX_CRIT_STEP_PER_PERCENT > 0.0f) {
+		step_term = static_cast<float>(dex) / CombatBalance::DEX_CRIT_STEP_PER_PERCENT;
+	}
+	return main + floor_term + step_term;
+}
+
+static float DexCritDmgBonus(const Mob* mob, float overflow) {
+	if (!mob) return 0.0f;
+	int dex = mob->GetDEX();
+	float base = static_cast<float>(dex) / CombatBalance::DEX_BASE_CRIT_DMG_DIVISOR;
+	return base + overflow;
+}
 
 float Mob::GetActSpellRange(uint16 spell_id, float range)
 {
@@ -61,12 +85,31 @@ int64 Mob::GetActSpellDamage(uint16 spell_id, int64 value, Mob* target) {
 	int chance = 0;
 	int legacy_manaburn_cap = RuleI(Spells, LegacyManaburnCap);
 
-	chance = RuleI(Spells, BaseCritChance); //Wizard base critical chance is 2% (Does not scale with level)
-	chance += itembonuses.CriticalSpellChance + spellbonuses.CriticalSpellChance + aabonuses.CriticalSpellChance;
-	chance += itembonuses.FrenziedDevastation + spellbonuses.FrenziedDevastation + aabonuses.FrenziedDevastation;
+	if (RuleB(Combat, UseNewDexFormulas)) {
+		float dexChance = DexCritChanceNew(this);
+		float totalChance = dexChance +
+			static_cast<float>(itembonuses.CriticalSpellChance + spellbonuses.CriticalSpellChance + aabonuses.CriticalSpellChance) +
+			static_cast<float>(itembonuses.FrenziedDevastation + spellbonuses.FrenziedDevastation + aabonuses.FrenziedDevastation) +
+			static_cast<float>(RuleI(Spells, BaseCritChance));
+		float overflow = std::max(0.0f, totalChance - 100.0f) * CombatBalance::DEX_CRIT_OVERFLOW_SCALAR;
+		// DOTs crit too
+		if (spells[spell_id].good_effect == 0 || spells[spell_id].buff_duration_formula < 0 || spells[spell_id].unstackable_dot == 0) {
+			if (zone->random.Roll(totalChance)) {
+				Critical = true;
+				int32 ratio = RuleI(Spells, BaseCritRatio);
+				ratio += itembonuses.SpellCritDmgIncrease + spellbonuses.SpellCritDmgIncrease + aabonuses.SpellCritDmgIncrease;
+				ratio += itembonuses.SpellCritDmgIncNoStack + spellbonuses.SpellCritDmgIncNoStack + aabonuses.SpellCritDmgIncNoStack;
+				ratio += static_cast<int32>(DexCritDmgBonus(this, overflow));
+				value = base_value * ratio / 100;
+			}
+		}
+	} else {
+		chance = RuleI(Spells, BaseCritChance); //Wizard base critical chance is 2% (Does not scale with level)
+		chance += itembonuses.CriticalSpellChance + spellbonuses.CriticalSpellChance + aabonuses.CriticalSpellChance;
+		chance += itembonuses.FrenziedDevastation + spellbonuses.FrenziedDevastation + aabonuses.FrenziedDevastation;
 
 	//Crtical Hit Calculation pathway
-	if (chance > 0 || (IsOfClientBot() && GetClass() == Class::Wizard && GetLevel() >= RuleI(Spells, WizCritLevel))) {
+	if (!RuleB(Combat, UseNewDexFormulas) && (chance > 0 || (IsOfClientBot() && GetClass() == Class::Wizard && GetLevel() >= RuleI(Spells, WizCritLevel)))) {
 
 		 int32 ratio = RuleI(Spells, BaseCritRatio); //Critical modifier is applied from spell effects only. Keep at 100 for live like criticals.
 
@@ -159,6 +202,8 @@ int64 Mob::GetActSpellDamage(uint16 spell_id, int64 value, Mob* target) {
 
 			return value;
 		}
+	}
+	// End legacy crit flow (UseNewDexFormulas == false)
 	}
 	//Non Crtical Hit Calculation pathway
 	value = base_value;
@@ -261,6 +306,9 @@ int64 Mob::GetActDoTDamage(uint16 spell_id, int64 value, Mob* target, bool from_
 	int64 extra_dmg = 0;
 	int16 chance = 0;
 	chance += itembonuses.CriticalDoTChance + spellbonuses.CriticalDoTChance + aabonuses.CriticalDoTChance;
+	if (RuleB(Combat, UseNewDexFormulas)) {
+		chance += static_cast<int16>(DexCritChanceNew(this));
+	}
 
 	if (spellbonuses.CriticalDotDecay)
 		chance += GetDecayEffectValue(spell_id, SpellEffect::CriticalDotDecay);
@@ -271,6 +319,10 @@ int64 Mob::GetActDoTDamage(uint16 spell_id, int64 value, Mob* target, bool from_
 	if (!spells[spell_id].good_effect && chance > 0 && (zone->random.Roll(chance))) {
 		int64 ratio = 200;
 		ratio += itembonuses.DotCritDmgIncrease + spellbonuses.DotCritDmgIncrease + aabonuses.DotCritDmgIncrease;
+		if (RuleB(Combat, UseNewDexFormulas)) {
+			float overflow = std::max(0.0f, static_cast<float>(chance) - 100.0f) * CombatBalance::DEX_CRIT_OVERFLOW_SCALAR;
+			ratio += static_cast<int64>(DexCritDmgBonus(this, overflow));
+		}
 		value = base_value*ratio/100;
 		value += int64(base_value*GetFocusEffect(focusImprovedDamage, spell_id, nullptr, from_buff_tic)/100)*ratio/100;
 		value += int64(base_value*GetFocusEffect(focusImprovedDamage2, spell_id, nullptr, from_buff_tic)/100)*ratio/100;
@@ -360,6 +412,18 @@ int64 Mob::GetActDoTDamage(uint16 spell_id, int64 value, Mob* target, bool from_
 		}
 
 		value -= extra_dmg;
+	}
+
+	if (RuleB(Combat, UseNewDexFormulas) && CombatBalance::ENABLE_DEX_DOT_TWINCAST) {
+		float dex_for_twincast = static_cast<float>(GetDEX());
+		if (IsPet() && GetOwner()) {
+			dex_for_twincast = static_cast<float>(GetOwner()->GetDEX()) * CombatBalance::PET_DEX_TWINCAST_SCALAR;
+		}
+		float twincast_chance = dex_for_twincast / CombatBalance::DEX_DOT_TWINCAST_DIVISOR;
+		twincast_chance = std::min(twincast_chance, 100.0f);
+		if (twincast_chance > 0.0f && zone->random.Roll(twincast_chance)) {
+			value *= 2;
+		}
 	}
 
 	return value;

@@ -21,6 +21,12 @@ Usage:
   - Run a query
     python tools/db_viewer.py --query "SELECT * FROM items LIMIT 10"
 
+  - Run a SQL script (multiple statements)
+    python tools/db_viewer.py --script utils/sql/custom/cleanup_dynamic_items.sql
+
+  - Dry-run a script (print statements, do not execute)
+    python tools/db_viewer.py --script utils/sql/custom/cleanup_dynamic_items.sql --dry-run
+
   - Run interactive shell
     python tools/db_viewer.py --shell
 
@@ -34,6 +40,7 @@ Dependencies:
 
 import argparse
 import csv
+import inspect
 import json
 import os
 import sys
@@ -73,7 +80,7 @@ def pretty_print_table(columns, rows, truncate=30, header=True):
 class DBViewer:
     def __init__(self, host=None, port=None, user=None, password=None, db=None):
         self.host = host
-        self.port = port or 3306
+        self.port = port or 3308
         self.user = user
         self.password = password
         self.db = db
@@ -200,6 +207,88 @@ class DBViewer:
             print("Query executed (no results)" )
         cur.close()
 
+    def _strip_comments_and_split(self, sql_text):
+        """
+        Remove line/block comments and split into individual statements on semicolons.
+        Not a full SQL parser; avoid using with custom DELIMITER blocks.
+        """
+        lines = []
+        in_block = False
+        for raw in sql_text.splitlines():
+            line = raw
+            stripped = line.strip()
+            if in_block:
+                if '*/' in stripped:
+                    in_block = False
+                continue
+            if stripped.startswith('/*'):
+                if '*/' not in stripped:
+                    in_block = True
+                continue
+            if stripped.startswith('--') or stripped.startswith('#') or stripped == '':
+                continue
+            # crude inline comment removal
+            for token in ('--', '#'):
+                if token in line:
+                    line = line.split(token, 1)[0]
+            if line.strip():
+                lines.append(line)
+        cleaned = '\n'.join(lines)
+        return [s.strip() for s in cleaned.split(';') if s.strip()]
+
+    def run_script(self, path, stop_on_error=False, dry_run=False):
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"Script not found: {path}")
+        with open(path, 'r', encoding='utf-8') as f:
+            sql_text = f.read()
+        if not sql_text.strip():
+            print(f"{path}: empty script; nothing to run")
+            return
+
+        statements = self._strip_comments_and_split(sql_text)
+
+        if dry_run:
+            print(f"[DRY RUN] Would execute statements from: {path}")
+            if not statements:
+                print("(No statements detected)")
+                return
+            for i, stmt in enumerate(statements, 1):
+                print(f"[{i}] {stmt};")
+            print(f"Total statements: {len(statements)}")
+            return
+
+        cur = self.conn.cursor()
+        print(f"Running script: {path}")
+        idx = 0
+        supports_multi = 'multi' in inspect.signature(cur.execute).parameters
+        try:
+            if supports_multi:
+                for idx, stmt in enumerate(cur.execute(sql_text, multi=True), start=1):
+                    if stmt.with_rows:
+                        rows = stmt.fetchall()
+                        cols = [d[0] for d in stmt.description]
+                        print(f"[{idx}] Result set ({len(rows)} rows)")
+                        pretty_print_table(cols, rows)
+                    else:
+                        print(f"[{idx}] OK ({stmt.rowcount} rows affected)")
+            else:
+                # Fallback: run pre-split statements (comments stripped)
+                for idx, statement in enumerate(statements, start=1):
+                    cur.execute(statement)
+                    if cur.with_rows:
+                        rows = cur.fetchall()
+                        cols = [d[0] for d in cur.description]
+                        print(f"[{idx}] Result set ({len(rows)} rows)")
+                        pretty_print_table(cols, rows)
+                    else:
+                        print(f"[{idx}] OK ({cur.rowcount} rows affected)")
+        except Exception as e:
+            print(f"Error in script at statement {idx}: {e}")
+            if stop_on_error:
+                cur.close()
+                raise
+        cur.close()
+
     def shell(self):
         print('DB Viewer Shell; enter SQL or `help` or `.exit`')
         while True:
@@ -213,7 +302,7 @@ class DBViewer:
             if s in ('.exit', 'exit', 'quit'):
                 break
             if s == 'help':
-                print('Commands:\n  list-tables, list-dbs, desc <table>, create <table>, rows <table> <limit>, count <table>, sample <table> <limit>\n  sql <SQL>')
+                print('Commands:\n  list-tables, list-dbs, desc <table>, create <table>, rows <table> <limit>, count <table>, sample <table> <limit>\n  sql <SQL>\n  run <path.sql>  (execute script)\n  run-dry <path.sql>  (print statements, do not execute)')
                 continue
             if s.startswith('list-dbs'):
                 self.list_databases(); continue
@@ -231,6 +320,10 @@ class DBViewer:
                 parts = s.split(); self.sample(parts[1], int(parts[2]) if len(parts) > 2 else 5); continue
             if s.startswith('sql '):
                 parts = s.split(None, 1); self.query(parts[1]); continue
+            if s.startswith('run '):
+                parts = s.split(None, 1); self.run_script(parts[1]); continue
+            if s.startswith('run-dry '):
+                parts = s.split(None, 1); self.run_script(parts[1], dry_run=True); continue
             # otherwise run raw SQL
             self.query(s)
 
@@ -252,9 +345,12 @@ if __name__ == '__main__':
     group.add_argument('--count', help='Row count for table')
     group.add_argument('--sample', help='Random sample from table')
     group.add_argument('--query', help='Run SQL query')
+    group.add_argument('--script', help='Run SQL script file')
     group.add_argument('--shell', action='store_true', help='Interactive shell')
     ap.add_argument('--limit', type=int, default=20, help='Limit for rows')
     ap.add_argument('--csv', help='Write query results to CSV')
+    ap.add_argument('--stop-on-error', action='store_true', help='Stop script execution on first error')
+    ap.add_argument('--dry-run', action='store_true', help='Print script statements without executing (use with --script)')
 
     args = ap.parse_args()
 
@@ -282,6 +378,8 @@ if __name__ == '__main__':
             dv.sample(args.sample, args.limit)
         elif args.query:
             dv.query(args.query, args.limit, args.csv)
+        elif args.script:
+            dv.run_script(args.script, stop_on_error=args.stop_on_error, dry_run=args.dry_run)
         elif args.shell:
             dv.shell()
         else:

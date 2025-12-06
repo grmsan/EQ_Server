@@ -33,8 +33,8 @@ except Exception:
 DEFAULT_CONFIG_PATH = os.path.join(os.path.dirname(__file__), '..', 'game_design', 'infinite_progression', 'item_scaling.json')
 
 
-# Basic tiered stat function (similar to CalculateTieredStat)
 def calculate_tiered_stat(base_value, level, base_increment=1, tier_bonus=1, tier_size=10):
+    """Tiered linear growth used in C++."""
     if level <= 0:
         return base_value
     total = base_value
@@ -57,49 +57,56 @@ def apply_stat_cap(value):
     return base_display, heroic
 
 
-# Pool distribution - Option A auto budget
+# Pool distribution - Option A auto budget (matches server logic: sum raw scaled, weight by presence/absence)
 def pool_distribute_auto(base_attrs, scaled_attrs, presence_mults, absence_mults, slot_mult=1.0):
-    raw_scaled = {k: scaled_attrs.get(k, 0) for k in base_attrs}
     attr_keys = ['STR', 'STA', 'AGI', 'DEX', 'INT', 'WIS', 'CHA']
-    budget = sum(max(0, raw_scaled.get(k, 0) - base_attrs.get(k, 0)) for k in attr_keys)
-    budget = int(math.floor(budget * slot_mult))
+    raw_scaled = {k: scaled_attrs.get(k, 0) for k in attr_keys}
+    budget = int(math.floor(sum(raw_scaled.values()) * slot_mult))
 
     weights = {}
-    for k in base_attrs:
-        if base_attrs.get(k, 0) > 0:
-            weights[k] = base_attrs.get(k, 0) * presence_mults.get(k, 1.0)
-        else:
-            weights[k] = absence_mults.get(k, 0.1)
+    for k in attr_keys:
+        weights[k] = presence_mults.get(k, 1.0) if base_attrs.get(k, 0) > 0 else absence_mults.get(k, 1.0)
 
     total_weight = sum(weights.values())
     if total_weight <= 0 or budget <= 0:
-        # even distribution or nothing to distribute
-        per = budget // len(base_attrs) if budget > 0 else 0
-        return {k: base_attrs.get(k, 0) + per for k in base_attrs}
+        return {k: base_attrs.get(k, 0) for k in attr_keys}
 
     result = {}
-    for k in base_attrs:
-        share = math.floor((weights[k] / total_weight) * budget)
-        result[k] = base_attrs.get(k, 0) + share
+    remaining = budget
+    for idx, k in enumerate(attr_keys):
+        if idx == len(attr_keys) - 1:
+            share = remaining
+        else:
+            share = int(math.floor((weights[k] / total_weight) * budget))
+            if share > remaining:
+                share = remaining
+            remaining -= share
+        result[k] = share
     return result
 
 
 def pool_distribute_static(base_attrs, static_budget, presence_mults, absence_mults, slot_mult=1.0):
+    attr_keys = ['STR', 'STA', 'AGI', 'DEX', 'INT', 'WIS', 'CHA']
+    static_budget = int(math.floor(static_budget * slot_mult))
     weights = {}
-    for k in base_attrs:
-        if base_attrs.get(k, 0) > 0:
-            weights[k] = base_attrs.get(k, 0) * presence_mults.get(k, 1.0)
-        else:
-            weights[k] = absence_mults.get(k, 0.1)
+    for k in attr_keys:
+        weights[k] = presence_mults.get(k, 1.0) if base_attrs.get(k, 0) > 0 else absence_mults.get(k, 1.0)
+
     total_weight = sum(weights.values())
     if total_weight <= 0 or static_budget <= 0:
-        per = static_budget // len(base_attrs) if static_budget > 0 else 0
-        return {k: base_attrs.get(k, 0) + per for k in base_attrs}
+        return {k: base_attrs.get(k, 0) for k in attr_keys}
+
     result = {}
-    static_budget = int(math.floor(static_budget * slot_mult))
-    for k in base_attrs:
-        share = math.floor((weights[k] / total_weight) * static_budget)
-        result[k] = base_attrs.get(k, 0) + share
+    remaining = static_budget
+    for idx, k in enumerate(attr_keys):
+        if idx == len(attr_keys) - 1:
+            share = remaining
+        else:
+            share = int(math.floor((weights[k] / total_weight) * static_budget))
+            if share > remaining:
+                share = remaining
+            remaining -= share
+        result[k] = share
     return result
 
 
@@ -220,68 +227,118 @@ def generate_curve_points(preset, start_lvl, end_lvl, start_val, end_val, streng
     return compressed
 
 
-def scaled_item(base, level, slot_mults=None, config=None):
-    # Use calculate_tiered_stat for attributes and weapon/damage/attack
-    out = base.copy()
-    # primary stats
-    # If JSON curves exist, use them; otherwise fall back to tiered defaults
-    if config and 'PrimaryCurves' in config:
-        pc = config['PrimaryCurves']
-        ac_curve = pc.get('AC', {}).get('points') if 'AC' in pc else None
-        hp_curve = pc.get('HP', {}).get('points') if 'HP' in pc else None
-        ac_mult = evaluate_curve(ac_curve, level) if ac_curve else 1.0
-        hp_mult = evaluate_curve(hp_curve, level) if hp_curve else 1.0
-        out['AC'] = int(math.floor(calculate_tiered_stat(base.get('AC', 0), level, base_increment=1, tier_bonus=1) * ac_mult))
-        out['HP'] = int(math.floor(calculate_tiered_stat(base.get('HP', 0), level, base_increment=4, tier_bonus=4) * hp_mult))
-    else:
-        out['AC'] = calculate_tiered_stat(base.get('AC', 0), level, base_increment=1, tier_bonus=1)
-        out['HP'] = calculate_tiered_stat(base.get('HP', 0), level, base_increment=4, tier_bonus=4)
-    # For the preview we use attribute base increment 1
-    for k in ['STR', 'STA', 'AGI', 'DEX', 'INT', 'WIS', 'CHA']:
-        # AttributeCurve multiplier from JSON
-        attr_curve_points = None
-        if config:
-            # prefer curve_override from config's AttributeCurve if present, else use config default
-            attr_curve_points = config.get('AttributeCurve', {}).get('points') if 'AttributeCurve' in config and config.get('AttributeCurve') else None
-        attr_mult = evaluate_curve(attr_curve_points, level) if attr_curve_points else 1.0
-        out[k] = int(math.floor(calculate_tiered_stat(base.get(k, 0), level, base_increment=1, tier_bonus=1) * attr_mult))
-    # Mod2-ish
-    mod_points = config.get('Mod2Curves', {}) if config else {}
-    shielding_curve = mod_points.get('Shielding', {}).get('points')
-    strikethrough_curve = mod_points.get('StrikeThrough', {}).get('points')
-    shielding_mult = evaluate_curve(shielding_curve, level) if shielding_curve else 1.0
-    strk_mult = evaluate_curve(strikethrough_curve, level) if strikethrough_curve else 1.0
-    out['Shielding'] = int(math.floor(calculate_tiered_stat(base.get('Shielding', 0), level, base_increment=1, tier_bonus=0) * shielding_mult))
-    out['StrikeThrough'] = int(math.floor(calculate_tiered_stat(base.get('StrikeThrough', 0), level, base_increment=2, tier_bonus=1) * strk_mult))
-    # weapon fields
-    if base.get('Damage', 0) > 0:
-        weapon_curves = config.get('WeaponCurves', {}) if config else {}
-        dmg_curve_points = weapon_curves.get('Damage', {}).get('points')
-        atk_curve_points = weapon_curves.get('Attack', {}).get('points')
-        dmg_mult = evaluate_curve(dmg_curve_points, level) if dmg_curve_points else 1.0
-        atk_mult = evaluate_curve(atk_curve_points, level) if atk_curve_points else 1.0
-        out['Damage'] = int(math.floor(calculate_tiered_stat(base.get('Damage', 0), level, base_increment=4, tier_bonus=4) * dmg_mult))
-        out['Attack'] = int(math.floor(calculate_tiered_stat(base.get('Attack', 0), level, base_increment=2, tier_bonus=2) * atk_mult))
+def scaled_item(base, level, slot_mults=None, config=None, attr_prefs=None, base_factor_divisor=22.0):
+    """
+    Preview scaling aligned with C++:
+    - Tiered base
+    - AttributeCurve + presence/absence + base-factor boost (1 + base/ divisor)
+    - Primary/Mod2/Weapon curves from JSON
+    - Ratio-based weapon damage with floor base+1
+    """
+    out = {}
+    slot_mults = slot_mults or {}
+    if attr_prefs is None:
+        if config and 'AttributePreferences' in config:
+            attr_prefs = {}
+            for k, v in config.get('AttributePreferences', {}).items():
+                mapped = k[1:].upper() if k.startswith('A') else k.upper()
+                attr_prefs[mapped] = {
+                    "presence_mult": v.get("presence_mult", 1.0),
+                    "absence_mult": v.get("absence_mult", 1.0)
+                }
+        else:
+            attr_prefs = {k: {"presence_mult": 1.0, "absence_mult": 1.0} for k in ['STR','STA','AGI','DEX','INT','WIS','CHA']}
 
-    # SpellDmg and HealAmt will be computed after pool redistribution in the UI flow
+    # Primary
+    pc = config.get('PrimaryCurves', {}) if config else {}
+    def prim(key, inc, bonus):
+        basev = base.get(key, 0)
+        curve = pc.get(key, {}).get('points') if key in pc else None
+        mult = evaluate_curve(curve, level) if curve else 1.0
+        return calculate_tiered_stat(basev, level, inc, bonus) * mult
+    ac = prim('AC', 1, 1) * (1.0 + base.get('AC', 0) / 200.0)
+    hp = prim('HP', 4, 4) * (1.0 + base.get('HP', 0) / 500.0)
+    mana = prim('Mana', 1, 1)
+    endur = prim('Endur', 4, 4)
+
+    for k,val in [('AC',ac),('HP',hp),('Mana',mana),('Endur',endur)]:
+        mult = slot_mults.get(k, 1.0)
+        out[k] = int(math.floor(val * mult))
+
+    # Attributes
+    attr_curve = config.get('AttributeCurve', {}).get('points') if config else None
+    attr_mult = evaluate_curve(attr_curve, level) if attr_curve else 1.0
+    for k in ['STR','STA','AGI','DEX','INT','WIS','CHA']:
+        basev = base.get(k, 0)
+        pref_cfg = attr_prefs.get(k, {})
+        pref_mult = pref_cfg.get('presence_mult', 1.0) if basev > 0 else pref_cfg.get('absence_mult', 1.0)
+        base_factor = 1.0 + (basev / base_factor_divisor)
+        val = calculate_tiered_stat(basev, level, 1, 1) * attr_mult * pref_mult * base_factor
+        if slot_mults.get('Attributes'):
+            val *= slot_mults['Attributes']
+        out[k] = int(math.floor(val))
+
+    # Weapon Attack
+    weapon_curves = config.get('WeaponCurves', {}) if config else {}
+    atk_curve = weapon_curves.get('Attack', {}).get('points') if weapon_curves else None
+    atk_mult = evaluate_curve(atk_curve, level) if atk_curve else 1.0
+    atk_val = calculate_tiered_stat(base.get('Attack', 0), level, 2, 2) * atk_mult
+    out['Attack'] = int(math.floor(atk_val * slot_mults.get('Attack', 1.0)))
+
+    # Weapon Damage (ratio-based)
+    if base.get('Damage', 0) > 0:
+        dmg_curve = weapon_curves.get('Damage', {}).get('points') if weapon_curves else None
+        dmg_mult = evaluate_curve(dmg_curve, level) if dmg_curve else 1.0
+        delay = max(1, base.get('Delay', 30))
+        ratio = base['Damage'] / delay
+        dmg_val = ratio * (1.0 + level * 0.10) * dmg_mult * delay
+        dmg_val = max(base['Damage'] + 1, int(math.floor(dmg_val)))
+        dmg_val = int(math.floor(dmg_val * slot_mults.get('Damage', 1.0)))
+        out['Damage'] = max(base['Damage'] + 1, dmg_val)
+
+    # Mod2s (mirror C++: tiered stat then curve; no hard clamp here)
+    mod_curves = config.get('Mod2Curves', {}) if config else {}
+    extras_curves = config.get('Mod2CurvesExtras', {}) if config else {}
+    combined_mod2 = {}
+    combined_mod2.update(mod_curves)
+    combined_mod2.update(extras_curves)
+    # constants from ScalingConfig (dynamic_item_manager.h)
+    combat_base_increment = 0
+    combat_tier_bonus = 0
+    caster_base_increment = 5
+    caster_tier_bonus = 5
+    regen_base_increment = 1
+    regen_tier_bonus = 1
+    for key, curve_cfg in combined_mod2.items():
+        base_val = base.get(key, 0)
+        if base_val <= 0:
+            continue
+        # per-key increment overrides to mirror C++
+        base_inc = combat_base_increment
+        tier_bonus = combat_tier_bonus
+        if key == 'StrikeThrough':
+            base_inc = combat_base_increment + 2
+            tier_bonus = combat_tier_bonus + 1
+        elif key in ('DamageShield', 'DotShielding'):
+            base_inc = combat_base_increment + 1
+            tier_bonus = combat_tier_bonus + 1
+        elif key in ('HealAmt', 'SpellDmg'):
+            base_inc = caster_base_increment
+            tier_bonus = caster_tier_bonus
+        elif key in ('Regen', 'ManaRegen', 'EnduranceRegen'):
+            base_inc = regen_base_increment
+            tier_bonus = regen_tier_bonus
+
+        raw = calculate_tiered_stat(base_val, level, base_inc, tier_bonus, tier_size=10)
+        curve = curve_cfg.get('points')
+        mult = evaluate_curve(curve, level) if curve else 1.0
+        val = int(round(raw * mult))
+        val = int(round(val * slot_mults.get(key, 1.0)))
+        out[key] = val
+
+    # SpellDmg/HealAmt placeholders (derived in UI later)
     out['SpellDmg'] = base.get('SpellDmg', 0)
     out['HealAmt'] = base.get('HealAmt', 0)
-
-    # Apply slot multipliers
-    if slot_mults:
-        if 'HP' in slot_mults and out.get('HP', 0) > 0:
-            out['HP'] = int(math.floor(out['HP'] * slot_mults['HP']))
-        if 'AC' in slot_mults and out.get('AC', 0) > 0:
-            out['AC'] = int(math.floor(out['AC'] * slot_mults['AC']))
-        if 'Damage' in slot_mults and out.get('Damage', 0) > 0:
-            out['Damage'] = int(math.floor(out['Damage'] * slot_mults['Damage']))
-        if 'Attack' in slot_mults and out.get('Attack', 0) > 0:
-            out['Attack'] = int(math.floor(out['Attack'] * slot_mults['Attack']))
-        if 'Attributes' in slot_mults:
-            for k in ['STR', 'STA', 'AGI', 'DEX', 'INT', 'WIS', 'CHA']:
-                if out.get(k, 0) > 0:
-                    out[k] = int(math.floor(out[k] * slot_mults['Attributes']))
-
     return out
 
 
@@ -293,29 +350,64 @@ def sum_items(items):
     return totals
 
 
+def make_section(parent, title, help_text, row, start_collapsed=False):
+    outer = tk.Frame(parent)
+    outer.grid(row=row, column=0, columnspan=2, sticky='we', pady=(6, 6))
+    header = tk.Frame(outer)
+    header.pack(side='top', fill='x')
+    body = tk.Frame(outer)
+    if start_collapsed:
+        collapsed = {'val': True}
+    else:
+        body.pack(side='top', fill='x')
+        collapsed = {'val': False}
+
+    def toggle():
+        if collapsed['val']:
+            body.pack(side='top', fill='x')
+            toggle_btn.configure(text='–')
+            collapsed['val'] = False
+        else:
+            body.pack_forget()
+            toggle_btn.configure(text='+')
+            collapsed['val'] = True
+
+    def show_help():
+        messagebox.showinfo(title, help_text)
+
+    toggle_btn = tk.Button(header, text='+' if start_collapsed else '–', width=2, command=toggle)
+    toggle_btn.pack(side='left')
+    tk.Label(header, text=title, font=('TkDefaultFont', 10, 'bold')).pack(side='left', padx=(4, 4))
+    tk.Button(header, text='?', width=2, command=show_help).pack(side='right')
+    return body
+
+
 class ItemScaleApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title('Item Scale Preview')
-        self.geometry('950x700')
+        self.geometry('1400x900')
         self.config = self.load_config()
         self.slot_mults = get_default_slot_multipliers(self.config)
+        # Presence/absence multipliers from config
+        self.presence_mults = {}
+        self.absence_mults = {}
         if self.config and 'AttributePreferences' in self.config:
-            self.presence_mults = {}
             for k, v in self.config.get('AttributePreferences', {}).items():
-                # keys in JSON are like 'AStr' - map to 'STR'
-                if k.startswith('A') and len(k) > 1:
-                    mapped = k[1:].upper()
-                else:
-                    mapped = k.upper()
+                mapped = k[1:].upper() if k.startswith('A') else k.upper()
                 self.presence_mults[mapped] = v.get('presence_mult', 1.0)
+                self.absence_mults[mapped] = v.get('absence_mult', 1.0)
         else:
-            self.presence_mults = {'STR': 1.2, 'STA': 1.1, 'AGI': 1.15, 'DEX': 1.25, 'INT': 1.6, 'WIS': 1.6, 'CHA': 1.0}
-        self.absence_mults = {k: 0.4 for k in self.presence_mults}
+            for k in ['STR','STA','AGI','DEX','INT','WIS','CHA']:
+                self.presence_mults[k] = 1.0
+                self.absence_mults[k] = 1.0
         # Plot helpers
         self.last_curve_points = None
-        self.marker_line = None
-        self.marker_point = None
+        self.last_growth_points = None
+        self.marker_line_curve = None
+        self.marker_point_curve = None
+        self.marker_line_growth = None
+        self.marker_point_growth = None
         self.create_widgets()
 
     def load_config(self):
@@ -328,23 +420,43 @@ class ItemScaleApp(tk.Tk):
             pass
         return None
 
+    # Helpers to safely read numeric inputs (avoid "" causing ValueError)
+    def safe_int(self, var, default=0):
+        try:
+            return int(var.get())
+        except Exception:
+            return default
+
+    def safe_float(self, var, default=0.0):
+        try:
+            return float(var.get())
+        except Exception:
+            return default
+
+    def safe_int_from_entry(self, val, default=0):
+        try:
+            return int(val)
+        except Exception:
+            return default
+
     def plot_curve_from_ui(self):
         if not HAS_MATPLOTLIB:
             messagebox.showerror('Plotting unavailable', "Matplotlib is required to plot curves. Install with 'pip install matplotlib'.")
             return
         try:
             preset = self.curve_preset_var.get()
-            s_lvl = int(self.curve_start_level.get())
-            e_lvl = int(self.curve_end_level.get())
-            s_val = float(self.curve_start_val.get())
-            e_val = float(self.curve_end_val.get())
-            strength = float(self.curve_strength_var.get())
+            s_lvl = self.safe_int(self.curve_start_level, 1)
+            e_lvl = self.safe_int(self.curve_end_level, s_lvl)
+            s_val = self.safe_float(self.curve_start_val, 1.0)
+            e_val = self.safe_float(self.curve_end_val, 1.0)
+            strength = self.safe_float(self.curve_strength_var, 1.0)
             points = generate_curve_points(preset, s_lvl, e_lvl, s_val, e_val, strength, steps=200)
             # plot
-            self.ax.clear()
-            xs = [p[0] for p in points]
-            ys = [p[1] for p in points]
-            self.ax.plot(xs, ys, label=f'{preset}')
+            self.ax_curve.clear()
+            if self.show_generator_curve.get():
+                xs = [p[0] for p in points]
+                ys = [p[1] for p in points]
+                self.ax_curve.plot(xs, ys, label=f'generator: {preset}')
             # optional plots for primary attributes
             try:
                 # draw markers for base and scaled attributes if present
@@ -362,15 +474,22 @@ class ItemScaleApp(tk.Tk):
                     if attr and attr in s_slot:
                         aval = s_slot[attr]
                         # draw a horizontal line where the attribute value sits relative to the multiplier curve
-                        self.ax.axhline(aval, color='green', linestyle=':', linewidth=1, zorder=2)
+                        self.ax_curve.axhline(aval, color='green', linestyle=':', linewidth=1, zorder=2)
                         # note: attribute value vs curve multiplier is not an exact relation but provides a visual cue
             except Exception:
                 pass
-            self.ax.set_xlabel('Level')
-            self.ax.set_ylabel('Scale Mult')
-            self.ax.set_title(f'{preset} curve ({s_lvl}-{e_lvl})')
-            self.ax.grid(True)
-            self.ax.legend()
+            # overlay config curve if requested
+            if self.plot_config_curve.get():
+                cfg_pts = self.get_config_curve_points(self.curve_config_stat_var.get())
+                if cfg_pts:
+                    xs2 = [p[0] for p in cfg_pts]
+                    ys2 = [p[1] for p in cfg_pts]
+                    self.ax_curve.plot(xs2, ys2, label='config', linestyle='--', color='orange')
+            self.ax_curve.set_xlabel('Level')
+            self.ax_curve.set_ylabel('Scale Mult')
+            self.ax_curve.set_title(f'{preset} curve ({s_lvl}-{e_lvl})')
+            self.ax_curve.grid(True)
+            self.ax_curve.legend()
             # remember last plotted curve for marker updates
             self.last_curve_points = points
             self.canvas.draw()
@@ -382,11 +501,11 @@ class ItemScaleApp(tk.Tk):
         # Create curve points from UI and set into memory override as AttributeCurve
         try:
             preset = self.curve_preset_var.get()
-            s_lvl = int(self.curve_start_level.get())
-            e_lvl = int(self.curve_end_level.get())
-            s_val = float(self.curve_start_val.get())
-            e_val = float(self.curve_end_val.get())
-            strength = float(self.curve_strength_var.get())
+            s_lvl = self.safe_int(self.curve_start_level, 1)
+            e_lvl = self.safe_int(self.curve_end_level, s_lvl)
+            s_val = self.safe_float(self.curve_start_val, 1.0)
+            e_val = self.safe_float(self.curve_end_val, 1.0)
+            strength = self.safe_float(self.curve_strength_var, 1.0)
             points = generate_curve_points(preset, s_lvl, e_lvl, s_val, e_val, strength, steps=200)
             self.curve_override = points
             # Keep override in the config memory to use for scaling
@@ -442,16 +561,80 @@ class ItemScaleApp(tk.Tk):
         with open(path, 'w', encoding='utf8') as f:
             json.dump(cfg, f, indent=2)
 
+    def plot_growth_from_ui(self):
+        if not HAS_MATPLOTLIB:
+            return
+        try:
+            start_lvl = max(1, self.safe_int(self.growth_start_level, 1))
+            end_lvl = max(start_lvl, self.safe_int(self.growth_end_level, start_lvl))
+            step = max(1, self.safe_int(self.growth_step, 1))
+            stat = self.growth_stat_var.get()
+            base = self.get_item_from_inputs()
+            slot = self.slot_var.get()
+            slot_mult = self.slot_mults.get(slot, {})
+            points = []
+            for lvl in range(start_lvl, end_lvl + 1, step):
+                scaled = scaled_item(base, lvl, slot_mult, config=self.config)
+                points.append((lvl, scaled.get(stat, 0)))
+            self.ax_growth.clear()
+            if points:
+                xs = [p[0] for p in points]
+                ys = [p[1] for p in points]
+                self.ax_growth.plot(xs, ys, label=f'{stat} ({slot})')
+                self.ax_growth.set_title(f'{stat} growth ({start_lvl}-{end_lvl})')
+                self.ax_growth.set_xlabel('Level')
+                self.ax_growth.set_ylabel(stat)
+                self.ax_growth.grid(True)
+                self.ax_growth.legend()
+            self.last_growth_points = points
+            self.canvas.draw()
+            self.update_growth_marker()
+        except Exception:
+            pass
+
+    def get_config_curve_points(self, target):
+        if not self.config:
+            return None
+        # target example: 'AttributeCurve' or 'PrimaryCurves.AC'
+        parts = target.split('.')
+        node = self.config
+        for p in parts:
+            if p in node:
+                node = node[p]
+            else:
+                return None
+        if isinstance(node, dict) and 'points' in node:
+            return node['points']
+        return None
+
     def create_widgets(self):
-        left = tk.Frame(self)
-        left.pack(side='left', fill='y', padx=8, pady=8)
+        # Scrollable left column (controls)
+        left_container = tk.Frame(self)
+        left_container.pack(side='left', fill='y', padx=8, pady=8)
+        canvas = tk.Canvas(left_container, width=360, highlightthickness=0)
+        scrollbar = tk.Scrollbar(left_container, orient='vertical', command=canvas.yview)
+        self.left = tk.Frame(canvas)
+        self.left.bind(
+            "<Configure>",
+            lambda e: canvas.configure(
+                scrollregion=canvas.bbox("all")
+            )
+        )
+        canvas.create_window((0, 0), window=self.left, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.pack(side="left", fill="y", expand=False)
+        scrollbar.pack(side="right", fill="y")
 
         right = tk.Frame(self)
         right.pack(side='right', fill='both', expand=True, padx=8, pady=8)
 
         # Top controls (level, slot)
-        top_ctrl = tk.Frame(left)
-        top_ctrl.grid(row=0, column=0, columnspan=2, sticky='we')
+        top_ctrl = make_section(
+            self.left,
+            'Step 1: Level & Slot',
+            'Set the target item level and slot. Slot applies slot multipliers from JSON (e.g., Head 1.25x attributes).',
+            row=0
+        )
         tk.Label(top_ctrl, text='Item Level:').grid(row=0, column=0, sticky='w')
         self.level_var = tk.IntVar(value=100)
         tk.Spinbox(top_ctrl, from_=1, to=10000, textvariable=self.level_var, width=8).grid(row=0, column=1)
@@ -459,13 +642,20 @@ class ItemScaleApp(tk.Tk):
         self.slot_var = tk.StringVar(value='Chest')
         slot_names = list(self.slot_mults.keys())
         ttk.Combobox(top_ctrl, values=slot_names, textvariable=self.slot_var, width=12).grid(row=0, column=3)
+        tk.Label(top_ctrl, text='Set level and slot; rest of controls use these.').grid(row=1, column=0, columnspan=4, sticky='w', pady=(4, 0))
 
         # DB Load section
-        db_frame = tk.LabelFrame(left, text='DB Load (optional)', padx=4, pady=4)
-        db_frame.grid(row=1, column=0, columnspan=2, sticky='we', pady=(6, 8))
+        db_frame = make_section(
+            self.left,
+            'DB Load (optional)',
+            'Load an item by ID or search by name from the database to prefill base stats. Requires mysql-connector.',
+            row=1,
+            start_collapsed=True
+        )
         tk.Label(db_frame, text='Item ID load:').grid(row=0, column=0, sticky='w', padx=(0, 4))
-        self.item_id_var = tk.IntVar(value=0)
-        tk.Entry(db_frame, textvariable=self.item_id_var, width=12).grid(row=0, column=1)
+        self.item_id_var = tk.StringVar(value='0')
+        tk.Entry(db_frame, textvariable=self.item_id_var, width=12, validate='key',
+                 validatecommand=(self.register(lambda P: True), '%P')).grid(row=0, column=1)
         tk.Button(db_frame, text='Load From DB', command=self.load_item_from_db_gui).grid(row=0, column=2, padx=(6, 0))
         # Search by name
         tk.Label(db_frame, text='Search name:').grid(row=1, column=0, sticky='w', pady=(6, 0))
@@ -485,15 +675,20 @@ class ItemScaleApp(tk.Tk):
         tk.Button(db_frame, text='Load Selected', command=self.load_selected_from_search).grid(row=4, column=0, columnspan=3, pady=(6, 0))
 
         # Pool mode section
-        pool_frame = tk.LabelFrame(left, text='Pool Mode', padx=4, pady=4)
-        pool_frame.grid(row=2, column=0, columnspan=2, sticky='we')
+        pool_frame = make_section(
+            self.left,
+            'Pool Mode & Scales',
+            'Auto: sums scaled attributes and redistributes by presence/absence weights. Static: uses fixed budget, distributes by weights. None: keeps raw scaled attributes. Static Budget sets the pool size in Static mode. Global Scale multiplies final stats. Presence Bias slides presence multipliers toward 1.0 (lower = flatter distribution).',
+            row=2
+        )
         self.pool_mode_var = tk.StringVar(value='auto')
         modes = [('Auto', 'auto'), ('Static', 'static'), ('None', 'none')]
         for i, (t, v) in enumerate(modes):
             tk.Radiobutton(pool_frame, text=t, value=v, variable=self.pool_mode_var).grid(row=0, column=i, sticky='w')
         tk.Label(pool_frame, text='Static Budget:').grid(row=1, column=0, sticky='w', pady=(6, 0))
-        self.static_budget_var = tk.IntVar(value=100)
-        tk.Entry(pool_frame, textvariable=self.static_budget_var, width=8).grid(row=1, column=1, sticky='w')
+        self.static_budget_var = tk.StringVar(value='100')
+        tk.Entry(pool_frame, textvariable=self.static_budget_var, width=8, validate='key',
+                 validatecommand=(self.register(lambda P: True), '%P')).grid(row=1, column=1, sticky='w')
         # Global scaling controls
         tk.Label(pool_frame, text='Global Scale:').grid(row=2, column=0, sticky='w', pady=(6, 0))
         self.global_scale_var = tk.DoubleVar(value=1.0)
@@ -502,8 +697,13 @@ class ItemScaleApp(tk.Tk):
         self.presence_bias_var = tk.DoubleVar(value=1.0)
         tk.Scale(pool_frame, variable=self.presence_bias_var, from_=0.0, to=1.0, resolution=0.05, orient='horizontal', length=120).grid(row=3, column=1, sticky='w')
         # Curve generator controls
-        curve_frame = tk.LabelFrame(left, text='Attribute Curve Generator', padx=4, pady=4)
-        curve_frame.grid(row=4, column=0, columnspan=2, sticky='we', pady=(8, 0))
+        curve_frame = make_section(
+            self.left,
+            'Curve Generator',
+            'Design curve points for attributes/primaries/weapons/mod2s. Plot shows generator curve; overlay shows actual config curve from JSON. Apply to preview uses it in-memory; Save writes to JSON with a backup.',
+            row=4,
+            start_collapsed=True
+        )
         tk.Label(curve_frame, text='Attribute:').grid(row=0, column=0, sticky='w')
         self.curve_attr_var = tk.StringVar(value='STR')
         attrs = ['STR', 'STA', 'AGI', 'DEX', 'INT', 'WIS', 'CHA']
@@ -518,16 +718,27 @@ class ItemScaleApp(tk.Tk):
         self.curve_end_level = tk.IntVar(value=100)
         tk.Entry(curve_frame, textvariable=self.curve_end_level, width=6).grid(row=1, column=3, sticky='w')
         tk.Label(curve_frame, text='Start Val:').grid(row=2, column=0, sticky='w')
-        self.curve_start_val = tk.DoubleVar(value=1.0)
-        tk.Entry(curve_frame, textvariable=self.curve_start_val, width=6).grid(row=2, column=1, sticky='w')
+        self.curve_start_val = tk.StringVar(value='1.0')
+        tk.Entry(curve_frame, textvariable=self.curve_start_val, width=6, validate='key',
+                 validatecommand=(self.register(lambda P: True), '%P')).grid(row=2, column=1, sticky='w')
         tk.Label(curve_frame, text='End Val:').grid(row=2, column=2, sticky='w')
-        self.curve_end_val = tk.DoubleVar(value=10.0)
-        tk.Entry(curve_frame, textvariable=self.curve_end_val, width=6).grid(row=2, column=3, sticky='w')
+        self.curve_end_val = tk.StringVar(value='10.0')
+        tk.Entry(curve_frame, textvariable=self.curve_end_val, width=6, validate='key',
+                 validatecommand=(self.register(lambda P: True), '%P')).grid(row=2, column=3, sticky='w')
         tk.Label(curve_frame, text='Strength:').grid(row=3, column=0, sticky='w')
         self.curve_strength_var = tk.DoubleVar(value=1.0)
         tk.Scale(curve_frame, variable=self.curve_strength_var, from_=0.1, to=5.0, resolution=0.1, orient='horizontal', length=150).grid(row=3, column=1, columnspan=3, sticky='w')
-        tk.Button(curve_frame, text='Plot Curve', command=self.plot_curve_from_ui).grid(row=4, column=0, pady=(4, 0))
-        tk.Button(curve_frame, text='Apply to AttributeCurve (Preview Only)', command=self.apply_curve_override).grid(row=4, column=1, columnspan=2, pady=(4, 0))
+        self.show_generator_curve = tk.BooleanVar(value=False)
+        tk.Checkbutton(curve_frame, text='Show generator preview', variable=self.show_generator_curve, command=self.plot_curve_from_ui).grid(row=4, column=0, columnspan=2, sticky='w', pady=(4,0))
+        tk.Button(curve_frame, text='Plot Curve', command=self.plot_curve_from_ui).grid(row=4, column=2, pady=(4, 0))
+        tk.Button(curve_frame, text='Apply to AttributeCurve (Preview Only)', command=self.apply_curve_override).grid(row=4, column=3, pady=(4, 0))
+        # Config curve overlay
+        tk.Label(curve_frame, text='Plot Config Curve:').grid(row=6, column=0, sticky='w', pady=(6,0))
+        self.curve_config_stat_var = tk.StringVar(value='AttributeCurve')
+        cfg_targets = ['AttributeCurve','PrimaryCurves.AC','PrimaryCurves.HP','WeaponCurves.Damage','WeaponCurves.Attack','Mod2Curves.Shielding']
+        ttk.Combobox(curve_frame, values=cfg_targets, textvariable=self.curve_config_stat_var, width=22).grid(row=6, column=1, sticky='w')
+        self.plot_config_curve = tk.BooleanVar(value=True)
+        tk.Checkbutton(curve_frame, text='Overlay actual config', variable=self.plot_config_curve, command=self.plot_curve_from_ui).grid(row=6, column=2, columnspan=2, sticky='w')
         tk.Label(curve_frame, text='Save Target:').grid(row=5, column=0, sticky='w', pady=(6, 0))
         self.save_target_var = tk.StringVar(value='AttributeCurve')
         save_targets = [
@@ -536,51 +747,83 @@ class ItemScaleApp(tk.Tk):
         ttk.Combobox(curve_frame, values=save_targets, textvariable=self.save_target_var, width=20).grid(row=5, column=1, sticky='w')
         tk.Button(curve_frame, text='Save to JSON', command=self.save_curve_to_json_ui).grid(row=5, column=2, columnspan=2, pady=(6, 0))
 
+        # Growth visualizer controls
+        growth_frame = make_section(
+            self.left,
+            'Growth Visualizer',
+            'Plots the actual scaled stat over levels using current base stats, slot, curves, and pool settings. Start/End/Step controls the sampled levels.',
+            row=5
+        )
+        tk.Label(growth_frame, text='Stat:').grid(row=0, column=0, sticky='w')
+        self.growth_stat_var = tk.StringVar(value='AC')
+        ttk.Combobox(growth_frame, values=['AC','HP','Mana','Endur','Damage','Attack','STR','STA','AGI','DEX','INT','WIS','CHA','Shielding'], textvariable=self.growth_stat_var, width=10).grid(row=0, column=1, sticky='w')
+        tk.Label(growth_frame, text='Start Lvl:').grid(row=1, column=0, sticky='w')
+        self.growth_start_level = tk.StringVar(value='1')
+        tk.Entry(growth_frame, textvariable=self.growth_start_level, width=6, validate='key',
+                 validatecommand=(self.register(lambda P: True), '%P')).grid(row=1, column=1, sticky='w')
+        tk.Label(growth_frame, text='End Lvl:').grid(row=1, column=2, sticky='w')
+        self.growth_end_level = tk.StringVar(value='100')
+        tk.Entry(growth_frame, textvariable=self.growth_end_level, width=6, validate='key',
+                 validatecommand=(self.register(lambda P: True), '%P')).grid(row=1, column=3, sticky='w')
+        tk.Label(growth_frame, text='Step:').grid(row=1, column=4, sticky='w')
+        self.growth_step = tk.StringVar(value='5')
+        tk.Entry(growth_frame, textvariable=self.growth_step, width=4, validate='key',
+                 validatecommand=(self.register(lambda P: True), '%P')).grid(row=1, column=5, sticky='w')
+        tk.Button(growth_frame, text='Plot Growth', command=self.plot_growth_from_ui).grid(row=0, column=2, columnspan=3, padx=(8,0))
+
         # Item inputs
         self.entries = {}
-        stat_keys = ['AC', 'HP', 'Damage', 'Attack', 'Shielding', 'StrikeThrough', 'STR', 'STA', 'AGI', 'DEX', 'INT', 'WIS', 'CHA']
-        stats_frame = tk.LabelFrame(left, text='Base Stats (enter for the item)', padx=4, pady=4)
-        stats_frame.grid(row=3, column=0, columnspan=2, pady=(8, 2), sticky='we')
+        stat_keys = ['AC', 'HP', 'Damage', 'Attack', 'Shielding', 'StrikeThrough', 'Accuracy', 'Avoidance', 'StunResist', 'SpellShield', 'STR', 'STA', 'AGI', 'DEX', 'INT', 'WIS', 'CHA']
+        stats_frame = make_section(
+            self.left,
+            'Base Stats',
+            'Enter the raw item values before scaling. Damage/Delay drive ratio scaling; attributes feed the pool; AC/HP get base emphasis.',
+            row=3
+        )
         for i, k in enumerate(stat_keys):
             tk.Label(stats_frame, text=k + ':').grid(row=i, column=0, sticky='w')
-            v = tk.IntVar(value=0)
-            e = tk.Entry(stats_frame, textvariable=v, width=8)
+            v = tk.StringVar(value='0')
+            e = tk.Entry(stats_frame, textvariable=v, width=8, validate='key',
+                         validatecommand=(self.register(lambda P: True), '%P'))
             e.grid(row=i, column=1)
             self.entries[k] = v
 
         # Buttons
-        tk.Button(left, text='Scale Item', command=self.scale_item).grid(row=20, column=0, pady=8)
-        tk.Button(left, text='Equip All Slots', command=self.equip_all).grid(row=20, column=1, pady=8)
-        tk.Button(left, text='Reset', command=self.reset_fields).grid(row=21, column=0)
-        tk.Button(left, text='Export to clipboard', command=self.export_clipboard).grid(row=21, column=1)
+        tk.Button(self.left, text='Scale Item', command=self.scale_item).grid(row=20, column=0, pady=8)
+        tk.Button(self.left, text='Equip All Slots', command=self.equip_all).grid(row=20, column=1, pady=8)
+        tk.Button(self.left, text='Reset', command=self.reset_fields).grid(row=21, column=0)
+        tk.Button(self.left, text='Export to clipboard', command=self.export_clipboard).grid(row=21, column=1)
         self.auto_update = tk.BooleanVar(value=True)
-        tk.Checkbutton(left, text='Auto Update', variable=self.auto_update).grid(row=22, column=0, columnspan=2, sticky='w')
+        tk.Checkbutton(self.left, text='Auto Update', variable=self.auto_update).grid(row=22, column=0, columnspan=2, sticky='w')
 
         # Output
         # Graph area (optional)
         graph_frame = tk.Frame(right)
         graph_frame.pack(side='top', fill='both', expand=False)
         if HAS_MATPLOTLIB:
-            self.fig = Figure(figsize=(5, 2.0), dpi=100)
-            self.ax = self.fig.add_subplot(111)
+            self.fig = Figure(figsize=(9, 3.4), dpi=100)
+            self.ax_growth = self.fig.add_subplot(121)
+            self.ax_curve = self.fig.add_subplot(122)
             self.canvas = FigureCanvasTkAgg(self.fig, master=graph_frame)
             self.canvas.get_tk_widget().pack(fill='both', expand=True)
         else:
             tk.Label(graph_frame, text='Matplotlib not installed; graph disabled').pack()
 
-        tk.Label(right, text='Scaled Output:').pack(anchor='nw')
-        # Details area: Before / After side-by-side
+        # Snapshot summary cards
+        summary_frame = tk.LabelFrame(right, text='Snapshot (Base → Scaled)', padx=6, pady=6)
+        summary_frame.pack(side='top', fill='x', pady=(6, 4))
+        self.summary_vars = {}
+        summary_keys = [('AC', 'AC'), ('HP', 'HP'), ('Damage', 'DMG'), ('Attack', 'ATK'), ('Attributes', 'ATTR (sum)')]
+        for i, (key, label) in enumerate(summary_keys):
+            sv = tk.StringVar(value=f'{label}: -')
+            self.summary_vars[key] = sv
+            tk.Label(summary_frame, textvariable=sv, anchor='w', width=22).grid(row=0, column=i, padx=4, sticky='w')
+
+        # Single unified details table (Base vs Scaled vs Delta)
+        tk.Label(right, text='Detail (Base / Scaled / Δ):').pack(anchor='nw')
         details_frame = tk.Frame(right)
         details_frame.pack(side='top', fill='both', expand=True)
-
-        before_box = tk.LabelFrame(details_frame, text='Base / Before', padx=4, pady=4)
-        before_box.pack(side='left', fill='both', expand=True)
-        self.before_text = tk.Text(before_box, wrap='none', height=18)
-        self.before_text.pack(fill='both', expand=True)
-
-        after_box = tk.LabelFrame(details_frame, text='Scaled / After', padx=4, pady=4)
-        after_box.pack(side='right', fill='both', expand=True)
-        self.output = tk.Text(after_box, wrap='none', height=18)
+        self.output = tk.Text(details_frame, wrap='none', height=24)
         self.output.pack(fill='both', expand=True)
 
         # Defaults for equip-all preset
@@ -590,6 +833,8 @@ class ItemScaleApp(tk.Tk):
         # Hook auto update
         self.bind_auto_update_controls()
         self.after(200, self.auto_update_tick)
+        # Help footer
+        tk.Label(right, text='Workflow: 1) Set level/slot and base stats. 2) Scale Item (or Auto Update). 3) Plot Growth to see stat over levels. 4) Use Curve Generator to tweak curves and Save when satisfied.', anchor='w').pack(anchor='w', pady=(6,0))
 
     def bind_auto_update_controls(self):
         def safe_trace(var):
@@ -602,7 +847,7 @@ class ItemScaleApp(tk.Tk):
                     pass
 
         # Vars to watch for changes
-        watch_vars = [self.level_var, self.slot_var, self.global_scale_var, self.presence_bias_var, self.curve_attr_var, self.curve_preset_var, self.curve_start_level, self.curve_end_level, self.curve_start_val, self.curve_end_val, self.curve_strength_var]
+        watch_vars = [self.level_var, self.slot_var, self.global_scale_var, self.presence_bias_var, self.curve_attr_var, self.curve_preset_var, self.curve_start_level, self.curve_end_level, self.curve_start_val, self.curve_end_val, self.curve_strength_var, self.growth_start_level, self.growth_end_level, self.growth_step, self.growth_stat_var]
         for v in watch_vars:
             safe_trace(v)
         for e in self.entries.values():
@@ -622,9 +867,10 @@ class ItemScaleApp(tk.Tk):
             except Exception:
                 pass
             try:
-                # Update plot if applicable
+                # Update plots if applicable
                 if HAS_MATPLOTLIB:
                     self.plot_curve_from_ui()
+                    self.plot_growth_from_ui()
             except Exception:
                 pass
 
@@ -635,6 +881,7 @@ class ItemScaleApp(tk.Tk):
                 self.scale_item()
                 if HAS_MATPLOTLIB:
                     self.update_plot_marker()
+                    self.update_growth_marker()
         except Exception:
             pass
         # re-schedule
@@ -644,33 +891,59 @@ class ItemScaleApp(tk.Tk):
         if not HAS_MATPLOTLIB or not self.last_curve_points:
             return
         try:
-            level = int(self.level_var.get())
+            level = self.safe_int(self.level_var, 1)
             val = evaluate_curve(self.last_curve_points, level)
             # remove old markers
             try:
-                if self.marker_line:
-                    self.marker_line.remove()
+                if self.marker_line_curve:
+                    self.marker_line_curve.remove()
             except Exception:
                 pass
             try:
-                if self.marker_point:
-                    self.marker_point.remove()
+                if self.marker_point_curve:
+                    self.marker_point_curve.remove()
             except Exception:
                 pass
             # add new
-            self.marker_line = self.ax.axvline(level, color='gray', linestyle='--', linewidth=1, zorder=3)
-            self.marker_point = self.ax.scatter([level], [val], color='red', zorder=5)
+            self.marker_line_curve = self.ax_curve.axvline(level, color='gray', linestyle='--', linewidth=1, zorder=3)
+            self.marker_point_curve = self.ax_curve.scatter([level], [val], color='red', zorder=5)
             # Also annotate the current value with a label on the side
             try:
                 # Remove old annotation if exists
-                if hasattr(self, 'marker_annot') and self.marker_annot:
-                    self.marker_annot.remove()
+                if hasattr(self, 'marker_annot_curve') and self.marker_annot_curve:
+                    self.marker_annot_curve.remove()
             except Exception:
                 pass
             try:
-                self.marker_annot = self.ax.annotate(f'{val:.2f}', xy=(level, val), xytext=(level + 1, val + 0.5), fontsize=8, color='red')
+                self.marker_annot_curve = self.ax_curve.annotate(f'{val:.2f}', xy=(level, val), xytext=(level + 1, val + 0.5), fontsize=8, color='red')
             except Exception:
-                self.marker_annot = None
+                self.marker_annot_curve = None
+            self.canvas.draw_idle()
+        except Exception:
+            pass
+
+    def update_growth_marker(self):
+        if not HAS_MATPLOTLIB or not getattr(self, 'last_growth_points', None):
+            return
+        try:
+            level = self.safe_int(self.level_var, 1)
+            # find nearest level point
+            lvls = [p[0] for p in self.last_growth_points]
+            vals = [p[1] for p in self.last_growth_points]
+            # approximate value at current level
+            val = vals[min(range(len(lvls)), key=lambda i: abs(lvls[i]-level))]
+            try:
+                if getattr(self, 'marker_line_growth', None):
+                    self.marker_line_growth.remove()
+            except Exception:
+                pass
+            try:
+                if getattr(self, 'marker_point_growth', None):
+                    self.marker_point_growth.remove()
+            except Exception:
+                pass
+            self.marker_line_growth = self.ax_growth.axvline(level, color='gray', linestyle='--', linewidth=1, zorder=3)
+            self.marker_point_growth = self.ax_growth.scatter([level], [val], color='red', zorder=5)
             self.canvas.draw_idle()
         except Exception:
             pass
@@ -699,7 +972,7 @@ class ItemScaleApp(tk.Tk):
     def get_item_from_inputs(self):
         base = {}
         for k, v in self.entries.items():
-            base[k] = int(v.get())
+            base[k] = self.safe_int_from_entry(v.get(), 0)
         return base
 
     def reset_fields(self):
@@ -740,13 +1013,13 @@ class ItemScaleApp(tk.Tk):
             scaled_attrs_with_slot = {k: scaled.get(k, 0) for k in attrs}
             if mode == 'auto':
                 # Apply presence bias to presence multipliers: scale the 'additional' portion toward 1.0
-                pbias = float(self.presence_bias_var.get()) if hasattr(self, 'presence_bias_var') else 1.0
+                pbias = self.safe_float(self.presence_bias_var, 1.0)
                 eff_presence = {}
                 for a, v in self.presence_mults.items():
                     eff_presence[a] = 1.0 + (v - 1.0) * pbias
                 redistributed = pool_distribute_auto(attrs, scaled_attrs_no_slot, eff_presence, self.absence_mults, slot_mult=slot_mult.get('Attributes', 1.0))
             elif mode == 'static':
-                redistributed = pool_distribute_static(attrs, int(self.static_budget_var.get()), self.presence_mults, self.absence_mults, slot_mult=slot_mult.get('Attributes', 1.0))
+                redistributed = pool_distribute_static(attrs, self.safe_int(self.static_budget_var, 0), self.presence_mults, self.absence_mults, slot_mult=slot_mult.get('Attributes', 1.0))
             else:
                 # 'none' mode: keep attributes as slot-scaled values
                 redistributed = scaled_attrs_with_slot
@@ -758,34 +1031,12 @@ class ItemScaleApp(tk.Tk):
                     # Prevent attributes from exceeding the slot-scaled attribute values
                     scaled[k] = min(redistributed[k], scaled.get(k, 0))
             # Apply global scale factor to final stats
-            gscale = float(self.global_scale_var.get()) if hasattr(self, 'global_scale_var') else 1.0
+            gscale = self.safe_float(self.global_scale_var, 1.0)
             for s_key in ['AC','HP','Damage','Attack','Shielding','StrikeThrough']:
                 if scaled.get(s_key) is not None:
                     scaled[s_key] = int(math.floor(scaled[s_key] * gscale))
             for k in ['STR', 'STA', 'AGI', 'DEX', 'INT', 'WIS', 'CHA']:
                 scaled[k] = int(math.floor(scaled.get(k, 0) * gscale))
-            # Derived stats (per-item)
-            # Compute derived stats from final redistributed attributes
-            if self.config:
-                s_cfg = self.config.get('SpellDmgFromInt', {})
-                if s_cfg.get('enabled'):
-                    if s_cfg.get('mode', 'divisor') == 'divisor':
-                        d = int(s_cfg.get('divisor', 10))
-                        scaled['SpellDmg'] = scaled.get('INT', 0) // d
-                    else:
-                        points = s_cfg.get('curve', {}).get('points', [])
-                        scaled_no_slot = scaled_item(base, level, None, config=self.config)
-                        scaled = scaled_item(base, level, slot_mult, config=self.config)
-                h_cfg = self.config.get('HealFromWis', {})
-                if h_cfg.get('enabled'):
-                    if h_cfg.get('mode', 'divisor') == 'divisor':
-                        d = int(h_cfg.get('divisor', 10))
-                        scaled['HealAmt'] = scaled.get('WIS', 0) // d
-                    else:
-                        points = h_cfg.get('curve', {}).get('points', [])
-                        mult = evaluate_curve(points, level) if points else 1.0
-                        scaled['HealAmt'] = int(math.floor((scaled.get('WIS', 0) / 10.0) * mult))
-
             # Derived stats
             if self.config:
                 # SpellDmgFromInt
@@ -811,23 +1062,40 @@ class ItemScaleApp(tk.Tk):
                         mult = evaluate_curve(points, level) if points else 1.0
                         scaled['HealAmt'] = int(math.floor((scaled.get('WIS', 0) / 10.0) * mult))
 
-            # Update before and after views
-            try:
-                self.before_text.delete('1.0', tk.END)
-                self.before_text.insert(tk.END, self.format_item(base, scaled_no_slot))
-            except Exception:
-                pass
-            # Update before and after views
-            try:
-                self.before_text.delete('1.0', tk.END)
-                self.before_text.insert(tk.END, self.format_item(base, scaled_no_slot))
-            except Exception:
-                pass
+            # Update summary cards
+            def sum_attrs(obj):
+                return sum(obj.get(k, 0) for k in ['STR','STA','AGI','DEX','INT','WIS','CHA'])
+            base_attrs_sum = sum_attrs(base)
+            scaled_attrs_sum = sum_attrs(scaled)
+            snap = {
+                'AC': (base.get('AC', 0), scaled.get('AC', 0)),
+                'HP': (base.get('HP', 0), scaled.get('HP', 0)),
+                'Damage': (base.get('Damage', 0), scaled.get('Damage', 0)),
+                'Attack': (base.get('Attack', 0), scaled.get('Attack', 0)),
+                'Attributes': (base_attrs_sum, scaled_attrs_sum),
+            }
+            for k, (bval, sval) in snap.items():
+                delta = sval - bval
+                label = f"{k if k!='Attributes' else 'ATTR (sum)'}: {bval} → {sval} (Δ {delta:+})"
+                if k in self.summary_vars:
+                    self.summary_vars[k].set(label)
+
+            # Update unified detail table
+            rows = []
+            rows.append(f"{'Stat':<15}{'Base':>10}{'Scaled':>12}{'Delta':>10}")
+            rows.append('-'*48)
+            for key in sorted(set(list(base.keys()) + list(scaled.keys()))):
+                b = base.get(key, 0)
+                s = scaled.get(key, 0)
+                rows.append(f"{key:<15}{b:>10}{s:>12}{(s-b):>10}")
             self.output.delete('1.0', tk.END)
-            self.output.insert(tk.END, self.format_item(base, scaled))
+            self.output.insert(tk.END, '\n'.join(rows))
             # Update plot marker based on last plotted curve
             if HAS_MATPLOTLIB:
-                self.update_plot_marker()
+                try:
+                    self.update_plot_marker()
+                except Exception:
+                    pass
         except Exception as e:
             messagebox.showerror('Error', str(e))
 
@@ -903,7 +1171,7 @@ class ItemScaleApp(tk.Tk):
 
     def load_item_from_db_gui(self):
         try:
-            item_id = int(self.item_id_var.get())
+            item_id = self.safe_int(self.item_id_var, 0)
             if not HAS_MYSQL:
                 messagebox.showerror('Missing dependency', "Please install 'mysql-connector-python' (pip install mysql-connector-python) to enable DB import")
                 return

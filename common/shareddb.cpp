@@ -1757,11 +1757,17 @@ void SharedDatabase::LoadSpells(void *data, int max_spells) {
     }
 
 	int counter = 0;
+	const int col_count = results.ColumnCount();
 
     for (auto& row = results.begin(); row != results.end(); ++row) {
 	    const int tempid = Strings::ToInt(row[0]);
         if(tempid >= max_spells) {
 			LogSpells("Non fatal error: spell.id >= max_spells, ignoring");
+			continue;
+		}
+		// Temporary guard: skip very high custom IDs if they cause instability
+		if (tempid >= 64000) {
+			LogSpells("Skipping high-id spell [{}] during load (temporary guard)", tempid);
 			continue;
 		}
 
@@ -1842,75 +1848,92 @@ void SharedDatabase::LoadSpells(void *data, int max_spells) {
 		for (y = 0; y < 16; y++)
 			sp[tempid].deities[y]=Strings::ToInt(row[126+y]);
 
-		sp[tempid].new_icon=Strings::ToInt(row[144]);
-		sp[tempid].uninterruptable=Strings::ToBool(row[146]);
-		sp[tempid].resist_difficulty=Strings::ToInt(row[147]);
-		sp[tempid].unstackable_dot = Strings::ToBool(row[148]);
-		sp[tempid].recourse_link = Strings::ToUnsignedInt(row[150]);
-		sp[tempid].no_partial_resist = Strings::ToBool(row[151]);
+		auto safe_int = [&](int idx) -> int32 {
+			if (idx >= col_count) return 0;
+			return row[idx] ? Strings::ToInt(row[idx]) : 0;
+		};
+		auto safe_uint = [&](int idx) -> uint32 {
+			if (idx >= col_count) return 0;
+			return row[idx] ? Strings::ToUnsignedInt(row[idx]) : 0;
+		};
+		auto safe_bool = [&](int idx) -> bool {
+			if (idx >= col_count) return false;
+			return row[idx] ? Strings::ToBool(row[idx]) : false;
+		};
+		auto safe_float = [&](int idx) -> float {
+			if (idx >= col_count) return 0.0f;
+			return row[idx] ? Strings::ToFloat(row[idx]) : 0.0f;
+		};
 
-		sp[tempid].short_buff_box = Strings::ToInt(row[154]);
-		sp[tempid].description_id = Strings::ToInt(row[155]);
-		sp[tempid].type_description_id = Strings::ToInt(row[156]);
-		sp[tempid].effect_description_id = Strings::ToInt(row[157]);
+		sp[tempid].new_icon           = safe_int(144);
+		sp[tempid].uninterruptable    = safe_bool(146);
+		sp[tempid].resist_difficulty  = safe_int(147);
+		sp[tempid].unstackable_dot    = safe_bool(148);
+		sp[tempid].recourse_link      = safe_uint(150);
+		sp[tempid].no_partial_resist  = safe_bool(151);
 
-		sp[tempid].npc_no_los = Strings::ToBool(row[159]);
-		sp[tempid].feedbackable = Strings::ToBool(row[160]);
-		sp[tempid].reflectable = Strings::ToBool(row[161]);
-		sp[tempid].bonus_hate=Strings::ToInt(row[162]);
+		sp[tempid].short_buff_box       = safe_int(154);
+		sp[tempid].description_id       = safe_int(155);
+		sp[tempid].type_description_id  = safe_int(156);
+		sp[tempid].effect_description_id= safe_int(157);
 
-		sp[tempid].ldon_trap = Strings::ToBool(row[165]);
-		sp[tempid].endurance_cost= Strings::ToInt(row[166]);
-		sp[tempid].timer_id= Strings::ToInt(row[167]);
-		sp[tempid].is_discipline = Strings::ToBool(row[168]);
-		sp[tempid].hate_added= Strings::ToInt(row[173]);
-		sp[tempid].endurance_upkeep=Strings::ToInt(row[174]);
-		sp[tempid].hit_number_type = Strings::ToInt(row[175]);
-		sp[tempid].hit_number = Strings::ToInt(row[176]);
-		sp[tempid].pvp_resist_base= Strings::ToInt(row[177]);
-		sp[tempid].pvp_resist_per_level= Strings::ToInt(row[178]);
-		sp[tempid].pvp_resist_cap= Strings::ToInt(row[179]);
-		sp[tempid].spell_category= Strings::ToInt(row[180]);
-		sp[tempid].pvp_duration = Strings::ToInt(row[181]);
-		sp[tempid].pvp_duration_cap = Strings::ToInt(row[182]);
-		sp[tempid].pcnpc_only_flag= Strings::ToInt(row[183]);
-		sp[tempid].cast_not_standing = Strings::ToInt(row[184]) != 0;
-		sp[tempid].can_mgb= Strings::ToBool(row[185]);
-		sp[tempid].dispel_flag = Strings::ToInt(row[186]);
-		sp[tempid].min_resist = Strings::ToInt(row[189]);
-		sp[tempid].max_resist = Strings::ToInt(row[190]);
-		sp[tempid].viral_targets = Strings::ToInt(row[191]);
-		sp[tempid].viral_timer = Strings::ToInt(row[192]);
-		sp[tempid].nimbus_effect = Strings::ToInt(row[193]);
-		sp[tempid].directional_start = Strings::ToFloat(row[194]);
-		sp[tempid].directional_end = Strings::ToFloat(row[195]);
-		sp[tempid].sneak = Strings::ToBool(row[196]);
-		sp[tempid].not_focusable = Strings::ToBool(row[197]);
-		sp[tempid].no_detrimental_spell_aggro = Strings::ToBool(row[198]);
-		sp[tempid].suspendable = Strings::ToBool(row[200]);
-		sp[tempid].viral_range = Strings::ToInt(row[201]);
-		sp[tempid].song_cap = Strings::ToInt(row[202]);
-		sp[tempid].no_block = Strings::ToInt(row[205]);
-		sp[tempid].spell_group=Strings::ToInt(row[207]);
-		sp[tempid].rank = Strings::ToInt(row[208]);
-		sp[tempid].no_resist=Strings::ToInt(row[209]);
-		sp[tempid].cast_restriction = Strings::ToInt(row[211]);
-		sp[tempid].allow_rest = Strings::ToBool(row[212]);
-		sp[tempid].can_cast_in_combat = Strings::ToBool(row[213]);
-		sp[tempid].can_cast_out_of_combat = Strings::ToBool(row[214]);
-		sp[tempid].override_crit_chance = Strings::ToInt(row[217]);
-		sp[tempid].aoe_max_targets = Strings::ToInt(row[218]);
-		sp[tempid].no_heal_damage_item_mod = Strings::ToInt(row[219]);
-		sp[tempid].caster_requirement_id = Strings::ToInt(row[220]);
-		sp[tempid].spell_class = Strings::ToInt(row[221]);
-		sp[tempid].spell_subclass = Strings::ToInt(row[222]);
-		sp[tempid].persist_death = Strings::ToBool(row[224]);
-		sp[tempid].min_distance = Strings::ToFloat(row[227]);
-		sp[tempid].min_distance_mod = Strings::ToFloat(row[228]);
-		sp[tempid].max_distance = Strings::ToFloat(row[229]);
-		sp[tempid].max_distance_mod = Strings::ToFloat(row[230]);
-		sp[tempid].min_range = Strings::ToFloat(row[231]);
-		sp[tempid].no_remove = Strings::ToBool(row[232]);
+		sp[tempid].npc_no_los           = safe_bool(159);
+		sp[tempid].feedbackable         = safe_bool(160);
+		sp[tempid].reflectable          = safe_bool(161);
+		sp[tempid].bonus_hate           = safe_int(162);
+
+		sp[tempid].ldon_trap            = safe_bool(165);
+		sp[tempid].endurance_cost       = safe_int(166);
+		sp[tempid].timer_id             = safe_int(167);
+		sp[tempid].is_discipline        = safe_bool(168);
+		sp[tempid].hate_added           = safe_int(173);
+		sp[tempid].endurance_upkeep     = safe_int(174);
+		sp[tempid].hit_number_type      = safe_int(175);
+		sp[tempid].hit_number           = safe_int(176);
+		sp[tempid].pvp_resist_base      = safe_int(177);
+		sp[tempid].pvp_resist_per_level = safe_int(178);
+		sp[tempid].pvp_resist_cap       = safe_int(179);
+		sp[tempid].spell_category       = safe_int(180);
+		sp[tempid].pvp_duration         = safe_int(181);
+		sp[tempid].pvp_duration_cap     = safe_int(182);
+		sp[tempid].pcnpc_only_flag      = safe_int(183);
+		sp[tempid].cast_not_standing    = safe_int(184) != 0;
+		sp[tempid].can_mgb              = safe_bool(185);
+		sp[tempid].dispel_flag          = safe_int(186);
+		sp[tempid].min_resist           = safe_int(189);
+		sp[tempid].max_resist           = safe_int(190);
+		sp[tempid].viral_targets        = safe_int(191);
+		sp[tempid].viral_timer          = safe_int(192);
+		sp[tempid].nimbus_effect        = safe_int(193);
+		sp[tempid].directional_start    = safe_float(194);
+		sp[tempid].directional_end      = safe_float(195);
+		sp[tempid].sneak                = safe_bool(196);
+		sp[tempid].not_focusable        = safe_bool(197);
+		sp[tempid].no_detrimental_spell_aggro = safe_bool(198);
+		sp[tempid].suspendable          = safe_bool(200);
+		sp[tempid].viral_range          = safe_int(201);
+		sp[tempid].song_cap             = safe_int(202);
+		sp[tempid].no_block             = safe_int(205);
+		sp[tempid].spell_group          = safe_int(207);
+		sp[tempid].rank                 = safe_int(208);
+		sp[tempid].no_resist            = safe_int(209);
+		sp[tempid].cast_restriction     = safe_int(211);
+		sp[tempid].allow_rest           = safe_bool(212);
+		sp[tempid].can_cast_in_combat   = safe_bool(213);
+		sp[tempid].can_cast_out_of_combat = safe_bool(214);
+		sp[tempid].override_crit_chance = safe_int(217);
+		sp[tempid].aoe_max_targets      = safe_int(218);
+		sp[tempid].no_heal_damage_item_mod = safe_int(219);
+		sp[tempid].caster_requirement_id = safe_int(220);
+		sp[tempid].spell_class          = safe_int(221);
+		sp[tempid].spell_subclass       = safe_int(222);
+		sp[tempid].persist_death        = safe_bool(224);
+		sp[tempid].min_distance = safe_float(227);
+		sp[tempid].min_distance_mod = safe_float(228);
+		sp[tempid].max_distance = safe_float(229);
+		sp[tempid].max_distance_mod = safe_float(230);
+		sp[tempid].min_range = safe_float(231);
+		sp[tempid].no_remove = safe_bool(232);
 		sp[tempid].damage_shield_type = 0;
 	}
 

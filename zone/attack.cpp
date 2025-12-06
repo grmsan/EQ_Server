@@ -54,6 +54,63 @@ extern FastMath g_Math;
 extern EntityList entity_list;
 extern Zone* zone;
 
+// ---------------------------------------------------------------------------
+// DEX precision helpers (new system gated by RuleB(Combat, UseNewDexFormulas))
+// ---------------------------------------------------------------------------
+static float CalcDexCritChanceNew(const Mob* mob) {
+	if (!mob) { return 0.0f; }
+	int level = mob->GetLevel();
+	int dex = mob->GetDEX();
+	float main = (static_cast<float>(dex) * static_cast<float>(level)) / CombatBalance::DEX_CRIT_DIVISOR;
+	float floor_term = static_cast<float>(dex) / CombatBalance::DEX_CRIT_MIN_DIVISOR;
+	float step_term = 0.0f;
+	if (CombatBalance::DEX_CRIT_STEP_PER_PERCENT > 0.0f) {
+		step_term = (static_cast<float>(dex) / CombatBalance::DEX_CRIT_STEP_PER_PERCENT);
+	}
+	return main + floor_term + step_term;
+}
+
+static float CalcDexCritDamageBonus(const Mob* mob, float overflow) {
+	if (!mob) { return 0.0f; }
+	int dex = mob->GetDEX();
+	float base = static_cast<float>(dex) / CombatBalance::DEX_BASE_CRIT_DMG_DIVISOR;
+	return base + overflow;
+}
+
+static int CalcDexMaxExtraProcs(const Mob* mob) {
+	if (!mob) { return 0; }
+	int dex = mob->GetDEX();
+	if (CombatBalance::DEX_PROC_BAND <= 0) return 0;
+	int bands = dex / CombatBalance::DEX_PROC_BAND;
+	if (bands < 0) bands = 0;
+	if (bands > CombatBalance::DEX_PROC_MAX_EXTRA) bands = CombatBalance::DEX_PROC_MAX_EXTRA;
+	return bands;
+}
+
+static bool RollDexChainProc(const Mob* mob, int chain_index) {
+	if (!mob) { return false; }
+	int dex = mob->GetDEX();
+	int idx = std::min(chain_index, CombatBalance::DEX_PROC_MAX_EXTRA - 1);
+	int denom = CombatBalance::DEX_PROC_DENOMS[idx];
+	float chance = static_cast<float>(dex) / static_cast<float>(dex + denom);
+	return zone->random.Roll(chance * 100.0f);
+}
+
+static float CalcDexMeleeBonus(const Mob* mob, float divisor, float cap) {
+	if (!mob || divisor <= 0.0f) return 0.0f;
+	float val = static_cast<float>(mob->GetDEX()) / divisor;
+	if (cap > 0.0f && val > cap) val = cap;
+	return val;
+}
+
+static float CalcDexHitBonus(const Mob* mob) {
+	return CalcDexMeleeBonus(mob, CombatBalance::DEX_HIT_CHANCE_DIVISOR, CombatBalance::DEX_MELEE_BONUS_MAX);
+}
+
+static float CalcDexSkillMultiBonus(const Mob* mob, float divisor) {
+	return CalcDexMeleeBonus(mob, divisor, CombatBalance::DEX_MULTI_HIT_SKILL_MAX);
+}
+
 //SYNC WITH: tune.cpp, mob.h TuneAttackAnimation
 EQ::skills::SkillType Mob::AttackAnimation(int Hand, const EQ::ItemInstance* weapon, EQ::skills::SkillType skillinuse)
 {
@@ -219,6 +276,9 @@ int Mob::GetTotalToHit(EQ::skills::SkillType skill, int chance_mod)
 		itembonuses.Accuracy[skill] +
 		aabonuses.Accuracy[skill] +
 		spellbonuses.Accuracy[skill];
+	if (RuleB(Combat, UseNewDexFormulas)) {
+		accuracy += static_cast<int>(CalcDexHitBonus(this));
+	}
 
 	// auto hit discs (and looks like there are some autohit AAs)
 	if (spellbonuses.HitChanceEffect[skill] >= 10000 || aabonuses.HitChanceEffect[skill] >= 10000)
@@ -332,6 +392,36 @@ int Mob::GetTotalDefense()
 	// Evasion is a percentage bonus according to AA descriptions
 	if (evasion_bonus)
 		avoidance = (avoidance * (100 + evasion_bonus)) / 100;
+
+	// AGI-based avoidance (class weighted, asymptotic)
+	if (RuleB(Combat, UseNewAgiFormulas)) {
+		float agi = static_cast<float>(GetAGI());
+		float base = CombatBalance::AGI_AVOID_CAP * agi / (agi + CombatBalance::AGI_AVOID_DIVISOR);
+		float mult = CombatBalance::AGI_AVOID_MULT_TANK;
+		switch (GetClass()) {
+		case Class::Monk:
+		case Class::Beastlord:
+		case Class::Rogue:
+		case Class::Bard:
+			mult = CombatBalance::AGI_AVOID_MULT_LIGHT;
+			break;
+		case Class::Warrior:
+		case Class::Paladin:
+		case Class::ShadowKnight:
+		case Class::Ranger:
+			mult = CombatBalance::AGI_AVOID_MULT_TANK;
+			break;
+		default:
+			mult = CombatBalance::AGI_AVOID_MULT_CASTER;
+			break;
+		}
+		float agi_pct = base * mult;
+		if (agi_pct > CombatBalance::AGI_AVOID_SOFTCAP) {
+			agi_pct = CombatBalance::AGI_AVOID_SOFTCAP;
+		}
+		// Scale current avoidance by agi_pct
+		avoidance += static_cast<int>(avoidance * (agi_pct / 100.0f));
+	}
 
 	return avoidance;
 }
@@ -5210,6 +5300,18 @@ void Mob::TryWeaponProc(const EQ::ItemInstance *inst, const EQ::ItemData *weapon
 	// We can proc once here, either weapon or one aug
 	bool proced = false; // silly bool to prevent augs from going if weapon does
 
+	auto TryDexChain = [&](const EQ::ItemInstance* inst_ref, const EQ::ItemData* data_ref, int effect_id) {
+		if (!RuleB(Combat, UseNewDexFormulas)) return;
+		int max_extra = CalcDexMaxExtraProcs(this);
+		if (max_extra <= 0) return;
+		for (int i = 0; i < max_extra; ++i) {
+			if (!RollDexChainProc(this, i)) {
+				break;
+			}
+			ExecWeaponProc(inst_ref, effect_id, on);
+		}
+	};
+
 	if (weapon->Proc.Type == EQ::item::ItemEffectCombatProc && IsValidSpell(weapon->Proc.Effect)) {
 		float WPC = ProcChance * (100.0f + // Proc chance for this weapon
 			static_cast<float>(weapon->ProcRate)) / 100.0f;
@@ -5229,6 +5331,7 @@ void Mob::TryWeaponProc(const EQ::ItemInstance *inst, const EQ::ItemData *weapon
 			else {
 				LogCombat("Attacking weapon ([{}]) successfully procing spell [{}] ([{}] percent chance)", weapon->Name, weapon->Proc.Effect, WPC * 100);
 				ExecWeaponProc(inst, weapon->Proc.Effect, on);
+				TryDexChain(inst, weapon, weapon->Proc.Effect);
 				proced = true;
 			}
 		}
@@ -5263,6 +5366,7 @@ void Mob::TryWeaponProc(const EQ::ItemInstance *inst, const EQ::ItemData *weapon
 					}
 					else {
 						ExecWeaponProc(aug_i, aug->Proc.Effect, on);
+						TryDexChain(aug_i, aug, aug->Proc.Effect);
 						if (RuleB(Combat, OneProcPerWeapon))
 							break;
 					}
@@ -5458,6 +5562,41 @@ void Mob::TryPetCriticalHit(Mob *defender, DamageHitInfo &hit)
 	if (hit.damage_done < 1)
 		return;
 
+	if (RuleB(Combat, UseNewDexFormulas)) {
+		Mob* owner = nullptr;
+		if (IsPet()) {
+			owner = GetOwner();
+		} else if (IsNPC() && CastToNPC()->GetSwarmOwner()) {
+			owner = entity_list.GetMobID(CastToNPC()->GetSwarmOwner());
+		}
+		if (!owner) return;
+
+		float dexChance = CalcDexCritChanceNew(owner) * CombatBalance::PET_DEX_CRIT_SCALAR;
+		int critChance = RuleI(Combat, PetBaseCritChance) + static_cast<int>(dexChance);
+		if (critChance <= 0) return;
+
+		float overflow = std::max(0.0f, static_cast<float>(critChance) - 100.0f) * CombatBalance::DEX_CRIT_OVERFLOW_SCALAR;
+		if (zone->random.Roll(critChance)) {
+			int critMod = 170 + GetCritDmgMod(hit.skill, owner);
+			critMod += static_cast<int>(CalcDexCritDamageBonus(owner, overflow));
+			if (critMod < 100) critMod = 100;
+			hit.damage_done = std::max(hit.damage_done, hit.base_damage);
+			hit.damage_done = (hit.damage_done * critMod) / 100;
+			entity_list.FilteredMessageCloseString(
+				this, /* Sender */
+				false,  /* Skip Sender */
+				RuleI(Range, CriticalDamage),
+				Chat::MeleeCrit, /* Type: 301 */
+				FilterMeleeCrits, /* FilterType: 12 */
+				CRITICAL_HIT, /* MessageFormat: %1 scores a critical hit! (%2) */
+				0,
+				GetCleanName(), /* Message1 */
+				itoa(hit.damage_done + hit.min_damage) /* Message2 */
+			);
+		}
+		return;
+	}
+
 	// Allows pets to perform critical hits.
 	// Each rank adds an additional 1% chance for any melee hit (primary, secondary, kick, bash, etc) to critical,
 	// dealing up to 63% more damage. http://www.magecompendium.com/aa-short-library.html
@@ -5535,6 +5674,31 @@ void Mob::TryCriticalHit(Mob *defender, DamageHitInfo &hit, ExtraAttackOptions *
 	}
 
 	if (IsNPC() && !RuleB(Combat, NPCCanCrit)) {
+		return;
+	}
+
+	// New DEX-based crit system
+	if (RuleB(Combat, UseNewDexFormulas)) {
+		float dexChance = CalcDexCritChanceNew(this);
+		int crit_chance_bonus = GetCriticalChanceBonus(hit.skill);
+		float totalChance = dexChance + static_cast<float>(crit_chance_bonus);
+		float overflow = std::max(0.0f, totalChance - 100.0f) * CombatBalance::DEX_CRIT_OVERFLOW_SCALAR;
+		float roll = zone->random.Real(0.0f, 100.0f);
+		if (roll > std::min(totalChance, 100.0f)) {
+			return;
+		}
+		// finishing blow check
+		if (TryFinishingBlow(defender, hit.damage_done)) {
+			return;
+		}
+		hit.damage_done = std::max(hit.damage_done, hit.base_damage);
+		int og_damage = hit.damage_done;
+		int crit_mod = 100 + GetCritDmgMod(hit.skill);
+		crit_mod += static_cast<int>(CalcDexCritDamageBonus(this, overflow));
+		if (crit_mod < 100) crit_mod = 100;
+		hit.damage_done = hit.damage_done * crit_mod / 100;
+		LogCombatDetail("NewDEX crit roll [{}] totalChance [{}] og dmg [{}] crit_mod [{}] new dmg [{}]", roll, totalChance, og_damage, crit_mod, hit.damage_done);
+		// fall through to class-specific messages/assassinate/cripple handling below
 		return;
 	}
 
@@ -5812,6 +5976,13 @@ void Mob::DoRiposte(Mob *defender)
 	}
 
 	defender->Attack(this, EQ::invslot::slotPrimary, true);
+
+	if (RuleB(Combat, UseNewDexFormulas)) {
+		float dex_bonus = CalcDexSkillMultiBonus(defender, CombatBalance::DEX_RIPOSTE_EXTRA_DIVISOR);
+		if (!HasDied() && !defender->HasDied() && dex_bonus > 0.0f && zone->random.Roll(dex_bonus)) {
+			defender->Attack(this, EQ::invslot::slotPrimary, true);
+		}
+	}
 
 	if (HasDied())
 		return;
@@ -6551,6 +6722,12 @@ void Mob::CommonOutgoingHitSuccess(Mob* defender, DamageHitInfo &hit, ExtraAttac
 			extra_mincap = GetLevel() * 2;
 		else if (GetLevel() > 50)
 			extra_mincap = GetLevel() * 3 / 2;
+		if (RuleB(Combat, UseNewDexFormulas)) {
+			float dex_bonus = CalcDexSkillMultiBonus(this, CombatBalance::DEX_BACKSTAB_EXTRA_DIVISOR);
+			if (dex_bonus > 0.0f && zone->random.Roll(dex_bonus)) {
+				Attack(defender, EQ::invslot::slotPrimary, false, false, false, opts);
+			}
+		}
 		if (IsSpecialAttack(eSpecialAttacks::ChaoticStab)) {
 			hit.damage_done = extra_mincap;
 		}
@@ -6564,6 +6741,12 @@ void Mob::CommonOutgoingHitSuccess(Mob* defender, DamageHitInfo &hit, ExtraAttac
 	}
 	else if (hit.skill == EQ::skills::SkillFrenzy && GetClass() == Class::Berserker && GetLevel() > 50) {
 		extra_mincap = 4 * GetLevel() / 5;
+		if (RuleB(Combat, UseNewDexFormulas)) {
+			float dex_bonus = CalcDexSkillMultiBonus(this, CombatBalance::DEX_FRENZY_EXTRA_DIVISOR);
+			if (dex_bonus > 0.0f && zone->random.Roll(dex_bonus)) {
+				Attack(defender, EQ::invslot::slotPrimary, false, false, false, opts);
+			}
+		}
 	}
 
 	// this has some weird ordering
@@ -6995,6 +7178,13 @@ void Client::DoAttackRounds(Mob *target, int hand, bool IsFromSpell)
 					int flurry_chance = aabonuses.FlurryChance + spellbonuses.FlurryChance +
 							    itembonuses.FlurryChance;
 
+					if (RuleB(Combat, UseNewDexFormulas)) {
+						float dex_bonus = CalcDexSkillMultiBonus(this, CombatBalance::DEX_FLURRY_EXTRA_DIVISOR);
+						if (dex_bonus > 0.0f && zone->random.Roll(dex_bonus)) {
+							flurry_chance += static_cast<int>(dex_bonus);
+						}
+					}
+
 					if (flurry_chance && zone->random.Roll(flurry_chance)) {
 						Attack(target, hand, false, false, IsFromSpell);
 
@@ -7043,11 +7233,18 @@ void Mob::DoMainHandAttackRounds(Mob *target, ExtraAttackOptions *opts, bool ram
 		return;
 	}
 
+	float dex_double_bonus = 0.0f;
+	float dex_dual_bonus = 0.0f;
+	if (RuleB(Combat, UseNewDexFormulas)) {
+		dex_double_bonus = CalcDexMeleeBonus(this, CombatBalance::DEX_DOUBLE_ATTACK_DIVISOR, CombatBalance::DEX_MELEE_BONUS_MAX);
+		dex_dual_bonus = CalcDexMeleeBonus(this, CombatBalance::DEX_DUAL_WIELD_DIVISOR, CombatBalance::DEX_MELEE_BONUS_MAX);
+	}
+
 	if (RuleB(Combat, UseLiveCombatRounds)) {
 		// A "quad" on live really is just a successful dual wield where both double attack
 		// The mobs that could triple lost the ability to when the triple attack skill was added in
 		Attack(target, EQ::invslot::slotPrimary, false, false, false, opts);
-		if (CanThisClassDoubleAttack() && CheckDoubleAttack()) {
+		if (CanThisClassDoubleAttack() && (CheckDoubleAttack() || (dex_double_bonus > 0.0f && zone->random.Roll(dex_double_bonus)))) {
 			Attack(target, EQ::invslot::slotPrimary, false, false, false, opts);
 			if ((IsPet() || IsTempPet()) && IsPetOwnerOfClientBot()) {
 				int chance = spellbonuses.PC_Pet_Flurry + itembonuses.PC_Pet_Flurry + aabonuses.PC_Pet_Flurry;
@@ -7079,7 +7276,7 @@ void Mob::DoMainHandAttackRounds(Mob *target, ExtraAttackOptions *opts, bool ram
 	if ((CanThisClassDoubleAttack() || GetSpecialAbility(SpecialAbility::TripleAttack) || GetSpecialAbility(SpecialAbility::QuadrupleAttack))
 		// check double attack, this is NOT the same rules that clients use...
 		&&
-		RandRoll < (GetLevel() + NPCDualAttackModifier)) {
+		(RandRoll < (GetLevel() + NPCDualAttackModifier) || (dex_double_bonus > 0.0f && zone->random.Roll(dex_double_bonus)))) {
 		Attack(target, EQ::invslot::slotPrimary, false, false, false, opts);
 		// lets see if we can do a triple attack with the main hand
 		// pets are excluded from triple and quads...
@@ -7105,9 +7302,13 @@ void Mob::DoOffHandAttackRounds(Mob *target, ExtraAttackOptions *opts, bool ramp
 	if ((GetSpecialAbility(SpecialAbility::DualWield) ||
 		(RuleB(Combat, UseLiveCombatRounds) && GetSpecialAbility(SpecialAbility::QuadrupleAttack))) ||
 		GetEquippedItemFromTextureSlot(EQ::textures::weaponSecondary) != 0) {
+		float dex_dual_bonus = 0.0f;
+		if (RuleB(Combat, UseNewDexFormulas)) {
+			dex_dual_bonus = CalcDexMeleeBonus(this, CombatBalance::DEX_DUAL_WIELD_DIVISOR, CombatBalance::DEX_MELEE_BONUS_MAX);
+		}
 		if (CheckDualWield()) {
 			Attack(target, EQ::invslot::slotSecondary, false, false, false, opts);
-			if (CanThisClassDoubleAttack() && GetLevel() > 35 && CheckDoubleAttack() && !rampage) {
+			if (CanThisClassDoubleAttack() && GetLevel() > 35 && (CheckDoubleAttack() || (dex_dual_bonus > 0.0f && zone->random.Roll(dex_dual_bonus))) && !rampage) {
 				Attack(target, EQ::invslot::slotSecondary, false, false, false, opts);
 
 				if ((IsPet() || IsTempPet()) && IsPetOwnerOfClientBot()) {

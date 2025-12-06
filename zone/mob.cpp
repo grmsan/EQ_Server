@@ -31,6 +31,7 @@
 #include "mob_movement_manager.h"
 #include "water_map.h"
 #include "dialogue_window.h"
+#include "combat_balance_config.h"
 
 #include <limits.h>
 #include <math.h>
@@ -38,6 +39,20 @@
 #include <algorithm>
 
 #include "bot.h"
+
+// Local DEX helpers (mirror attack/effects)
+static float DexCritChanceNew(const Mob* mob) {
+	if (!mob) return 0.0f;
+	int level = mob->GetLevel();
+	int dex = mob->GetDEX();
+	float main = (static_cast<float>(dex) * static_cast<float>(level)) / CombatBalance::DEX_CRIT_DIVISOR;
+	float floor_term = static_cast<float>(dex) / CombatBalance::DEX_CRIT_MIN_DIVISOR;
+	float step_term = 0.0f;
+	if (CombatBalance::DEX_CRIT_STEP_PER_PERCENT > 0.0f) {
+		step_term = static_cast<float>(dex) / CombatBalance::DEX_CRIT_STEP_PER_PERCENT;
+	}
+	return main + floor_term + step_term;
+}
 
 extern EntityList entity_list;
 
@@ -835,6 +850,13 @@ int Mob::_GetRunSpeed() const {
 	aa_mod += aabonuses.BaseMovementSpeed + aabonuses.movementspeed;
 	int spell_mod = spellbonuses.movementspeed + itembonuses.movementspeed;
 	int movemod = 0;
+	int agi_run = 0;
+
+	if (RuleB(Combat, UseNewAgiFormulas)) {
+		float agi = static_cast<float>(GetAGI());
+		float agi_pct = CombatBalance::AGI_RUN_CAP * agi / (agi + CombatBalance::AGI_RUN_DIVISOR);
+		agi_run = static_cast<int>(agi_pct);
+	}
 
 	if(spell_mod < 0)
 	{
@@ -847,6 +869,11 @@ int Mob::_GetRunSpeed() const {
 	else
 	{
 		movemod = aa_mod;
+	}
+
+	// Take the max of AGI vs spell/AA (do not stack additively beyond cap)
+	if (agi_run > movemod) {
+		movemod = agi_run;
 	}
 
 	if(movemod < -85) //cap it at moving very very slow
@@ -2701,15 +2728,25 @@ void Mob::SendStatsWindow(Client* c, bool use_window)
 	);
 
 	if ((IsClient() && CastToClient()->GetHaste()) || (!IsClient() && GetHaste())) {
+		float agi_total = static_cast<float>(GetAGI() + GetHeroicAGI());
+		float agi_haste = (RuleB(Combat, UseNewAgiFormulas))
+			? (100.0f * agi_total / (agi_total + CombatBalance::AGI_HASTE_DIVISOR))
+			: 0.0f;
 		c->Message(
 			Chat::White,
 			fmt::format(
-				"Haste: {}/{} (Item: {} + Spell: {} + Over: {})",
+				"Haste: {}/{} (Item: {} + Spell: {} + Over: {}{}{})",
 				IsClient() ? Strings::Commify(CastToClient()->GetHaste()) : Strings::Commify(GetHaste()),
 				Strings::Commify(RuleI(Character, HasteCap)),
 				Strings::Commify(itembonuses.haste),
 				Strings::Commify(spellbonuses.haste + spellbonuses.hastetype2),
-				Strings::Commify(spellbonuses.hastetype3 + extra_haste)
+				Strings::Commify(spellbonuses.hastetype3 + extra_haste),
+				(RuleB(Combat, UseNewAgiFormulas) && IsClient())
+					? fmt::format(", AGI: {:.1f}% (pre-cap)", agi_haste)
+					: std::string(""),
+				(RuleB(Combat, UseNewAgiFormulas) && IsClient())
+					? fmt::format(", AGI Stat: {}", static_cast<int>(agi_total))
+					: std::string("")
 			).c_str()
 		);
 	}
@@ -5274,6 +5311,15 @@ int32 Mob::GetActSpellCasttime(uint16 spell_id, int32 casttime)
 	casttime = casttime * (100 - cast_reducer) / 100;
 	casttime -= cast_reducer_amt;
 
+	if (RuleB(Combat, UseNewAgiFormulas)) {
+		float agi = static_cast<float>(GetAGI());
+		float floor = CombatBalance::AGI_CAST_FLOOR_SEC * 1000.0f; // milliseconds
+		float mult = CombatBalance::AGI_CAST_DIVISOR / (agi + CombatBalance::AGI_CAST_DIVISOR);
+		float cast_floor_ms = floor;
+		float new_cast = cast_floor_ms + (static_cast<float>(casttime) - cast_floor_ms) * mult;
+		casttime = static_cast<int32>(std::max(new_cast, cast_floor_ms));
+	}
+
 	return std::max(casttime, 0);
 
 }
@@ -5504,6 +5550,13 @@ int Mob::GetHaste()
 	}
 
 	h += extra_haste;	//GM granted haste.
+
+	if (RuleB(Combat, UseNewAgiFormulas)) {
+		float agi = static_cast<float>(GetAGI() + GetHeroicAGI());
+		float agi_haste = 100.0f * agi / (agi + CombatBalance::AGI_HASTE_DIVISOR);
+		int final_cap = (IsNPC() ? RuleI(NPC, NPCHasteCap) : IsBot() ? RuleI(Bots, BotsHasteCap) : IsMerc() ? RuleI(Mercs, MercsHasteCap) : RuleI(Character, HasteCap));
+		h = std::min(h + static_cast<int>(agi_haste), final_cap);
+	}
 
 	return 100 + h;
 }
@@ -5919,6 +5972,21 @@ void Mob::TryTwincast(Mob *caster, Mob *target, uint32 spell_id)
 {
 	if (!IsValidSpell(spell_id)) {
 		return;
+	}
+
+	// New DEX-based twincast layer (additive with focus)
+	if (RuleB(Combat, UseNewDexFormulas)) {
+		float dexChance = DexCritChanceNew(this);
+		// pets: use owner dex scaled
+		if (IsPet() && GetOwner()) {
+			dexChance = DexCritChanceNew(GetOwner()) * CombatBalance::PET_DEX_TWINCAST_SCALAR;
+		}
+		if (dexChance > 0 && zone->random.Roll(dexChance)) {
+			if (IsClient()) {
+				Message(Chat::Spells, "You twincast %s!", spells[spell_id].name);
+			}
+			SpellFinished(spell_id, target, EQ::spells::CastingSlot::Item, 0, -1, spells[spell_id].resist_difficulty);
+		}
 	}
 
 	if (IsOfClientBot())

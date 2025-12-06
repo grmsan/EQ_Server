@@ -91,6 +91,9 @@ Client (receives packets with spell data, renders effects)
 - `aa_rank_effects` - Effects for each rank
 - `aa_rank_prereqs` - AA unlock requirements
 - `items` - Spell scrolls, discipline tomes
+- **ID ranges / limits**:
+  - `spells_new.id` is effectively 16-bit on the client (wraps at 65535). Keep custom spell IDs < 65535 (we reserve the 64000–65050 band for custom AAs like Heroic Throw 65000 and Colossal Smash 65010).
+  - `aa_ability.id` / `aa_ranks.id` / `aa_rank_effects.rank_id` are `int unsigned` (server side) and safe well past 100k; we use the 110000 band for custom warrior AA above. Stay below 2^31 to avoid client/packet surprises.
 
 ### C++ Code
 - `common/spdat.h` - Spell constants and SpellEffect namespace
@@ -105,6 +108,8 @@ Client (receives packets with spell data, renders effects)
 - `common/repositories/aa_ability_repository.h`
 - `common/repositories/aa_ranks_repository.h`
 - `common/repositories/aa_rank_effects_repository.h`
+- Installation SQL examples now live outside this docs folder:
+  - `utils/sql/custom/abilities/heroic_throw.sql` (custom AA install script)
 
 ## Development Workflow
 

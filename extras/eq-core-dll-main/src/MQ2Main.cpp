@@ -21,12 +21,52 @@ GNU General Public License for more details.
 #define DEBUG_TRY
 
 #include "MQ2Main.h"
+// For VEH, symbol resolution and module enumeration
+#include <dbghelp.h>
+#include <tlhelp32.h>
+#include <vector>
+
+#pragma comment(lib, "dbghelp.lib")
 
 #ifdef EQLIB_EXPORTS
 #pragma message("EQLIB_EXPORTS")
 #else
 #pragma message("EQLIB_IMPORTS")
 #endif
+
+// File-scope page protection state used by VEH and exposed helper
+static std::vector<uintptr_t> g_protectedPages;
+static SIZE_T g_pageSize = 0;
+// vectored handler pointer promoted to file-scope so other translation units
+// can detect whether the handler is installed and queue protections safely.
+static PVOID g_vectoredHandler = NULL;
+
+extern "C" __declspec(dllexport) void __cdecl MQ2_ProtectPage(uintptr_t addr)
+{
+    if (!addr) return;
+    if (!g_pageSize) {
+        const SYSTEM_INFO si = [](){ SYSTEM_INFO s={0}; GetSystemInfo(&s); return s; }();
+        g_pageSize = si.dwPageSize ? si.dwPageSize : 4096;
+    }
+    uintptr_t pageBase = addr & ~(g_pageSize - 1);
+    for (auto p : g_protectedPages) if (p == pageBase) return;
+    // If the VEH handler isn't installed yet, queue the pageBase and log a queued state.
+    g_protectedPages.push_back(pageBase);
+    FILE* lf = nullptr;
+    if (fopen_s(&lf, "dinput8_debug.log", "a") == 0 && lf) {
+        if (!g_vectoredHandler) {
+            fprintf(lf, "MQ2Main: MQ2_ProtectPage queued page %p (addr %p) - VEH not ready\n", (void*)pageBase, (void*)addr);
+        } else {
+            DWORD old = 0;
+            if (VirtualProtect((LPVOID)pageBase, g_pageSize, PAGE_READONLY, &old)) {
+                fprintf(lf, "MQ2Main: MQ2_ProtectPage protected page %p (addr %p)\n", (void*)pageBase, (void*)addr);
+            } else {
+                fprintf(lf, "MQ2Main: MQ2_ProtectPage failed to protect page %p (addr %p)\n", (void*)pageBase, (void*)addr);
+            }
+        }
+        fclose(lf);
+    }
+}
 
 DWORD WINAPI MQ2Start(LPVOID lpParameter);
 #if !defined(ISXEQ) && !defined(ISXEQ_LEGACY)
@@ -380,6 +420,145 @@ DWORD WINAPI MQ2Start(LPVOID lpParameter)
     InitializeMQ2DInput();
     if (gGameState == GAMESTATE_INGAME)
         gbInZone = TRUE;
+
+    // Initialize symbol handler for stack traces and symbol resolution
+    HANDLE proc = GetCurrentProcess();
+    SymSetOptions(SYMOPT_DEFERRED_LOADS | SYMOPT_UNDNAME);
+    SymInitialize(proc, NULL, TRUE);
+
+    // Dump loaded modules to the dinput8 debug log for easier triage
+    auto DumpLoadedModules = [&]() {
+        FILE* lf = nullptr;
+        if (fopen_s(&lf, "dinput8_debug.log", "a") == 0 && lf) {
+            fprintf(lf, "MQ2Main: Loaded modules:\n");
+            HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, GetCurrentProcessId());
+            if (hSnap != INVALID_HANDLE_VALUE) {
+                MODULEENTRY32 me = {0};
+                me.dwSize = sizeof(me);
+                if (Module32First(hSnap, &me)) {
+                    do {
+                        fprintf(lf, "  %s @ %p size=0x%08x\n", me.szModule, me.modBaseAddr, me.modBaseSize);
+                    } while (Module32Next(hSnap, &me));
+                }
+                CloseHandle(hSnap);
+            }
+            fclose(lf);
+        }
+    };
+
+    DumpLoadedModules();
+
+    // VEH write-watch: resolve modules/symbols and capture stack traces on writes
+    if (!g_pageSize) {
+        const SYSTEM_INFO si = [](){ SYSTEM_INFO s={0}; GetSystemInfo(&s); return s; }();
+        g_pageSize = si.dwPageSize ? si.dwPageSize : 4096;
+    }
+
+    auto ProtectPageForAddr = [&](uintptr_t addr) {
+        if (!addr) return;
+        uintptr_t pageBase = addr & ~(g_pageSize - 1);
+        // Avoid duplicates
+        for (auto p : g_protectedPages) if (p == pageBase) return;
+        DWORD old = 0;
+        if (VirtualProtect((LPVOID)pageBase, g_pageSize, PAGE_READONLY, &old)) {
+            g_protectedPages.push_back(pageBase);
+            FILE* lf = nullptr;
+            if (fopen_s(&lf, "dinput8_debug.log", "a") == 0 && lf) {
+                fprintf(lf, "MQ2Main: Protected page %p (addr %p)\n", (void*)pageBase, (void*)addr);
+                fclose(lf);
+            }
+        }
+    };
+
+    // Known addresses observed in prior log runs; protect their pages as an early test.
+    // These values were captured from a user's run and may vary by process; they are a best-effort starting point.
+    uintptr_t knownAddrs[] = { 0x26A8B6A4ull, 0x26A8B6B0ull, 0x26A88018ull };
+    for (auto a : knownAddrs) ProtectPageForAddr(a);
+
+    // Exported helper for other translation units to request protections at runtime
+    // Implement accessible wrapper using function pointer capture of ProtectPageForAddr
+    // (we provide a C-callable function below that calls this lambda via a static thunk)
+
+    // we will install a callable that forwards to ProtectPageForAddr via a static function defined later
+
+    // Vectored exception handler to capture writes to protected pages; resolves module/symbol and stack
+    auto VehHandler = [](PEXCEPTION_POINTERS info) -> LONG {
+        if (!info || !info->ExceptionRecord) return EXCEPTION_CONTINUE_SEARCH;
+        if (info->ExceptionRecord->ExceptionCode != EXCEPTION_ACCESS_VIOLATION) return EXCEPTION_CONTINUE_SEARCH;
+        // ExceptionInformation[0] == 1 for write, 0 for read
+        ULONG_PTR writeFlag = info->ExceptionRecord->ExceptionInformation[0];
+        uintptr_t targetAddr = (uintptr_t)info->ExceptionRecord->ExceptionInformation[1];
+        if (writeFlag != 1) return EXCEPTION_CONTINUE_SEARCH; // we care about writes
+
+        // Check whether target is inside one of our protected pages
+        uintptr_t pageBase = targetAddr & ~(g_pageSize - 1);
+
+        // Build a log entry with faulting IP and thread id
+        uintptr_t faultIp = 0;
+#ifdef _M_X64
+        faultIp = (uintptr_t)info->ContextRecord->Rip;
+#else
+        faultIp = (uintptr_t)info->ContextRecord->Eip;
+#endif
+        DWORD tid = GetCurrentThreadId();
+        time_t now = time(nullptr);
+
+        FILE* lf = nullptr;
+        if (fopen_s(&lf, "dinput8_debug.log", "a") == 0 && lf) {
+            char tb[32];
+            strftime(tb, sizeof(tb), "%Y%m%d_%H%M%S", localtime(&now));
+            fprintf(lf, "%s MQ2Main: WRITE_WATCH_FAULT ip=%p target=%p tid=%u\n", tb, (void*)faultIp, (void*)targetAddr, tid);
+
+            // Resolve module for fault IP
+            HMODULE hm = NULL;
+            if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, (LPCSTR)faultIp, &hm)) {
+                char modname[MAX_PATH] = {0};
+                GetModuleFileNameA(hm, modname, sizeof(modname));
+                fprintf(lf, "  module: %s\n", modname);
+            }
+
+            // Capture a short stack trace
+            void* bt[16];
+            USHORT frames = CaptureStackBackTrace(0, _countof(bt), bt, NULL);
+            fprintf(lf, "  stack (%u frames):\n", frames);
+            for (USHORT i = 0; i < frames; ++i) {
+                uintptr_t addr = (uintptr_t)bt[i];
+                // Try to resolve symbol
+                DWORD64 disp = 0;
+                char symbuf[sizeof(SYMBOL_INFO) + 256] = {0};
+                PSYMBOL_INFO pSym = (PSYMBOL_INFO)symbuf;
+                pSym->SizeOfStruct = sizeof(SYMBOL_INFO);
+                pSym->MaxNameLen = 255;
+                if (SymFromAddr(GetCurrentProcess(), (DWORD64)addr, &disp, pSym)) {
+                    fprintf(lf, "    %02u: %p %s + 0x%llx\n", i, (void*)addr, pSym->Name, (unsigned long long)disp);
+                } else {
+                    fprintf(lf, "    %02u: %p\n", i, (void*)addr);
+                }
+            }
+            fclose(lf);
+        }
+
+        // Make the page writable so the instruction can complete, then allow execution to continue.
+        DWORD old = 0;
+        VirtualProtect((LPVOID)pageBase, g_pageSize, PAGE_READWRITE, &old);
+        return EXCEPTION_CONTINUE_EXECUTION;
+    };
+
+    // Register the handler (first handler to run)
+    g_vectoredHandler = AddVectoredExceptionHandler(1, (PVECTORED_EXCEPTION_HANDLER)VehHandler);
+
+    // Apply queued protections (if any) now that VEH is installed.
+    if (!g_protectedPages.empty()) {
+        FILE* lf = nullptr;
+        if (fopen_s(&lf, "dinput8_debug.log", "a") == 0 && lf) {
+            fprintf(lf, "MQ2Main: Applying queued protections (%zu pages)\n", g_protectedPages.size());
+            fclose(lf);
+        }
+        for (auto pageBase : g_protectedPages) {
+            DWORD old = 0;
+            VirtualProtect((LPVOID)pageBase, g_pageSize, PAGE_READONLY, &old);
+        }
+    }
 
 
     WriteChatColor(LoadedString,USERCOLOR_DEFAULT);

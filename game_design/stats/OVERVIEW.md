@@ -146,3 +146,12 @@ AttackRating = (GetSkill(EQ::skills::SkillOffense) * 1.345) + str_bonus + (GetPr
 | **Strength** | +0.9 ATK per point (Weak) | **+20 ATK per point** (at Lv 60) |
 | **Stamina** | 50% penalty > 255 | **Linear Scaling** (HP = STA * Level) |
 | **Gameplay** | Gear upgrades feel meaningless after hitting cap. | Gaining 100 STR is a **massive** power spike. |
+
+## High-Stat Guardrails (keep 2k+ stats sane)
+- **STR**: Linear additive bonus with `STR_LEVEL_DIVISOR` and optional DR start ~1200; offhand/pet scalars keep dual-wield/pets in check.
+- **STA**: HP/regen tuned conservatively; cap total mitigation when combined with WIS/CHA so stacked defense cannot nullify damage.
+- **DEX**: Add caps for resist penetration (per-stat and shared CHA+DEX), overflow softcap for crit damage, hard cap on proc chain depth and optional bow softcap.
+- **AGI**: Haste and run speed obey existing caps; cast/GCD floor (e.g., 0.5s) prevents zero-time casts; avoidance softcapped by class multipliers.
+- **INT**: Spell power softcap + wizard crit cap; total CDR cap (e.g., 65% with all sources); mana discount capped.
+- **WIS**: Spell mitigation capped (~50%); heal/rune softcaps; CC resist capped (~80%) so control still matters.
+- **CHA**: Rare loot capped (~50%); pet power softcapped; shared resist-pen cap with DEX; damage reduction capped; charm permanence gated by rule/threshold.

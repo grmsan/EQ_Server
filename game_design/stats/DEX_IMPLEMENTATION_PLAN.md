@@ -1,4 +1,4 @@
-# DEX Attribute Implementation Plan
+﻿# DEX Attribute Implementation Plan
 
 > Design source: `game_design/stats/DEX.md`, system context: `game_design/stats/OVERVIEW.md`.
 > Goal: Make Dexterity the Stat of Precision — crit reliability + crit power, multi-proc chains, bow force (rangers), spell penetration — with clear tuning knobs in code/config.
@@ -130,3 +130,10 @@ DEX drives four pillars:
 ## Rollout Notes
 - Keep defaults conservative (match DEX.md numbers) and adjust `DEX_CRIT_DIVISOR`, `DEX_BASE_CRIT_DMG_DIVISOR`, and proc denominators after playtests.
 - Document knob changes in the JSON/changelogs so designers can iterate without code changes where appropriate (gear/stat curves), and in `combat_balance_config.h` for code-level knobs.
+
+## Additional Guardrails (high-stat safety)
+- Add explicit caps for resist penetration: `DEX_RESIST_PENETRATION_CAP` (e.g., 120) and shared cap with CHA (`CHA_DEX_RESIST_CAP` ~180) so combined sources cannot zero raid resists.
+- Add crit overflow softcap (`DEX_CRIT_OVERFLOW_SOFTCAP`, start ~100%, power ~0.75) or a hard cap to prevent 2k+ DEX from creating runaway crit damage multipliers.
+- Clamp bow DEX bonus through an optional softcap (`DEX_BOW_FORCE_SOFTCAP` with power < 1.0) if ranged DPS outpaces melee at very high DEX.
+- Keep multi-proc hard cap by band (e.g., +1 proc per 500 DEX, max 4) to avoid deep chains on extreme gear.
+- Consider item curve adjustments (`item_scaling.json`) to slow DEX growth on late-tier slots if live playtests show spikes.

@@ -23,6 +23,8 @@
 #include <iphlpapi.h>
 #include <IPTypes.h>
 #include "spaghetti.h"
+#include <thread>
+#include <chrono>
 #include <limits.h>
 #include <intrin.h>
 
@@ -45,6 +47,76 @@ void LogDebug(const char* format, ...) {
 		fprintf(file, "\n");
 		va_end(args);
 		fclose(file);
+	}
+}
+
+static void ConditionalDumpOpcode(uint16_t op, const char* buf, size_t size, const char* toggle_filename)
+{
+	// Toggle file lives in the repo logs folder. If present, dump the packet for offline analysis.
+	const char* repo_toggle_prefix = "C:\\Users\\marsh\\OneDrive\\Documents\\GitHub\\EQ_Server\\logs\\";
+	char fulltoggle[1024];
+	snprintf(fulltoggle, sizeof(fulltoggle), "%s%s", repo_toggle_prefix, toggle_filename);
+	FILE* tf = nullptr;
+	if (fopen_s(&tf, fulltoggle, "r") == 0 && tf) {
+		fclose(tf);
+		// toggle file exists -> write dump
+		time_t now = time(nullptr);
+		struct tm* tmv = localtime(&now);
+		char tb[32] = {0};
+		strftime(tb, sizeof(tb), "%Y%m%d_%H%M%S", tmv);
+		char dumpname[1024];
+		snprintf(dumpname, sizeof(dumpname), "C:\\Users\\marsh\\OneDrive\\Documents\\GitHub\\EQ_Server\\logs\\dumps\\packet_%s_%04x.bin", tb, op & 0xFFFF);
+		FILE* df = nullptr;
+		// Ensure dumps directory exists (best-effort)
+		// We won't create directories portably here; assume it exists or the user will create it.
+		if (fopen_s(&df, dumpname, "wb") == 0 && df) {
+			fwrite(buf, 1, size, df);
+			fclose(df);
+		}
+		// Also append a short human-readable line to the repo stats log
+		FILE* lf = nullptr;
+		if (fopen_s(&lf, "C:\\Users\\marsh\\OneDrive\\Documents\\GitHub\\EQ_Server\\logs\\stats_debug.log", "a") == 0 && lf) {
+			fprintf(lf, "%s DUMP opcode=0x%04x size=%zu -> %s\n", tb, op & 0xFFFF, size, dumpname);
+			fclose(lf);
+		}
+	}
+}
+
+// Use simple integers for last-logged detour values to avoid global C++
+// container construction during DLL load which can be fragile.
+static int g_last_logged_hp = INT_MIN;
+static int g_last_logged_mana = INT_MIN;
+static int g_last_logged_end = INT_MIN;
+
+static void ConditionalLogEdgeStat(const char* buf, size_t size, const char* /*toggle_filename*/)
+{
+	// Always parse and append EdgeStat entries to the repo stats_debug.log
+	if (!buf || size < 4) return;
+	uint32_t count = 0;
+	memcpy(&count, buf, sizeof(uint32_t));
+	if (count > 1000) return; // sanity cap
+
+	FILE* lf = nullptr;
+	if (fopen_s(&lf, "C:\\Users\\marsh\\OneDrive\\Documents\\GitHub\\EQ_Server\\logs\\stats_debug.log", "a") == 0 && lf) {
+		time_t now = time(nullptr);
+		struct tm* tmv = localtime(&now);
+		char tb[32] = {0};
+		strftime(tb, sizeof(tb), "%Y%m%d_%H%M%S", tmv);
+		fprintf(lf, "%s EDGE_STAT count=%u\n", tb, count);
+		size_t expected = sizeof(uint32_t) + (size_t)count * (sizeof(uint32_t) + sizeof(uint64_t));
+		if (size < expected) {
+			fprintf(lf, "  WARNING: packet too small for declared count (size=%zu expected=%zu)\n", size, expected);
+		}
+		for (uint32_t i = 0; i < count; ++i) {
+			size_t off = sizeof(uint32_t) + i * (sizeof(uint32_t) + sizeof(uint64_t));
+			if (off + sizeof(uint32_t) + sizeof(uint64_t) > size) break;
+			uint32_t key = 0;
+			uint64_t value = 0;
+			memcpy(&key, buf + off, sizeof(uint32_t));
+			memcpy(&value, buf + off + sizeof(uint32_t), sizeof(uint64_t));
+			fprintf(lf, "  stat[%u] key=%u value=%llu\n", i, key, (unsigned long long)value);
+		}
+		fclose(lf);
 	}
 }
 
@@ -577,21 +649,636 @@ struct ItemSerializationHeader
 
 typedef CHARINFO2* (__thiscall* EQ_Character_GetCharInfo2_t)(EQ_Character*);
 
+// Cached server-reported HP values (from OP_HPUpdate) for the local player.
+int g_serverCurHP = -1;
+int g_serverMaxHP = -1;
+// Cached server-reported Endurance values (from OP_EnduranceUpdate) for the local player.
+int g_serverCurEnd = -1;
+int g_serverMaxEnd = -1;
+// Cached server-reported Mana values (from OP_ManaUpdate) for the local player.
+int g_serverCurMana = -1;
+int g_serverMaxMana = -1;
+// Track which spawn/character the caches belong to so we can clear on character swap.
+uint16_t g_localSpawnId = 0;
+
+// Cached stats from the PlayerProfile packet (server authoritative).
+struct ServerProfileCache {
+    bool   has_profile = false;
+    int    str = -1;
+    int    sta = -1;
+    int    agi = -1;
+    int    dex = -1;
+    int    intl = -1;
+    int    wis = -1;
+    int    cha = -1;
+    int    hp_cur = -1;
+    int    mana_cur = -1;
+    int    mana_max = -1;
+    int    end_cur = -1; // profile provides total; use it until we have a better source
+    int    end_max = -1;
+};
+
+ServerProfileCache g_serverProfile;
+static bool logged_profile_candidate = false;
+static int packetCount = 0;
+
+// Recent packet circular buffer to assist debugging crashes/zoning sequences
+struct RecentPacket {
+	uint16_t opcode;
+	size_t size;
+	// head/tail hold hex previews (2 chars per byte) plus terminating NUL
+	char head[33];
+	char tail[33];
+	time_t ts;
+};
+static const size_t kRecentPacketBuf = 256;
+static RecentPacket g_recent_packets[kRecentPacketBuf];
+static size_t g_recent_idx = 0;
+static bool g_verbose_logs = false; // enable by dropping a file or toggle in code
+
+static void AddRecentPacket(unsigned opcode, const char* buf, size_t size) {
+	RecentPacket &r = g_recent_packets[g_recent_idx % kRecentPacketBuf];
+	r.opcode = static_cast<uint16_t>(opcode & 0xFFFF);
+	r.size = size;
+	r.ts = std::time(nullptr);
+	// head
+	size_t h = size < 16 ? size : 16;
+	for (size_t i = 0; i < h; ++i) {
+		unsigned char c = static_cast<unsigned char>(buf[i]);
+		sprintf(r.head + (i * 2), "%02X", c);
+	}
+	r.head[h*2] = '\0';
+	// tail
+	size_t t = size < 16 ? 0 : (size - 16);
+	size_t tail_len = (size < 16) ? size : 16;
+	for (size_t i = 0; i < tail_len; ++i) {
+		unsigned char c = static_cast<unsigned char>(buf[t + i]);
+		sprintf(r.tail + (i * 2), "%02X", c);
+	}
+	r.tail[tail_len*2] = '\0';
+	++g_recent_idx;
+}
+
+static void DumpRecentPackets(FILE* f, size_t count = 20) {
+	if (!f) return;
+	size_t available = (g_recent_idx < kRecentPacketBuf) ? g_recent_idx : kRecentPacketBuf;
+	size_t to_dump = count < available ? count : available;
+	size_t start = (g_recent_idx >= to_dump) ? (g_recent_idx - to_dump) : 0;
+	for (size_t i = 0; i < to_dump; ++i) {
+		size_t idx = (start + i) % kRecentPacketBuf;
+		RecentPacket &r = g_recent_packets[idx];
+		char tb[64] = {0};
+		struct tm *tmv = localtime(&r.ts);
+		strftime(tb, sizeof(tb), "%Y-%m-%d %H:%M:%S", tmv);
+		fprintf(f, "[%s] RECENT opcode=0x%04x size=%zu head=%s tail=%s\n", tb, r.opcode, r.size, r.head, r.tail);
+	}
+}
+
+static void ResetServerCaches()
+{
+    g_serverCurHP   = -1;
+    g_serverMaxHP   = -1;
+    g_serverCurEnd  = -1;
+    g_serverMaxEnd  = -1;
+    g_serverCurMana = -1;
+    g_serverMaxMana = -1;
+    g_serverProfile = ServerProfileCache{};
+    logged_profile_candidate = false;
+}
+
+// --- Write-watch for local-player stat writes (VEH) ---
+static PVOID g_stat_watch_handler = nullptr;
+static void* g_stat_watch_page = nullptr;
+static size_t g_stat_watch_page_size = 0;
+static bool g_stat_watch_active = false;
+
+static void DisableStatWriteWatch();
+
+static LONG CALLBACK StatWriteWatchHandler(PEXCEPTION_POINTERS ep)
+{
+	if (!ep || !ep->ExceptionRecord) return EXCEPTION_CONTINUE_SEARCH;
+	DWORD code = (DWORD)ep->ExceptionRecord->ExceptionCode;
+	// Access violation on write (1 == write)
+	if (code == EXCEPTION_ACCESS_VIOLATION && ep->ExceptionRecord->NumberParameters >= 2) {
+		uintptr_t fault_addr = (uintptr_t)ep->ExceptionRecord->ExceptionInformation[1];
+		uintptr_t page_base = (uintptr_t)g_stat_watch_page;
+		size_t page_size = g_stat_watch_page_size;
+		if (g_stat_watch_active && page_base && fault_addr >= page_base && fault_addr < page_base + page_size) {
+			// Log the faulting IP and target address (x86 uses Eip)
+#ifdef _M_X64
+			void* ip = (void*)ep->ContextRecord->Rip;
+#else
+			void* ip = (void*)ep->ContextRecord->Eip;
+#endif
+			LogDebug("[WRITE_WATCH_FAULT] ip=%p target=%p", ip, (void*)fault_addr);
+
+			// Temporarily make the page writable so the instruction can complete.
+			DWORD old = 0;
+			if (VirtualProtect((LPVOID)page_base, page_size, PAGE_READWRITE, &old)) {
+				// Allow the instruction to continue and perform the write.
+				return EXCEPTION_CONTINUE_EXECUTION;
+			} else {
+				// If we can't change protection, remove the watch to avoid lockout.
+				DisableStatWriteWatch();
+				return EXCEPTION_CONTINUE_SEARCH;
+			}
+		}
+	}
+	return EXCEPTION_CONTINUE_SEARCH;
+}
+
+static void EnableStatWriteWatchForSpawn(void* spawn_ptr)
+{
+	if (!spawn_ptr) return;
+	SYSTEM_INFO si;
+	GetSystemInfo(&si);
+	size_t page = si.dwPageSize;
+	uintptr_t addr = (uintptr_t)spawn_ptr;
+	uintptr_t page_base = addr & ~(page - 1);
+
+	g_stat_watch_page = (void*)page_base;
+	g_stat_watch_page_size = page; // watch a single page covering spawn
+
+	// Protect page to trigger VEH on writes
+	DWORD old = 0;
+	if (VirtualProtect(g_stat_watch_page, g_stat_watch_page_size, PAGE_NOACCESS, &old)) {
+		if (!g_stat_watch_handler) {
+			g_stat_watch_handler = AddVectoredExceptionHandler(1, StatWriteWatchHandler);
+		}
+		g_stat_watch_active = true;
+		LogDebug("[WRITE_WATCH_ENABLE] page=%p size=%zu", g_stat_watch_page, g_stat_watch_page_size);
+		// Start a short-lived timer to automatically disable the watch after 15 seconds
+		std::thread([]() {
+			std::this_thread::sleep_for(std::chrono::seconds(15));
+			DisableStatWriteWatch();
+		}).detach();
+	} else {
+		LogDebug("[WRITE_WATCH_ENABLE_FAIL] could not protect page=%p", g_stat_watch_page);
+		g_stat_watch_active = false;
+	}
+}
+
+static void DisableStatWriteWatch()
+{
+	if (g_stat_watch_page && g_stat_watch_page_size) {
+		DWORD old = 0;
+		VirtualProtect(g_stat_watch_page, g_stat_watch_page_size, PAGE_READWRITE, &old);
+	}
+	if (g_stat_watch_handler) {
+		RemoveVectoredExceptionHandler(g_stat_watch_handler);
+		g_stat_watch_handler = nullptr;
+	}
+	g_stat_watch_page = nullptr;
+	g_stat_watch_page_size = 0;
+	g_stat_watch_active = false;
+	LogDebug("[WRITE_WATCH_DISABLE]");
+}
+
+static void LogPacket(const char* tag, unsigned opcode, size_t size)
+{
+    FILE* f = nullptr;
+    if (fopen_s(&f, "dinput8_debug.log", "a") == 0 && f) {
+		fprintf(f, "%s opcode=0x%04x size=%zu\n", tag, opcode & 0xFFFF, size);
+        fclose(f);
+    }
+}
+
+// prev_max: the previous cached max value for this stat (or -1 if unknown)
+// prev_max: the previous cached max value for this stat (or -1 if unknown)
+// src: human-readable source of the packet (e.g., "HPUpdate", "ServerStatsUpdate")
+static void LogPacketDetail(const char* tag, unsigned opcode, size_t size, uint32_t cur, int32_t max, uint16_t spawn, int32_t prev_max = -1, const char* src = "")
+{
+    FILE* f = nullptr;
+	// Only log endurance/mana packets when the max value changes (to reduce noise).
+	// Always log HP packets.
+	bool is_mana = strstr(tag, "MANA") != nullptr;
+	bool is_end = strstr(tag, "END") != nullptr;
+	if ((is_mana || is_end) && prev_max != -1 && prev_max == max) {
+		return; // no meaningful max change, skip noisy logging
+	}
+	if (fopen_s(&f, "dinput8_debug.log", "a") == 0 && f) {
+		if (src && src[0]) {
+			fprintf(f, "%s opcode=0x%04x size=%zu cur=%u max=%d spawn=%u src=%s\n", tag, opcode & 0xFFFF, size, cur, max, spawn, src);
+		} else {
+			fprintf(f, "%s opcode=0x%04x size=%zu cur=%u max=%d spawn=%u\n", tag, opcode & 0xFFFF, size, cur, max, spawn);
+		}
+		fclose(f);
+	}
+}
+
+static uint32_t ReadUInt32Safe(const char* buf, size_t size, size_t offset)
+{
+    if (offset + 4 > size) return 0;
+    uint32_t v;
+    memcpy(&v, buf + offset, 4);
+    return v;
+}
+
 unsigned char __fastcall HandleWorldMessage_Trampoline(DWORD *con, DWORD edx, unsigned __int32 unk, unsigned __int32 opcode, char* buf, size_t size);
 unsigned char __fastcall HandleWorldMessage_Detour(DWORD *con, DWORD edx, unsigned __int32 unk, unsigned __int32 opcode, char* buf, size_t size)
 {
-    static int packetCount = 0;
     try {
         packetCount++;
-        // Log first 100 packets to capture login sequence
-        if (packetCount <= 100) {
-            LogDebug("[RX #%d] Opcode: 0x%04x Size: %d", packetCount, opcode & 0xFFFF, size);
+        // If we swapped characters/spawn, clear cached values so we don't leak old stats to the new toon.
+				if (GetCharInfo() && GetCharInfo()->pSpawn) {
+            PSPAWNINFO me = reinterpret_cast<PSPAWNINFO>(GetCharInfo()->pSpawn);
+            if (me && me->SpawnID != 0 && me->SpawnID != g_localSpawnId) {
+                // Only blow away caches if this is an actual toon swap (not the initial 0 -> real spawn id transition).
+                if (g_localSpawnId != 0) {
+					LogDebug("[CACHE_RESET] new spawn id %u (old %u), clearing server caches", me->SpawnID, g_localSpawnId);
+					// Log a short summary of last-known server stats before clearing so we have context.
+					LogDebug("[CACHE_RESET_SUMMARY] last HP=%d/%d Mana=%d/%d End=%d/%d",
+						g_serverCurHP, g_serverMaxHP, g_serverCurMana, g_serverMaxMana, g_serverCurEnd, g_serverMaxEnd);
+					ResetServerCaches();
+					// Dump recent packet previews to help diagnose what packets arrived during zoning
+					{
+						FILE* rf = nullptr;
+						if (fopen_s(&rf, "dinput8_debug.log", "a") == 0 && rf) {
+							fprintf(rf, "[CACHE_RESET_RECENT] spawn=%u recent packet dump:\n", me->SpawnID);
+							DumpRecentPackets(rf, 40);
+							fclose(rf);
+						}
+					}
+                } else {
+                    LogDebug("[CACHE_RESET] new spawn id %u (old %u), keeping profile cache", me->SpawnID, g_localSpawnId);
+					// Also dump recent packets when we keep profile cache (initial spawn)
+					{
+						FILE* rf = nullptr;
+						if (fopen_s(&rf, "dinput8_debug.log", "a") == 0 && rf) {
+							fprintf(rf, "[CACHE_RESET_RECENT] spawn=%u recent packet dump (initial):\n", me->SpawnID);
+							DumpRecentPackets(rf, 40);
+							fclose(rf);
+						}
+					}
+                }
+				g_localSpawnId = me->SpawnID;
+
+				// Enable a short-lived write-watch on both the local spawn and character info pages
+				// to catch unexpected writers who may be double-applying item stats during zone-in.
+				EnableStatWriteWatchForSpawn((void*)me);
+				if (GetCharInfo()) {
+					EnableStatWriteWatchForSpawn((void*)GetCharInfo());
+				}
+				// Also log a concise structured client-side spawn parse line for correlation
+				{
+					FILE* sf3 = nullptr;
+					const char* repo_stats_path = "C:\\Users\\marsh\\OneDrive\\Documents\\GitHub\\EQ_Server\\logs\\stats_debug.log";
+					if (fopen_s(&sf3, repo_stats_path, "a") == 0 && sf3) {
+						time_t now3 = time(nullptr);
+						struct tm *tmv3 = localtime(&now3);
+						char tb3[32] = {0};
+						strftime(tb3, sizeof(tb3), "%Y%m%d_%H%M%S", tmv3);
+						const char* nm = (me && me->Name) ? me->Name : "(nil)";
+						int curhp = 0;
+						int maxhp = 0;
+						// PSPAWNINFO exposes HPCurrent/HPMax
+						curhp = (me) ? me->HPCurrent : 0;
+						maxhp = (me) ? me->HPMax : 0;
+						fprintf(sf3, "%s CLIENT_SPAWN_PARSED spawn=%u name=%s cur=%d max=%d\n", tb3, g_localSpawnId, nm, curhp, maxhp);
+						fclose(sf3);
+					}
+				}
+            }
         }
-        // After first 100, only log time of day as heartbeat
-        else if ((opcode & 0xFFFF) == 0x3200) {
-             LogDebug("[RX HEARTBEAT] 0x3200");
+		// NOTE: packet logging temporarily disabled to avoid interfering with
+		// client stability while we diagnose a crash that can occur on certain
+		// incoming packets. These logs can be re-enabled once the crash is
+		// resolved.
+
+		// Conditional on-demand dumps for specific opcodes useful for diagnosing zoning stat changes.
+		// Create the toggle files under repo `logs/` to enable without rebuilding:
+		//  - enable_dump_1338  (EdgeStatLabelPacket)
+		//  - enable_dump_575b  (suspected large item/HME packet)
+		{
+			uint16_t lop = opcode & 0xFFFF;
+			if (lop == 0x1338) {
+				ConditionalDumpOpcode(lop, buf, size, "enable_dump_1338");
+				// Also write a readable, parsed EdgeStat log when toggled
+				ConditionalLogEdgeStat(buf, size, "enable_log_1338");
+			}
+			if (lop == 0x575b) {
+				ConditionalDumpOpcode(lop, buf, size, "enable_dump_575b");
+			}
+		}
+
+        // Only parse PlayerProfile opcode (RoF2 0x6506) for stats snapshot; ignore other large packets.
+        const uint16_t player_profile_opcode = 0x6506; // OP_PlayerProfile (RoF2)
+		if (!logged_profile_candidate && (opcode & 0xFFFF) == player_profile_opcode && size > 9000) {
+            logged_profile_candidate = true;
+            // Reset per-profile caches so we don't carry over stale values between characters.
+            g_serverProfile = ServerProfileCache{};
+			// Read a set of offsets from the PlayerProfile; these offsets have historically varied by client
+			// build/version. We guard reads and log the offsets we used to aid diagnosing mismatches.
+			uint32_t cur_hp   = ReadUInt32Safe(buf, size, 948);
+			uint32_t mana     = ReadUInt32Safe(buf, size, 944);
+			uint32_t str      = ReadUInt32Safe(buf, size, 952);
+			uint32_t sta      = ReadUInt32Safe(buf, size, 956);
+			// INT and CHA offsets were swapped in earlier parsing; fix the order to match packet layout.
+			uint32_t intl     = ReadUInt32Safe(buf, size, 960);
+			uint32_t dex      = ReadUInt32Safe(buf, size, 964);
+			uint32_t cha      = ReadUInt32Safe(buf, size, 968);
+			uint32_t agi      = ReadUInt32Safe(buf, size, 972);
+			uint32_t wis      = ReadUInt32Safe(buf, size, 976);
+			uint32_t end_tot  = (size > 13760) ? ReadUInt32Safe(buf, size, 13756) : 0;
+			uint32_t mana_tot = (size > 13764) ? ReadUInt32Safe(buf, size, 13760) : 0;
+
+			// Basic sanity: if mana_tot is absurd (e.g., garbage from struct mismatch), zero it.
+			if (mana_tot > 100000000) {
+				LogDebug("[PLAYER_PROFILE_WARN] large mana_tot=%u; probable struct mismatch (size=%zu)", mana_tot, size);
+				mana_tot = 0;
+			}
+
+			// If mana_tot is zero but other fields look okay, log an extra warning so zoning/profile parse issues stand out.
+			if (mana_tot == 0 && mana > 0) {
+				LogDebug("[PLAYER_PROFILE_WARN] mana_tot==0 while mana=%u (profile size=%zu). Offsets might be wrong.", mana, size);
+			}
+
+            g_serverProfile.has_profile = true;
+            g_serverProfile.hp_cur   = static_cast<int>(cur_hp);
+            g_serverProfile.mana_cur = static_cast<int>(mana);
+            g_serverProfile.mana_max = static_cast<int>(mana_tot);
+            g_serverProfile.str      = static_cast<int>(str);
+            g_serverProfile.sta      = static_cast<int>(sta);
+            g_serverProfile.cha      = static_cast<int>(cha);
+            g_serverProfile.dex      = static_cast<int>(dex);
+            g_serverProfile.intl     = static_cast<int>(intl);
+            g_serverProfile.agi      = static_cast<int>(agi);
+            g_serverProfile.wis      = static_cast<int>(wis);
+            g_serverProfile.end_cur  = static_cast<int>(end_tot);
+            g_serverProfile.end_max  = static_cast<int>(end_tot);
+
+            // Seed live caches from the profile so the UI doesn't show stale HP/Mana/End while waiting for updates.
+            g_serverCurHP   = static_cast<int>(cur_hp);
+            g_serverMaxHP   = static_cast<int>(cur_hp);    // profile max HP is not present; use cur as best-effort
+            g_serverCurMana = static_cast<int>(mana);
+            g_serverMaxMana = static_cast<int>(mana_tot);
+            g_serverCurEnd  = static_cast<int>(end_tot);
+            g_serverMaxEnd  = static_cast<int>(end_tot);
+
+            FILE* f = nullptr;
+            if (fopen_s(&f, "dinput8_debug.log", "a") == 0 && f) {
+                fprintf(f,
+                    "[PROFILE_CACHE] opcode=0x%04x size=%zu HP=%u mana=%u (tot=%u) end=%u STR=%u STA=%u AGI=%u DEX=%u INT=%u WIS=%u CHA=%u\n",
+                    opcode & 0xFFFF, size,
+                    cur_hp, mana, mana_tot, end_tot,
+                    str, sta, agi, dex, intl, wis, cha);
+
+				// Also log a small hex preview (head/tail) to help diagnose offset mismatches without dumping whole packet.
+				size_t head_len = size < 64 ? size : 64;
+				size_t tail_len = size < 64 ? 0 : 64;
+				char head_hex[256] = {0};
+				char tail_hex[256] = {0};
+				for (size_t i = 0; i < head_len; ++i) {
+					unsigned char c = static_cast<unsigned char>(buf[i]);
+					sprintf(head_hex + (i * 2), "%02X", c);
+				}
+				if (tail_len) {
+					size_t t = size - tail_len;
+					for (size_t i = 0; i < tail_len; ++i) {
+						unsigned char c = static_cast<unsigned char>(buf[t + i]);
+						sprintf(tail_hex + (i * 2), "%02X", c);
+					}
+				}
+				fprintf(f, "[PROFILE_RAW] size=%zu head=%s tail=%s\n", size, head_hex, tail_hex);
+
+				// If packet is reasonably sized, write full binary dump for offline analysis.
+				const size_t kMaxFullDump = 65536; // 64KB
+				if (size > 0 && size <= kMaxFullDump) {
+					char dumpname[128];
+					time_t now = std::time(nullptr);
+					struct tm *tmv = localtime(&now);
+					char tb[32] = {0};
+					strftime(tb, sizeof(tb), "%Y%m%d_%H%M%S", tmv);
+					snprintf(dumpname, sizeof(dumpname), "profile_dump_%s_%04x.bin", tb, opcode & 0xFFFF);
+					FILE* df = nullptr;
+					if (fopen_s(&df, dumpname, "wb") == 0 && df) {
+						fwrite(buf, 1, size, df);
+						fclose(df);
+						fprintf(f, "[PROFILE_DUMP] wrote %s (%zu bytes)\n", dumpname, size);
+					}
+				} else {
+					fprintf(f, "[PROFILE_DUMP] skipped full dump (size=%zu > %zu)\n", size, kMaxFullDump);
+				}
+                fclose(f);
+            }
         }
-    } catch (...) {
+	} catch (...) {
+		// Log unexpected exception while parsing packet headers
+		LogDebug("[EXCEPTION] exception in packet header parsing opcode=0x%04x size=%zu", opcode & 0xFFFF, size);
+	}
+
+    // Capture server HP / Endurance / Mana updates for the local player so the label hook can use server-authoritative values.
+    // OP_HPUpdate / OP_EnduranceUpdate / OP_ManaUpdate payloads are 10 bytes: uint32 cur, int32 max, uint16 spawn_id.
+    const uint16_t hp_opcode         = 0x2828; // OP_HPUpdate (RoF2)
+    const uint16_t end_opcode        = 0x5f42; // OP_EnduranceUpdate (RoF2)
+    const uint16_t mob_end_opcode    = 0x1c81; // OP_MobEnduranceUpdate (RoF2)
+    const uint16_t mana_opcode       = 0x3791; // OP_ManaUpdate (RoF2)
+    const uint16_t mob_mana_opcode   = 0x2404; // OP_MobManaUpdate (RoF2)
+    const uint16_t stats_opcode      = 0x7330; // Custom OP_ServerStatsUpdate
+    uint16_t op = opcode & 0xFFFF;
+
+    // Full stats packet (authoritative for stats/HME)
+    if (op == stats_opcode && size >= 56) {
+#pragma pack(push,1)
+        struct ServerStatsUpdatePayload {
+            uint16_t spawn_id;
+            uint16_t padding;
+            int32_t  str;
+            int32_t  sta;
+            int32_t  agi;
+            int32_t  dex;
+            int32_t  intl;
+            int32_t  wis;
+            int32_t  cha;
+            int32_t  cur_hp;
+            int32_t  max_hp;
+            int32_t  cur_mana;
+            int32_t  max_mana;
+            int32_t  cur_end;
+            int32_t  max_end;
+        };
+        #pragma pack(pop)
+        const auto* s = reinterpret_cast<const ServerStatsUpdatePayload*>(buf);
+        PSPAWNINFO me = nullptr;
+        if (GetCharInfo()) {
+            me = reinterpret_cast<PSPAWNINFO>(GetCharInfo()->pSpawn);
+        }
+		if (me && s->spawn_id == me->SpawnID) {
+            g_localSpawnId   = s->spawn_id;
+			// Detect changes vs previous server profile and log only deltas to help trace origin of stat changes
+			int prev_cur_hp = g_serverCurHP;
+			int prev_max_hp = g_serverMaxHP;
+			int prev_cur_mana = g_serverCurMana;
+			int prev_max_mana = g_serverMaxMana;
+			int prev_cur_end = g_serverCurEnd;
+			int prev_max_end = g_serverMaxEnd;
+			int prev_str = g_serverProfile.str;
+			int prev_sta = g_serverProfile.sta;
+			int prev_agi = g_serverProfile.agi;
+			int prev_dex = g_serverProfile.dex;
+			int prev_intl = g_serverProfile.intl;
+			int prev_wis = g_serverProfile.wis;
+			int prev_cha = g_serverProfile.cha;
+
+			g_serverProfile.has_profile = true;
+			g_serverProfile.str      = s->str;
+			g_serverProfile.sta      = s->sta;
+			g_serverProfile.agi      = s->agi;
+			g_serverProfile.dex      = s->dex;
+			g_serverProfile.intl     = s->intl;
+			g_serverProfile.wis      = s->wis;
+			g_serverProfile.cha      = s->cha;
+			g_serverCurHP            = s->cur_hp;
+			g_serverMaxHP            = s->max_hp;
+			g_serverCurMana          = s->cur_mana;
+			g_serverMaxMana          = s->max_mana;
+			g_serverCurEnd           = s->cur_end;
+			g_serverMaxEnd           = s->max_end;
+
+			// Do NOT overwrite the client's in-memory spawn HP fields here.
+			// We prefer to enforce authoritative values at accessor/detour
+			// boundaries (Max_HP/Max_Mana/Max_Endurance detours) rather than
+			// mutating spawn structures in-place. This preserves client-side
+			// integrity and avoids masking underlying divergences.
+
+			// Log the full applied server stats (for visibility)
+			LogDebug("[SERVER_STATS_APPLIED] STR=%d STA=%d AGI=%d DEX=%d INT=%d WIS=%d CHA=%d HP=%d/%d Mana=%d/%d End=%d/%d",
+				s->str, s->sta, s->agi, s->dex, s->intl, s->wis, s->cha,
+				s->cur_hp, s->max_hp, s->cur_mana, s->max_mana, s->cur_end, s->max_end);
+
+			// Also write a small raw dump of the ServerStatsUpdate payload to help debug zoning sequences
+			{
+				FILE* sf = nullptr;
+				if (fopen_s(&sf, "stats_debug.log", "a") == 0 && sf) {
+					time_t now = std::time(nullptr);
+					struct tm *tmv = localtime(&now);
+					char tb[32] = {0};
+					strftime(tb, sizeof(tb), "%Y%m%d_%H%M%S", tmv);
+					fprintf(sf, "[%s] STATS_RAW spawn=%u size=%zu str=%d sta=%d agi=%d dex=%d intl=%d wis=%d cha=%d cur_hp=%d max_hp=%d cur_mana=%d max_mana=%d cur_end=%d max_end=%d\n",
+						tb, s->spawn_id, size, s->str, s->sta, s->agi, s->dex, s->intl, s->wis, s->cha, s->cur_hp, s->max_hp, s->cur_mana, s->max_mana, s->cur_end, s->max_end);
+					// hex preview of the payload
+					size_t preview_len = size < 128 ? size : 128;
+					for (size_t i = 0; i < preview_len; ++i) {
+						fprintf(sf, "%02X", (unsigned char)buf[i]);
+					}
+					fprintf(sf, "\n");
+					// write full small binary dump for offline analysis
+					const size_t kStatsDumpMax = 65536;
+					if (size > 0 && size <= kStatsDumpMax) {
+						char dumpname[128];
+						snprintf(dumpname, sizeof(dumpname), "stats_dump_%s_%04x.bin", tb, opcode & 0xFFFF);
+						FILE* df = nullptr;
+						if (fopen_s(&df, dumpname, "wb") == 0 && df) {
+							fwrite(buf, 1, size, df);
+							fclose(df);
+							fprintf(sf, "WROTE %s (%zu bytes)\n", dumpname, size);
+						}
+					}
+					fclose(sf);
+				}
+						// Also mirror the same human-readable log into the workspace logs folder so
+						// it's easy to find when running the client from outside the repo.
+						{
+							FILE* sf2 = nullptr;
+							const char* repo_stats_path = "C:\\Users\\marsh\\OneDrive\\Documents\\GitHub\\EQ_Server\\logs\\stats_debug.log";
+							if (fopen_s(&sf2, repo_stats_path, "a") == 0 && sf2) {
+								time_t now2 = std::time(nullptr);
+								struct tm *tmv2 = localtime(&now2);
+								char tb2[32] = {0};
+								strftime(tb2, sizeof(tb2), "%Y%m%d_%H%M%S", tmv2);
+								fprintf(sf2, "[%s] STATS_RAW spawn=%u size=%zu str=%d sta=%d agi=%d dex=%d intl=%d wis=%d cha=%d cur_hp=%d max_hp=%d cur_mana=%d max_mana=%d cur_end=%d max_end=%d\n",
+									tb2, s->spawn_id, size, s->str, s->sta, s->agi, s->dex, s->intl, s->wis, s->cha, s->cur_hp, s->max_hp, s->cur_mana, s->max_mana, s->cur_end, s->max_end);
+								size_t preview_len2 = size < 128 ? size : 128;
+								for (size_t i = 0; i < preview_len2; ++i) {
+									fprintf(sf2, "%02X", (unsigned char)buf[i]);
+								}
+								fprintf(sf2, "\n");
+								// small binary dump as well
+								const size_t kStatsDumpMax2 = 65536;
+								if (size > 0 && size <= kStatsDumpMax2) {
+									char dumpname2[256];
+									snprintf(dumpname2, sizeof(dumpname2), "C:\\Users\\marsh\\OneDrive\\Documents\\GitHub\\EQ_Server\\logs\\stats_dump_%s_%04x.bin", tb2, opcode & 0xFFFF);
+									FILE* df2 = nullptr;
+									if (fopen_s(&df2, dumpname2, "wb") == 0 && df2) {
+										fwrite(buf, 1, size, df2);
+										fclose(df2);
+										fprintf(sf2, "WROTE %s (%zu bytes)\n", dumpname2, size);
+									}
+								}
+								fclose(sf2);
+							}
+						}
+			}
+
+			// Now log any deltas found (showing source: ServerStatsUpdate)
+			char delta_buf[512];
+			delta_buf[0] = '\0';
+			int pos = 0;
+			auto app = [&](const char* name, int oldv, int newv) {
+				if (oldv != newv) {
+					pos += snprintf(delta_buf + pos, sizeof(delta_buf) - pos, "%s:%d->%d ", name, oldv, newv);
+				}
+			};
+			app("HP_max", prev_max_hp, g_serverMaxHP);
+			app("HP_cur", prev_cur_hp, g_serverCurHP);
+			app("Mana_max", prev_max_mana, g_serverMaxMana);
+			app("Mana_cur", prev_cur_mana, g_serverCurMana);
+			app("End_max", prev_max_end, g_serverMaxEnd);
+			app("End_cur", prev_cur_end, g_serverCurEnd);
+			app("STR", prev_str, g_serverProfile.str);
+			app("STA", prev_sta, g_serverProfile.sta);
+			app("AGI", prev_agi, g_serverProfile.agi);
+			app("DEX", prev_dex, g_serverProfile.dex);
+			app("INT", prev_intl, g_serverProfile.intl);
+			app("WIS", prev_wis, g_serverProfile.wis);
+			app("CHA", prev_cha, g_serverProfile.cha);
+			if (delta_buf[0] != '\0') {
+				LogDebug("[SERVER_STATS_CHANGE] %s spawn=%u src=ServerStatsUpdate", delta_buf, s->spawn_id);
+			}
+        }
+    }
+
+    if (size >= 10 && (op == hp_opcode || op == end_opcode || op == mob_end_opcode || op == mana_opcode || op == mob_mana_opcode)) {
+        try {
+#pragma pack(push,1)
+            struct HpUpdatePayload {
+                uint32_t cur_hp;
+                int32_t  max_hp;
+                uint16_t spawn_id;
+            };
+#pragma pack(pop)
+
+            const auto* hp = reinterpret_cast<const HpUpdatePayload*>(buf);
+            uint32_t cur   = hp->cur_hp;
+            int32_t  max   = hp->max_hp;
+            uint16_t spawn = hp->spawn_id;
+
+            PSPAWNINFO me = nullptr;
+            if (GetCharInfo()) {
+                me = reinterpret_cast<PSPAWNINFO>(GetCharInfo()->pSpawn);
+            }
+            // Only consider packets for our spawn with non-zero values
+            if (me && spawn == me->SpawnID && (cur > 0 || max > 0)) {
+				if (op == hp_opcode) {
+					int prev_max = g_serverMaxHP;
+					g_serverCurHP = static_cast<int>(cur);
+					g_serverMaxHP = static_cast<int>(max);
+					LogPacketDetail("[HP_PACKET_APPLIED]", opcode, size, cur, max, spawn, prev_max, "HPUpdate");
+				} else if (op == end_opcode || op == mob_end_opcode) { // endurance updates
+					int prev_max = g_serverMaxEnd;
+					g_serverCurEnd = static_cast<int>(cur);
+					g_serverMaxEnd = static_cast<int>(max);
+					LogPacketDetail("[END_PACKET_APPLIED]", opcode, size, cur, max, spawn, prev_max, "EnduranceUpdate");
+				} else { // mana updates
+					int prev_max = g_serverMaxMana;
+					g_serverCurMana = static_cast<int>(cur);
+					g_serverMaxMana = static_cast<int>(max);
+					LogPacketDetail("[MANA_PACKET_APPLIED]", opcode, size, cur, max, spawn, prev_max, "ManaUpdate");
+				}
+            }
+        } catch (...) {
+            LogDebug("[SERVER_HP_CACHE] exception parsing possible HPUpdate");
+        }
     }
 
     // Intercept OP_ItemPacket and OP_CharInventory to apply custom stats per-instance
@@ -629,6 +1316,8 @@ unsigned char __fastcall HandleWorldMessage_Detour(DWORD *con, DWORD edx, unsign
                                 dynamic_level = value;
                                 LogDebug("[CUSTOM_STATS] Parsed dynamic_level=%d", dynamic_level);
                             }
+								// Log every custom stat pair for visibility
+								LogDebug("[CUSTOM_STATS_PAIR] key=%s value=%d", key_buf, value);
                         }
 
                         // TODO: Apply scaling to the item instance in client memory
@@ -728,6 +1417,65 @@ unsigned char __fastcall SendMessage_Detour(DWORD* con, unsigned __int32 unk, un
 DETOUR_TRAMPOLINE_EMPTY(unsigned char __fastcall SendMessage_Trampoline(DWORD*, unsigned __int32, unsigned __int32, char* buf, size_t, DWORD, DWORD));
 
 DETOUR_TRAMPOLINE_EMPTY(unsigned char __fastcall SetDeviceGammaRamp_Trampoline(HDC hdc, LPVOID lpRamp));
+
+// Detours: prefer server-provided max stats when available
+DETOUR_TRAMPOLINE_EMPTY(int __cdecl EQCharacter_MaxHP_Tramp(int, int));
+int __cdecl EQCharacter_MaxHP_Detour(int a1, int a2)
+{
+	int nativeVal = EQCharacter_MaxHP_Tramp(a1, a2);
+	int used = nativeVal;
+	int server = g_serverMaxHP;
+	if (server > 0) {
+		used = server;
+	}
+	// Log first use or changes for local player (simple static int to avoid
+	// global container construction order problems)
+	if (pLocalPlayer) {
+		if (g_last_logged_hp != used) {
+			g_last_logged_hp = used;
+			LogDebug("CLIENT_DETOUR stat=HP server=%d native=%d used=%d", server, nativeVal, used);
+		}
+	}
+	return used;
+}
+
+DETOUR_TRAMPOLINE_EMPTY(int __cdecl EQCharacter_MaxMana_Tramp(int));
+int __cdecl EQCharacter_MaxMana_Detour(int a1)
+{
+	int nativeVal = EQCharacter_MaxMana_Tramp(a1);
+	int used = nativeVal;
+	int server = g_serverMaxMana;
+	if (server > 0) used = server;
+	if (pLocalPlayer) {
+		if (g_last_logged_mana != used) {
+			g_last_logged_mana = used;
+			LogDebug("CLIENT_DETOUR stat=Mana server=%d native=%d used=%d", server, nativeVal, used);
+		}
+	}
+	return used;
+}
+
+DETOUR_TRAMPOLINE_EMPTY(int __cdecl EQCharacter_MaxEnd_Tramp(int));
+int __cdecl EQCharacter_MaxEnd_Detour(int a1)
+{
+	int nativeVal = EQCharacter_MaxEnd_Tramp(a1);
+	int used = nativeVal;
+	int server = g_serverMaxEnd;
+	if (server > 0) used = server;
+	if (pLocalPlayer) {
+		if (g_last_logged_end != used) {
+			g_last_logged_end = used;
+			LogDebug("CLIENT_DETOUR stat=Endurance server=%d native=%d used=%d", server, nativeVal, used);
+		}
+	}
+	return used;
+}
+
+// NOTE: TotalEffect detour removed — attempting to detour member functions
+// with the wrong calling convention caused instability on character select.
+// We keep the EdgeStat cache and Max_* detours active; further member-
+// function detours should be added only after confirming exact calling
+// conventions and offsets for this client build.
 
 signed int ProcessGameEvents_Hook()
 {
@@ -936,14 +1684,8 @@ void InitHooks()
 		DebugSpew("disabling heroic stats");
 		var = (((DWORD)0x0044410C - 0x400000) + baseAddress);
 		PatchA((DWORD*)var, "\x90\x90\xEB", 3); // Remove heroic Stamina
+			FILE* f = nullptr;
 
-		var = (((DWORD)0x00442B36 - 0x400000) + baseAddress);
-		PatchA((DWORD*)var, "\x90\x90\xEB", 3); // Remove heroic int
-		var = (((DWORD)0x00442BB6 - 0x400000) + baseAddress);
-		PatchA((DWORD*)var, "\x90\x90\xEB", 3); // Remove heroic wis
-	}
-
-	if (isOldModelHorseSupportEnabled) {
 		DebugSpew("enabling old model mount support");
 		var = (((DWORD)0x0058DE28 - 0x400000) + baseAddress);
 		PatchA((DWORD*)var, "\x32\xC0", 2); // No mount models
@@ -955,7 +1697,27 @@ void InitHooks()
 	}
 
 	var = (((DWORD)0x004C3250 - 0x400000) + baseAddress);
+#if 0
+	// Disabled: installing the world-message detour caused instability/crashes
+	// during recent investigations. Keep the code here for reference but do
+	// not activate it so the client runs with the unmodified packet handler.
 	EzDetour((DWORD)var, HandleWorldMessage_Detour, HandleWorldMessage_Trampoline);
+#endif
+
+	// Install detours so that the game's native Max_* accessors return the
+	// authoritative server-provided values when we have them. This keeps
+	// UI and other systems consistent without mutating spawn memory.
+	// Temporarily disable Max_* accessor detours to restore a stable baseline
+	// for the DLL while we investigate crash causes. Re-enable only after
+	// the packet-order/write-source is identified and a surgical detour is
+	// implemented.
+#if 0
+	EzDetour((DWORD)EQ_Character__Max_HP, EQCharacter_MaxHP_Detour, EQCharacter_MaxHP_Tramp);
+	EzDetour((DWORD)EQ_Character__Max_Mana, EQCharacter_MaxMana_Detour, EQCharacter_MaxMana_Tramp);
+	EzDetour((DWORD)EQ_Character__Max_Endurance, EQCharacter_MaxEnd_Detour, EQCharacter_MaxEnd_Tramp);
+#endif
+
+	// TotalEffect detour disabled (was causing instability). See comment above.
 
 	if (isSpellDataCRCEnabled) {
 		DebugSpew("enabling spell data crc");

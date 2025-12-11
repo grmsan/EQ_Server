@@ -3665,6 +3665,32 @@ int32 Mob::GetSTR() const
 		base_str += static_cast<int32>(owner_str * CombatBalance::PET_STR_INHERITANCE);
 	}
 
+	// Lightweight one-time-per-client logging to repo stats_debug.log to avoid spam
+	if (IsClient()) {
+		static std::unordered_set<uint32> logged_ids;
+		const uint32 id = GetID();
+		if (logged_ids.insert(id).second) {
+			FILE* lf = nullptr;
+			if (fopen_s(&lf, "C:\\Users\\marsh\\OneDrive\\Documents\\GitHub\\EQ_Server\\logs\\stats_debug.log", "a") == 0 && lf) {
+				time_t now = time(nullptr);
+				struct tm* tmv = localtime(&now);
+				char tb[32] = {0};
+				strftime(tb, sizeof(tb), "%Y%m%d_%H%M%S", tmv);
+				int32 item = itembonuses.STR;
+				int32 spell = spellbonuses.STR;
+				int32 aa = aabonuses.STR;
+				int32 owner_inherit = 0;
+				if (owner) {
+					int32 owner_str = owner->GetSTR();
+					owner_inherit = static_cast<int32>(owner_str * CombatBalance::PET_STR_INHERITANCE);
+				}
+				fprintf(lf, "%s CALC_STR id=%u name=%s base=%d item=%d spell=%d aa=%d owner_inherit=%d result=%d\n",
+					tb, id, GetName(), (int)STR, item, spell, aa, owner_inherit, base_str);
+				fclose(lf);
+			}
+		}
+	}
+
 	return base_str;
 }
 

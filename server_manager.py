@@ -8,6 +8,9 @@ import threading
 import glob
 import queue
 from datetime import datetime
+import shutil
+import json
+import mysql.connector
 
 class ServerManagerApp(tk.Tk):
     def __init__(self):
@@ -32,7 +35,11 @@ class ServerManagerApp(tk.Tk):
 
         self.build_dir = os.path.join(os.getcwd(), "build")
         self.bin_dir = self.find_bin_dir()
+        # DLL search path (only care about this one build output)
+        self.extra_dll_dir = os.path.join("extras", "eq-core-dll-main", "bin")
         self.vcpkg_bin_dir = os.path.join(os.getcwd(), "vcpkg", "vcpkg-export-x64", "installed", "x64-windows", "bin")
+        # Default EQ client directory for exports/copies
+        self.eq_dir_var = tk.StringVar(value=r"D:\Rof2")
 
         self.create_widgets()
         self.update_status_loop()
@@ -81,6 +88,9 @@ class ServerManagerApp(tk.Tk):
         # --- Tools Tab ---
         self.create_tools_tab()
 
+        # Kick off initial status checks
+        self.after(100, self.refresh_status_indicators)
+
     def create_main_tab(self):
         # Build Section
         build_frame = ttk.LabelFrame(self.main_tab, text="Build Server")
@@ -110,6 +120,32 @@ class ServerManagerApp(tk.Tk):
 
         self.shared_mem_btn = ttk.Button(global_frame, text="Run Shared Memory", command=self.run_shared_memory_thread)
         self.shared_mem_btn.pack(side="left", padx=5, pady=5)
+
+        # Client assets/status + quick actions
+        client_frame = ttk.LabelFrame(self.main_tab, text="Client Assets (EQ Folder + DLL/Exports)")
+        client_frame.pack(fill="x", padx=10, pady=5)
+
+        ttk.Label(client_frame, text="EQ Client Folder:").grid(row=0, column=0, padx=5, pady=5, sticky="e")
+        ttk.Entry(client_frame, textvariable=self.eq_dir_var, width=50).grid(row=0, column=1, padx=5, pady=5, sticky="w")
+        ttk.Button(client_frame, text="Browse", command=self.browse_eq_dir).grid(row=0, column=2, padx=5, pady=5)
+        ttk.Button(client_frame, text="Refresh Status", command=self.refresh_status_indicators).grid(row=0, column=3, padx=5, pady=5)
+
+        # Status labels (updated on load/refresh)
+        self.status_labels = {
+            "dll": ttk.Label(client_frame, text="DLL: checking...", foreground="blue"),
+            "spells": ttk.Label(client_frame, text="spells_us: checking...", foreground="blue"),
+            "dbstr": ttk.Label(client_frame, text="dbstr_us: checking...", foreground="blue"),
+        }
+        self.status_labels["dll"].grid(row=1, column=0, columnspan=2, padx=5, pady=2, sticky="w")
+        self.status_labels["spells"].grid(row=2, column=0, columnspan=2, padx=5, pady=2, sticky="w")
+        self.status_labels["dbstr"].grid(row=3, column=0, columnspan=2, padx=5, pady=2, sticky="w")
+
+        # Quick action buttons
+        ttk.Button(client_frame, text="Build + Copy DLL", command=self.run_build_eqcore_thread).grid(row=1, column=2, padx=5, pady=2, sticky="w")
+        ttk.Button(client_frame, text="Copy DLL Only", command=self.copy_eqcore_dll).grid(row=1, column=3, padx=5, pady=2, sticky="w")
+        ttk.Button(client_frame, text="Export spells_us", command=self.run_export_spells_thread).grid(row=2, column=2, padx=5, pady=2, sticky="w")
+        ttk.Button(client_frame, text="Export dbstr_us", command=self.run_export_dbstr_thread).grid(row=2, column=3, padx=5, pady=2, sticky="w")
+        ttk.Button(client_frame, text="Launch eqgame (patchme)", command=self.launch_eqgame).grid(row=3, column=2, padx=5, pady=2, sticky="w")
 
         # Processes List
         proc_frame = ttk.LabelFrame(self.main_tab, text="Server Processes")
@@ -303,6 +339,16 @@ class ServerManagerApp(tk.Tk):
         ttk.Button(backup_btn_frame, text="Open Backup Folder",
                   command=self.open_backup_folder).pack(side="left", padx=5)
 
+        # Client export section
+        export_frame = ttk.LabelFrame(db_frame, text="Export Client Files")
+        export_frame.pack(fill="x", pady=5)
+        ttk.Label(export_frame, text="EQ Client Folder:").grid(row=0, column=0, padx=5, pady=5, sticky="e")
+        ttk.Entry(export_frame, textvariable=self.eq_dir_var, width=50).grid(row=0, column=1, padx=5, pady=5, sticky="w")
+        ttk.Button(export_frame, text="Browse", command=self.browse_eq_dir).grid(row=0, column=2, padx=5, pady=5)
+        ttk.Button(export_frame, text="Export spells_us.txt", command=self.run_export_spells_thread).grid(row=1, column=0, padx=5, pady=5, sticky="w")
+        ttk.Button(export_frame, text="Export dbstr_us.txt", command=self.run_export_dbstr_thread).grid(row=1, column=1, padx=5, pady=5, sticky="w")
+        ttk.Button(export_frame, text="Show Export Status", command=self.show_export_status).grid(row=1, column=2, padx=5, pady=5, sticky="w")
+
         # Database output
         self.db_output = scrolledtext.ScrolledText(db_frame, height=10, bg="white",
                                                    font=("Consolas", 9))
@@ -329,6 +375,17 @@ class ServerManagerApp(tk.Tk):
 
         ttk.Button(btn_frame, text="Refresh List", command=self.refresh_scripts).pack(side="left", padx=5)
         ttk.Button(btn_frame, text="Run Selected Script", command=self.run_selected_script).pack(side="left", padx=5)
+
+        # EQ client utilities
+        client_frame = ttk.LabelFrame(tools_frame, text="EQ Client Utilities")
+        client_frame.pack(fill="x", pady=10, padx=2)
+        ttk.Label(client_frame, text="EQ Client Folder:").grid(row=0, column=0, padx=5, pady=5, sticky="e")
+        ttk.Entry(client_frame, textvariable=self.eq_dir_var, width=50).grid(row=0, column=1, padx=5, pady=5, sticky="w")
+        ttk.Button(client_frame, text="Browse", command=self.browse_eq_dir).grid(row=0, column=2, padx=5, pady=5)
+        ttk.Button(client_frame, text="Build + Copy eqcore DLL", command=self.run_build_eqcore_thread).grid(row=1, column=0, padx=5, pady=5, sticky="w")
+        ttk.Button(client_frame, text="Copy eqcore DLL (no build)", command=self.copy_eqcore_dll).grid(row=1, column=1, padx=5, pady=5, sticky="w")
+        ttk.Button(client_frame, text="Launch eqgame.exe (patchme)", command=self.launch_eqgame).grid(row=1, column=2, padx=5, pady=5, sticky="w")
+        ttk.Button(client_frame, text="Show DLL Info", command=self.show_dll_info).grid(row=2, column=0, padx=5, pady=5, sticky="w")
 
     # ==================== Console Output Methods ====================
 
@@ -644,6 +701,290 @@ class ServerManagerApp(tk.Tk):
         else:
             subprocess.run(["xdg-open", backup_dir])
 
+    # ==================== Client Export / EQ Utilities ====================
+
+    def browse_eq_dir(self):
+        path = filedialog.askdirectory(initialdir=self.eq_dir_var.get(), title="Select EQ Client Folder")
+        if path:
+            self.eq_dir_var.set(path)
+
+    def _backup_existing(self, path):
+        if os.path.exists(path):
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            new_name = f"{path}.{ts}.old"
+            os.rename(path, new_name)
+            self.log(f"Backed up existing file to {new_name}")
+
+    def _load_db_config(self):
+        with open("eqemu_config.json", "r") as f:
+            cfg = json.load(f)["server"]["database"]
+        return {
+            "host": cfg["host"],
+            "port": int(cfg["port"]),
+            "user": cfg["username"],
+            "password": cfg["password"],
+            "database": cfg["db"],
+        }
+
+    def run_export_spells_thread(self):
+        threading.Thread(target=self.export_spells, daemon=True).start()
+
+    def run_export_dbstr_thread(self):
+        threading.Thread(target=self.export_dbstr, daemon=True).start()
+
+    def export_spells(self):
+        dest = os.path.join(self.eq_dir_var.get(), "spells_us.txt")
+        try:
+            db_cfg = self._load_db_config()
+            conn = mysql.connector.connect(**db_cfg)
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM spells_new ORDER BY id")
+            columns = cur.column_names
+
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            self._backup_existing(dest)
+            with open(dest, "w", encoding="utf-8", newline="") as f:
+                for row in cur:
+                    parts = []
+                    for val in row:
+                        if val is None:
+                            parts.append("")
+                        else:
+                            parts.append(str(val))
+                    f.write("^".join(parts) + "\n")
+            cur.close()
+            conn.close()
+            self.log(f"Exported spells to {dest}")
+            if hasattr(self, "db_output"):
+                self.db_output.insert("end", f"Exported spells to {dest}\n")
+                self.db_output.see("end")
+        except Exception as e:
+            self.log(f"Spell export failed: {e}")
+            if hasattr(self, "db_output"):
+                self.db_output.insert("end", f"Spell export failed: {e}\n")
+                self.db_output.see("end")
+
+    def export_dbstr(self):
+        dest = os.path.join(self.eq_dir_var.get(), "dbstr_us.txt")
+        try:
+            db_cfg = self._load_db_config()
+            conn = mysql.connector.connect(**db_cfg)
+            cur = conn.cursor()
+            cur.execute("SELECT id, type, value FROM db_str ORDER BY id, type")
+
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            self._backup_existing(dest)
+            with open(dest, "w", encoding="utf-8", newline="") as f:
+                for row in cur:
+                    parts = []
+                    for val in row:
+                        if val is None:
+                            parts.append("")
+                        else:
+                            parts.append(str(val))
+                    f.write("^".join(parts) + "\n")
+            cur.close()
+            conn.close()
+            self.log(f"Exported dbstr to {dest}")
+            if hasattr(self, "db_output"):
+                self.db_output.insert("end", f"Exported dbstr to {dest}\n")
+                self.db_output.see("end")
+        except Exception as e:
+            self.log(f"dbstr export failed: {e}")
+            if hasattr(self, "db_output"):
+                self.db_output.insert("end", f"dbstr export failed: {e}\n")
+                self.db_output.see("end")
+
+    def _dll_candidates(self):
+        path = os.path.join(self.extra_dll_dir, "dinput8.dll")
+        return [path] if os.path.exists(path) else []
+
+    def _compute_dll_status(self):
+        candidates = self._dll_candidates()
+        src_path = os.path.join(self.extra_dll_dir, "dinput8.dll")
+        if not candidates:
+            return False, f"DLL: missing {src_path}"
+        src = candidates[0]
+        src_size = os.path.getsize(src)
+        src_mtime = datetime.fromtimestamp(os.path.getmtime(src)).strftime("%Y-%m-%d %H:%M:%S")
+        client_path = os.path.join(self.eq_dir_var.get(), "dinput8.dll")
+        if not os.path.exists(client_path):
+            return False, f"DLL: client dinput8 missing (built {os.path.basename(src)} {src_size/1024:.1f} KB @ {src_mtime})"
+        dst_size = os.path.getsize(client_path)
+        dst_mtime = datetime.fromtimestamp(os.path.getmtime(client_path)).strftime("%Y-%m-%d %H:%M:%S")
+        ok = src_size == dst_size
+        status = "DLL: up to date" if ok else "DLL: OUT OF DATE"
+        msg = f"{status} (built {src_size/1024:.1f} KB {src_mtime} vs client {dst_size/1024:.1f} KB {dst_mtime})"
+        return ok, msg
+
+    def _compute_export_status(self):
+        db_cfg = self._load_db_config()
+        conn = mysql.connector.connect(**db_cfg)
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM spells_new")
+        spells_rows = cur.fetchone()[0]
+        cur.execute("SELECT COUNT(*) FROM db_str")
+        dbstr_rows = cur.fetchone()[0]
+        cur.close()
+        conn.close()
+
+        def check_file(path, label, expected):
+            if not os.path.exists(path):
+                return False, f"{label}: missing ({path})"
+            with open(path, "r", encoding="utf-8", errors="ignore") as f:
+                line_count = sum(1 for _ in f)
+            mtime = datetime.fromtimestamp(os.path.getmtime(path)).strftime("%Y-%m-%d %H:%M:%S")
+            ok = (line_count == expected)
+            status = "up to date" if ok else "OUT OF DATE"
+            return ok, f"{label}: {status} ({line_count} lines, db {expected}, modified {mtime})"
+
+        spells_path = os.path.join(self.eq_dir_var.get(), "spells_us.txt")
+        dbstr_path = os.path.join(self.eq_dir_var.get(), "dbstr_us.txt")
+        spells_ok, spells_msg = check_file(spells_path, "spells_us", spells_rows)
+        dbstr_ok, dbstr_msg = check_file(dbstr_path, "dbstr_us", dbstr_rows)
+        return spells_ok, spells_msg, dbstr_ok, dbstr_msg
+
+    def run_build_eqcore_thread(self):
+        threading.Thread(target=self.build_eqcore_and_copy, daemon=True).start()
+
+    def build_eqcore_and_copy(self):
+        try:
+            self.log("Building eqcore DLL target...")
+            # Prefer building via CMake if the target exists
+            cmd = ["cmake", "--build", self.build_dir, "--target", "eqcore-dll"]
+            if sys.platform == "win32":
+                cmd += ["--config", "RelWithDebInfo"]
+
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode == 0:
+                self.log("eqcore build complete (cmake target), copying...")
+                self.copy_eqcore_dll()
+                return
+
+            # If CMake target not available or failed, try the included PowerShell helper (Windows only)
+            self.log(f"eqcore cmake build failed or target missing: {result.stderr.strip()}" )
+            ps_script = os.path.join("extras", "eq-core-dll-main", "build_dll.ps1")
+            if sys.platform == "win32" and os.path.exists(ps_script):
+                self.log("Falling back to PowerShell build script: build_dll.ps1")
+                try:
+                    ps_cmd = ["powershell", "-ExecutionPolicy", "Bypass", "-File", ps_script]
+                    ps_result = subprocess.run(ps_cmd, capture_output=True, text=True)
+                    if ps_result.returncode != 0:
+                        self.log(f"PowerShell build failed: {ps_result.stderr}")
+                        return
+                    self.log("PowerShell build complete, copying...")
+                    self.copy_eqcore_dll()
+                    return
+                except Exception as e:
+                    self.log(f"PowerShell build invocation failed: {e}")
+                    return
+
+            # No fallback available or all builds failed
+            self.log("eqcore build failed and no fallback succeeded.")
+        except Exception as e:
+            self.log(f"eqcore build/copy failed: {e}")
+
+    def copy_eqcore_dll(self):
+        try:
+            # search for dll in extras/eq-core-dll-main/bin only
+            candidates = self._dll_candidates()
+            if not candidates:
+                messagebox.showerror("Error", f"No dinput8.dll found in {self.extra_dll_dir}")
+                return
+            src = max(candidates, key=os.path.getmtime)
+            dest_dir = self.eq_dir_var.get()
+            os.makedirs(dest_dir, exist_ok=True)
+            dest_name = "dinput8.dll" if "dinput8" in os.path.basename(src).lower() else os.path.basename(src)
+            dest = os.path.join(dest_dir, dest_name)
+            self._backup_existing(dest)
+            shutil.copy2(src, dest)
+            self.log(f"Copied {src} -> {dest}")
+        except Exception as e:
+            self.log(f"Copy eqcore DLL failed: {e}")
+
+    def launch_eqgame(self):
+        eq_dir = self.eq_dir_var.get()
+        exe_path = os.path.join(eq_dir, "eqgame.exe")
+        if not os.path.exists(exe_path):
+            messagebox.showerror("Error", f"eqgame.exe not found in {eq_dir}")
+            return
+        try:
+            subprocess.Popen([exe_path, "patchme"], cwd=eq_dir)
+            self.log(f"Launched eqgame.exe from {eq_dir}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to launch eqgame.exe: {e}")
+            self.log(f"Failed to launch eqgame.exe: {e}")
+
+    def show_dll_info(self):
+        def info_for(path, label):
+            if not os.path.exists(path):
+                return f"{label}: missing ({path})"
+            size_kb = os.path.getsize(path) / 1024
+            mtime = datetime.fromtimestamp(os.path.getmtime(path)).strftime("%Y-%m-%d %H:%M:%S")
+            return f"{label}: {os.path.basename(path)} | {size_kb:.1f} KB | modified {mtime}"
+
+        try:
+            # Only care about dinput8.dll in extras/eq-core-dll-main/bin
+            candidates = self._dll_candidates()
+            built_msg = f"Built dll: none found at {os.path.join(self.extra_dll_dir, 'dinput8.dll')}"
+            if candidates:
+                src = candidates[0]
+                built_msg = info_for(src, "Built dll")
+
+            # Client dinput8.dll in EQ folder
+            client_dinput = os.path.join(self.eq_dir_var.get(), "dinput8.dll")
+            client_msg = info_for(client_dinput, "Client dinput8")
+
+            msg = built_msg + "\n" + client_msg
+            self.log(msg)
+        except Exception as e:
+            self.log(f"DLL info failed: {e}")
+            if hasattr(self, "db_output"):
+                self.db_output.insert("end", f"DLL info failed: {e}\n")
+                self.db_output.see("end")
+
+    def show_export_status(self):
+        def file_info(path, label, expected_rows):
+            if not os.path.exists(path):
+                return f"{label}: missing ({path})"
+            try:
+                with open(path, "r", encoding="utf-8", errors="ignore") as f:
+                    line_count = sum(1 for _ in f)
+                mtime = datetime.fromtimestamp(os.path.getmtime(path)).strftime("%Y-%m-%d %H:%M:%S")
+                status = "up to date" if expected_rows is not None and line_count == expected_rows else "out of date"
+                return f"{label}: {os.path.basename(path)} | {line_count} lines | modified {mtime} | {status} (db rows {expected_rows})"
+            except Exception as e:
+                return f"{label}: error reading file ({e})"
+
+        try:
+            db_cfg = self._load_db_config()
+            conn = mysql.connector.connect(**db_cfg)
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM spells_new")
+            spells_rows = cur.fetchone()[0]
+            cur.execute("SELECT COUNT(*) FROM db_str")
+            dbstr_rows = cur.fetchone()[0]
+            cur.close()
+            conn.close()
+
+            eq_dir = self.eq_dir_var.get()
+            spells_path = os.path.join(eq_dir, "spells_us.txt")
+            dbstr_path = os.path.join(eq_dir, "dbstr_us.txt")
+
+            spells_msg = file_info(spells_path, "spells_us.txt", spells_rows)
+            dbstr_msg = file_info(dbstr_path, "dbstr_us.txt", dbstr_rows)
+
+            msg = spells_msg + "\n" + dbstr_msg
+            self.log(msg)
+            if hasattr(self, "db_output"):
+                self.db_output.insert("end", msg + "\n")
+                self.db_output.see("end")
+        except Exception as e:
+            self.log(f"Export status failed: {e}")
+            if hasattr(self, "db_output"):
+                self.db_output.insert("end", f"Export status failed: {e}\n")
+                self.db_output.see("end")
+
     # ==================== Original Methods ====================
 
     def refresh_scripts(self):
@@ -671,6 +1012,32 @@ class ServerManagerApp(tk.Tk):
         self.log_text.insert("end", f"{message}\n")
         self.log_text.see("end")
         self.log_text.config(state="disabled")
+
+    def set_status_label(self, key, ok, msg):
+        if key not in self.status_labels:
+            return
+        lbl = self.status_labels[key]
+        lbl.config(text=msg, foreground="green" if ok else "red")
+
+    def refresh_status_indicators(self):
+        """Run status checks in a thread and update UI"""
+        threading.Thread(target=self._refresh_status_worker, daemon=True).start()
+
+    def _refresh_status_worker(self):
+        try:
+            # DLL status
+            dll_ok, dll_msg = self._compute_dll_status()
+            self.after(0, lambda: self.set_status_label("dll", dll_ok, dll_msg))
+        except Exception as e:
+            self.after(0, lambda: self.set_status_label("dll", False, f"DLL: error {e}"))
+
+        try:
+            spells_ok, spells_msg, dbstr_ok, dbstr_msg = self._compute_export_status()
+            self.after(0, lambda: self.set_status_label("spells", spells_ok, spells_msg))
+            self.after(0, lambda: self.set_status_label("dbstr", dbstr_ok, dbstr_msg))
+        except Exception as e:
+            self.after(0, lambda: self.set_status_label("spells", False, f"spells_us: error {e}"))
+            self.after(0, lambda: self.set_status_label("dbstr", False, f"dbstr_us: error {e}"))
 
     def clean_build(self):
         if messagebox.askyesno("Clean Build", "Are you sure you want to delete the build directory?"):

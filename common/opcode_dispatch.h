@@ -356,6 +356,7 @@ OUT(OP_GuildManageStatus, GuildManageStatus_Struct);
 OUT(OP_GuildMemberUpdate, GuildMemberUpdate_Struct);
 OUT(OP_HPUpdate, SpawnHPUpdate_Struct);
 OUT(OP_IncreaseStats, IncreaseStat_Struct);
+OUT(OP_ServerStatsUpdate, ServerStatsUpdate_Struct);
 OUT(OP_ItemVerifyReply, ItemVerifyReply_Struct);
 OUT(OP_LFGAppearance, LFG_Appearance_Struct);
 OUT(OP_LeadershipExpUpdate, LeadershipExpUpdate_Struct);

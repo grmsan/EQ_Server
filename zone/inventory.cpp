@@ -28,6 +28,9 @@
 #include "../common/events/player_event_logs.h"
 #include "bot.h"
 #include "../common/evolving_items.h"
+#include <chrono>
+#include "stat_debug.h"
+#include <sstream>
 #include "../common/repositories/character_corpse_items_repository.h"
 #include "queryserv.h"
 
@@ -1083,7 +1086,23 @@ bool Client::PutItemInInventory(int16 slot_id, const EQ::ItemInstance& inst, boo
 		//SendWearChange(EQ::InventoryProfile::CalcMaterialFromSlot(slot_id));
 	}
 
+	{
+		std::ostringstream ss_before;
+		if (inst.GetItem()) ss_before << "PutItemInInventory BEFORE slot=" << slot_id << " item_id=" << inst.GetItem()->ID << " name='" << inst.GetItem()->Name << "'";
+		else ss_before << "PutItemInInventory BEFORE slot=" << slot_id << " dynamic_id=" << inst.GetID();
+		ss_before << " char='" << GetCleanName() << "' spawn=" << GetID();
+		STAT_LOG(ss_before.str());
+	}
+
 	CalcBonuses();
+
+	{
+		std::ostringstream ss_after;
+		if (inst.GetItem()) ss_after << "PutItemInInventory AFTER slot=" << slot_id << " item_id=" << inst.GetItem()->ID << " name='" << inst.GetItem()->Name << "'";
+		else ss_after << "PutItemInInventory AFTER slot=" << slot_id << " dynamic_id=" << inst.GetID();
+		ss_after << " char='" << GetCleanName() << "' spawn=" << GetID();
+		STAT_LOG(ss_after.str());
+	}
 
 	if (slot_id == EQ::invslot::slotCursor) {
 		auto s = m_inv.cursor_cbegin(), e = m_inv.cursor_cend();
@@ -3068,6 +3087,32 @@ void Client::SendItemPacket(int16 slot_id, const EQ::ItemInstance* inst, ItemPac
 #if EQDEBUG >= 9
 		DumpPacket(outapp);
 #endif
+	// Append minimal trace of outgoing ItemPacket for forensic correlation
+		{
+			FILE* pf = nullptr;
+			if (fopen_s(&pf, "logs/packet_trace.log", "a") == 0 && pf) {
+				auto now = std::chrono::system_clock::now();
+				auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
+				time_t tnow = std::chrono::system_clock::to_time_t(now);
+				struct tm tmv{};
+#ifdef _WIN32
+				localtime_s(&tmv, &tnow);
+#else
+				localtime_r(&tnow, &tmv);
+#endif
+				char tb[40] = {0};
+				strftime(tb, sizeof(tb), "%Y%m%d_%H%M%S", &tmv);
+				int itemid = 0;
+				if (inst && inst->GetItem()) itemid = inst->GetItem()->ID;
+				fprintf(pf, "%s_%03d OP_ItemPacket char=%u slot=%d itemid=%d packet_type=%d serialized_len=%zu itembonus.DEX=%d GetDEX=%d\n",
+					tb, (int)ms.count(), GetID(), slot_id, itemid, (int)packet_type, packet.length(), itembonuses.DEX, GetDEX());
+				// Write a truncated view of the serialized payload to aid debugging
+				const size_t max_snip = 200;
+				fprintf(pf, "    serialized_snip=%.*s\n", (int)std::min(packet.length(), max_snip), packet.c_str());
+				fclose(pf);
+			}
+		}
+
 	FastQueuePacket(&outapp);
 }
 

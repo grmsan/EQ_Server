@@ -24,10 +24,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 #include <iostream>
 #include <math.h>
 #include <set>
+#include <unordered_set>
 #include <stdio.h>
 #include <string.h>
 #include <zlib.h>
 #include "bot.h"
+#include <chrono>
 
 #ifdef _WINDOWS
 #define snprintf	_snprintf
@@ -1380,20 +1382,26 @@ void Client::Handle_Connect_OP_ZoneEntry(const EQApplicationPacket *app)
 	// Rebuild any missing dynamic items in inventory before loading it (handles curve changes or DB purges)
 	{
 		std::string query = fmt::format(
-			"SELECT i.itemid "
+			"SELECT i.item_id "
 			"FROM inventory i "
-			"LEFT JOIN items t ON t.id = i.itemid "
-			"WHERE i.character_id = {} AND i.itemid >= 1000000000 AND t.id IS NULL",
+			"LEFT JOIN items t ON t.id = i.item_id "
+			"WHERE i.character_id = {} AND i.item_id >= 1000000000 AND t.id IS NULL",
 			cid
 		);
 		auto regen_results = database.QueryDatabase(query);
 		if (regen_results.Success() && regen_results.RowCount() > 0) {
 			auto& mgr = EQ::DynamicItemManager::Get();
+			auto start_time = std::chrono::steady_clock::now();
 			for (auto row : regen_results) {
+				// Safety: don't let regen stall character load
+				if (std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start_time).count() > 2000) {
+					Log(Logs::General, Logs::Error, "Dynamic regen aborted for cid {} after 2s time budget", cid);
+					break;
+				}
 				uint32 dyn_id = Strings::ToUnsignedInt(row[0]);
-				uint32 base_id = dyn_id % 1000000;
-				uint32 level = (dyn_id / 1000000) % 100000;
-				if (base_id == 0 || level == 0) {
+				uint32 base_id = mgr.GetBaseItemID(dyn_id);
+				int level = mgr.GetItemLevel(dyn_id);
+				if (base_id == 0 || level <= 0) {
 					Log(Logs::General, Logs::Error, "Dynamic regen skipped: invalid dyn_id {} (base {}, level {})", dyn_id, base_id, level);
 					continue;
 				}
@@ -1404,6 +1412,46 @@ void Client::Handle_Connect_OP_ZoneEntry(const EQApplicationPacket *app)
 				}
 				mgr.InsertItemIntoDatabase(dyn_id, base_id, scaled);
 				Log(Logs::General, Logs::Status, "Dynamic regen: rebuilt missing item {} (base {} level {})", dyn_id, base_id, level);
+			}
+		}
+
+		// Pass 2: inventory safety scan. If a dynamic item reference exists in inventory but the item row is missing,
+		// regenerate it on the fly so the slot won't be empty in-game.
+		auto inv_scan = database.QueryDatabase(
+			fmt::format(
+				"SELECT slot_id, item_id FROM inventory WHERE character_id = {} AND item_id >= 1000000000",
+				cid
+			)
+		);
+		if (inv_scan.Success() && inv_scan.RowCount() > 0) {
+			auto& mgr = EQ::DynamicItemManager::Get();
+			auto start_time = std::chrono::steady_clock::now();
+			for (auto row : inv_scan) {
+				if (std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start_time).count() > 2000) {
+					Log(Logs::General, Logs::Error, "Inventory regen aborted for cid {} after 2s time budget", cid);
+					break;
+				}
+				uint32 dyn_id = Strings::ToUnsignedInt(row[1]);
+				if (dyn_id == 0) {
+					continue;
+				}
+				// If the item exists, nothing to do.
+				if (database.GetItem(dyn_id)) {
+					continue;
+				}
+				uint32 base_id = mgr.GetBaseItemID(dyn_id);
+				int level = mgr.GetItemLevel(dyn_id);
+				if (base_id == 0 || level <= 0) {
+					Log(Logs::General, Logs::Error, "Inventory regen skipped: invalid dyn_id {} (base {}, level {})", dyn_id, base_id, level);
+					continue;
+				}
+				const EQ::ItemData* scaled = mgr.GenerateScaledItem(base_id, level);
+				if (!scaled) {
+					Log(Logs::General, Logs::Error, "Inventory regen failed: base {} level {} for dyn_id {}", base_id, level, dyn_id);
+					continue;
+				}
+				mgr.InsertItemIntoDatabase(dyn_id, base_id, scaled);
+				Log(Logs::General, Logs::Status, "Inventory regen: rebuilt missing item {} (base {} level {})", dyn_id, base_id, level);
 			}
 		}
 	}
@@ -1723,6 +1771,41 @@ void Client::Handle_Connect_OP_ZoneEntry(const EQApplicationPacket *app)
 	Mob::SetMana(m_pp.mana); // mob function doesn't send the packet
 	SetEndurance(m_pp.endurance);
 
+	// Build a send-only copy populated with the persistent base stats (m_pp).
+	// Do NOT overwrite m_pp here; send_pp remains a snapshot of stored base values.
+	PlayerProfile_Struct send_pp = m_pp;
+
+	// One-time-per-client debug snapshot to confirm we are sending uncapped values to the client
+	if (IsClient()) {
+		static std::unordered_set<uint32> s_logged_profile_ids;
+		const uint32 _id = GetID();
+		if (s_logged_profile_ids.insert(_id).second) {
+			LogInfo(
+				"Sending uncapped profile stats STR={} STA={} AGI={} DEX={} INT={} WIS={} CHA={} HP={}/{} Mana={}/{} Endur={}/{} for id={} name={}",
+				send_pp.STR, send_pp.STA, send_pp.AGI, send_pp.DEX, send_pp.INT, send_pp.WIS, send_pp.CHA,
+				send_pp.cur_hp, GetMaxHP(), send_pp.mana, GetMaxMana(), send_pp.endurance, GetMaxEndurance(), _id, GetCleanName()
+			);
+
+			// Detailed breakdown: base (stored in m_pp), item bonuses, spell bonuses, AA bonuses, and computed total
+			LogInfo("Profile stat breakdown for id={} name={}: STR base={} item={} spell={} aa={} total={}",
+				_id, GetCleanName(), m_pp.STR, itembonuses.STR, spellbonuses.STR, aabonuses.STR, GetSTR());
+			LogInfo("Profile stat breakdown for id={} name={}: STA base={} item={} spell={} aa={} total={}",
+				_id, GetCleanName(), m_pp.STA, itembonuses.STA, spellbonuses.STA, aabonuses.STA, GetSTA());
+			LogInfo("Profile stat breakdown for id={} name={}: AGI base={} item={} spell={} aa={} total={}",
+				_id, GetCleanName(), m_pp.AGI, itembonuses.AGI, spellbonuses.AGI, aabonuses.AGI, GetAGI());
+			LogInfo("Profile stat breakdown for id={} name={}: DEX base={} item={} spell={} aa={} total={}",
+				_id, GetCleanName(), m_pp.DEX, itembonuses.DEX, spellbonuses.DEX, aabonuses.DEX, GetDEX());
+			LogInfo("Profile stat breakdown for id={} name={}: INT base={} item={} spell={} aa={} total={}",
+				_id, GetCleanName(), m_pp.INT, itembonuses.INT, spellbonuses.INT, aabonuses.INT, GetINT());
+			LogInfo("Profile stat breakdown for id={} name={}: WIS base={} item={} spell={} aa={} total={}",
+				_id, GetCleanName(), m_pp.WIS, itembonuses.WIS, spellbonuses.WIS, aabonuses.WIS, GetWIS());
+			LogInfo("Profile stat breakdown for id={} name={}: CHA base={} item={} spell={} aa={} total={}",
+				_id, GetCleanName(), m_pp.CHA, itembonuses.CHA, spellbonuses.CHA, aabonuses.CHA, GetCHA());
+			LogInfo("Profile HP/Mana/Endur for id={} name={}: cur_hp={} max_hp={} mana={} max_mana={} endur={} max_endur={}",
+				_id, GetCleanName(), send_pp.cur_hp, GetMaxHP(), send_pp.mana, GetMaxMana(), send_pp.endurance, GetMaxEndurance());
+		}
+	}
+
 	/* Update LFP in case any (or all) of our group disbanded while we were zoning. */
 	if (IsLFP()) { UpdateLFP(); }
 
@@ -1764,13 +1847,38 @@ void Client::Handle_Connect_OP_ZoneEntry(const EQApplicationPacket *app)
 	//CRC32::SetEQChecksum((unsigned char*)&m_pp, sizeof(PlayerProfile_Struct) - sizeof(m_pp.m_player_profile_version) - 4);
 	// m_pp.checksum = 0; // All server out-bound player profile packets are now translated - no need to waste cycles calculating this...
 
-	outapp = new EQApplicationPacket(OP_PlayerProfile, sizeof(PlayerProfile_Struct));
+outapp = new EQApplicationPacket(OP_PlayerProfile, sizeof(PlayerProfile_Struct));
 
-	/* The entityid field in the Player Profile is used by the Client in relation to Group Leadership AA */
-	m_pp.entityid = GetID();
-	memcpy(outapp->pBuffer, &m_pp, outapp->size);
-	outapp->priority = 6;
-	FastQueuePacket(&outapp);
+// Use send_pp for the outbound profile (base/persistent values) and leave m_pp untouched for persistence.
+send_pp.entityid = GetID(); // group leadership AA uses this field client-side
+memcpy(outapp->pBuffer, &send_pp, outapp->size);
+outapp->priority = 6;
+// Append a concise trace of the outgoing PlayerProfile for forensic correlation
+	{
+		FILE* pf = nullptr;
+		if (fopen_s(&pf, "logs/packet_trace.log", "a") == 0 && pf) {
+			auto now = std::chrono::system_clock::now();
+			auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
+			time_t tnow = std::chrono::system_clock::to_time_t(now);
+			struct tm tmv{};
+#ifdef _WIN32
+			localtime_s(&tmv, &tnow);
+#else
+			localtime_r(&tnow, &tmv);
+#endif
+			char tb[40] = {0};
+			strftime(tb, sizeof(tb), "%Y%m%d_%H%M%S", &tmv);
+			fprintf(pf, "%s_%03d OP_PlayerProfile spawn=%u send_pp.DEX=%d m_pp.DEX=%d GetDEX=%d\n",
+				tb, (int)ms.count(), send_pp.entityid, send_pp.DEX, m_pp.DEX, GetDEX());
+			fprintf(pf, "    breakdown DEX base=%d item=%d spell=%d aa=%d total=%d\n",
+				m_pp.DEX, itembonuses.DEX, spellbonuses.DEX, aabonuses.DEX, GetDEX());
+			fclose(pf);
+		}
+	}
+
+FastQueuePacket(&outapp);
+// Push authoritative stats immediately after profile so the client/DLL has correct values on connect.
+SendServerStatsUpdate();
 
 	if (m_pp.RestTimer) {
 		rest_timer.Start(m_pp.RestTimer * 1000);

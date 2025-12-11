@@ -6561,6 +6561,27 @@ struct EvolveGetNextItem {
 	uint32 max_transfer_level;
 };
 
+// Custom server-authoritative stats update (for UI override)
+struct ServerStatsUpdate_Struct
+{
+/*00*/ uint16 spawn_id;
+/*02*/ uint16 padding; // align to 4 bytes
+/*04*/ int32  str;
+/*08*/ int32  sta;
+/*12*/ int32  agi;
+/*16*/ int32  dex;
+/*20*/ int32  intl;
+/*24*/ int32  wis;
+/*28*/ int32  cha;
+/*32*/ int32  cur_hp;
+/*36*/ int32  max_hp;
+/*40*/ int32  cur_mana;
+/*44*/ int32  max_mana;
+/*48*/ int32  cur_end;
+/*52*/ int32  max_end;
+/*56*/
+};
+
 // Restore structure packing to default
 #pragma pack()
 

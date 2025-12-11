@@ -37,6 +37,8 @@
 #include <math.h>
 #include <sstream>
 #include <algorithm>
+#include <unordered_set>
+#include <ctime>
 
 #include "bot.h"
 
@@ -1014,9 +1016,31 @@ int64 Mob::CalcMaxMana()
 }
 
 int64 Mob::CalcMaxHP() {
-	max_hp = (base_hp + itembonuses.HP);
-	max_hp += max_hp * ((aabonuses.PercentMaxHPChange + spellbonuses.PercentMaxHPChange + itembonuses.PercentMaxHPChange) / 10000.0f);
-	max_hp += spellbonuses.FlatMaxHPChange + itembonuses.FlatMaxHPChange + aabonuses.FlatMaxHPChange;
+	// Compute components for clearer logging
+	int64_t base = (base_hp + itembonuses.HP);
+	float percent = (aabonuses.PercentMaxHPChange + spellbonuses.PercentMaxHPChange + itembonuses.PercentMaxHPChange) / 10000.0f;
+	int64_t after_percent = static_cast<int64_t>(base + (base * percent));
+	int64_t flat = spellbonuses.FlatMaxHPChange + itembonuses.FlatMaxHPChange + aabonuses.FlatMaxHPChange;
+
+	max_hp = after_percent + flat;
+
+	// Lightweight one-time-per-client logging to repo stats_debug.log to avoid spam
+	if (IsClient()) {
+		static std::unordered_set<uint32> logged_ids;
+		const uint32 id = GetID();
+		if (logged_ids.insert(id).second) {
+			FILE* lf = nullptr;
+			if (fopen_s(&lf, "C:\\Users\\marsh\\OneDrive\\Documents\\GitHub\\EQ_Server\\logs\\stats_debug.log", "a") == 0 && lf) {
+				time_t now = time(nullptr);
+				struct tm* tmv = localtime(&now);
+				char tb[32] = {0};
+				strftime(tb, sizeof(tb), "%Y%m%d_%H%M%S", tmv);
+				fprintf(lf, "%s CALC_MaxHP id=%u name=%s base=%lld percent=%.4f after_percent=%lld flat=%lld result=%lld\n",
+					tb, id, GetName(), (long long)base, percent, (long long)after_percent, (long long)flat, (long long)max_hp);
+				fclose(lf);
+			}
+		}
+	}
 
 	return max_hp;
 }
@@ -1565,9 +1589,10 @@ void Mob::SendHPUpdate(bool force_update_all)
 
 			static EQApplicationPacket p(OP_HPUpdate, sizeof(SpawnHPUpdate_Struct));
 			auto b = (SpawnHPUpdate_Struct*) p.pBuffer;
-			b->cur_hp   = static_cast<uint32>(CastToClient()->GetHP() - itembonuses.HP);
+			// Send full server-side values (uncapped), do not subtract item HP
+			b->cur_hp   = static_cast<uint32>(CastToClient()->GetHP());
 			b->spawn_id = GetID();
-			b->max_hp   = CastToClient()->GetMaxHP() - itembonuses.HP;
+			b->max_hp   = CastToClient()->GetMaxHP();
 			CastToClient()->QueuePacket(&p);
 			CastToClient()->SendEdgeStats();
 
@@ -3507,8 +3532,7 @@ void Mob::ShowStats(Client* c)
 			fmt::format(
 				"Spawn | Raid: {} Rare: {}",
 				t->IsRaidTarget() ? "Yes" : "No",
-				t->IsRareSpawn() ? "Yes" : "No",
-				t->GetSkipGlobalLoot() ? "Yes" : "No"
+				t->IsRareSpawn() ? "Yes" : "No"
 			).c_str()
 		);
 

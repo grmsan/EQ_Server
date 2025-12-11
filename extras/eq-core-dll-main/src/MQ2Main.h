@@ -110,6 +110,10 @@ using namespace std;
 // reroute malloc/free
 EQLIB_API VOID *MQ2Malloc(size_t size);
 EQLIB_API VOID MQ2Free(VOID *memblock);
+// Request that the MQ2 core protect the page containing `addr` and
+// install a write-watch. If the VEH handler is not yet installed,
+// the request will be queued and applied once the handler is ready.
+EQLIB_API void MQ2_ProtectPage(uintptr_t addr);
 /*
 #ifdef MQ2PLUGIN
 #define malloc(x) MQ2Malloc(x)
@@ -262,6 +266,14 @@ PLUGIN_API VOID OnDPSPulse(VOID);
 /* DETOURING API */
 EQLIB_API VOID InitializeMQ2Detours();
 EQLIB_API VOID ShutdownMQ2Detours();
+#ifdef __cplusplus
+extern "C" {
+#endif
+// Exposed helper: protect the page containing the provided address (no-op if already protected)
+EQLIB_API void __cdecl MQ2_ProtectPage(uintptr_t addr);
+#ifdef __cplusplus
+}
+#endif
 #ifndef ISXEQ
 #ifdef ISXEQ_LEGACY
 #define RemoveDetour(address)

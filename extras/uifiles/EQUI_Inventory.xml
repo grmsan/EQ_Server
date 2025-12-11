@@ -1449,7 +1449,7 @@
 	</Label>
 	<Label item="IW_CHANumber">
 		<ScreenID>CHANumberLabel</ScreenID>
-		<EQType>11</EQType>
+		<EQType>244</EQType>
 		<RelativePosition>true</RelativePosition>
 		<Location>
 			<X>30</X>

@@ -1870,6 +1870,7 @@ public:
 	void ResetHPUpdateTimer() { hpupdate_timer.Start(); }
 
 	void SendHPUpdateMarquee();
+	void SendServerStatsUpdate();
 
 	void CheckRegionTypeChanges();
 

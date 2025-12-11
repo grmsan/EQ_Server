@@ -10,6 +10,7 @@ SET(zone_sources
     aura.cpp
     beacon.cpp
     bonuses.cpp
+    stat_debug.cpp
     bot.cpp
     bot_raid.cpp
     bot_database.cpp

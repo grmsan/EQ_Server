@@ -33,6 +33,7 @@
 #include "../common/repositories/character_bind_repository.h"
 #include "../common/repositories/character_material_repository.h"
 #include "../common/repositories/start_zones_repository.h"
+#include <chrono>
 
 WorldDatabase database;
 WorldDatabase content_db;
@@ -41,6 +42,7 @@ extern std::vector<RaceClassCombos> character_create_race_class_combos;
 
 void WorldDatabase::GetCharSelectInfo(uint32 account_id, EQApplicationPacket **out_app, uint32 client_version_bit)
 {
+	auto total_start = std::chrono::steady_clock::now();
 	EQ::versions::ClientVersion
 		   client_version  = EQ::versions::ConvertClientVersionBitToClientVersion(client_version_bit);
 	size_t character_limit = EQ::constants::StaticLookup(client_version)->CharacterCreationLimit;
@@ -69,6 +71,8 @@ void WorldDatabase::GetCharSelectInfo(uint32 account_id, EQApplicationPacket **o
 		auto *cs = (CharacterSelect_Struct *) (*out_app)->pBuffer;
 		cs->CharCount  = 0;
 		cs->TotalChars = character_limit;
+		auto total_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - total_start).count();
+		Log(Logs::General, Logs::Status, "CharSelect: account {} has 0 chars (total {} ms)", account_id, total_ms);
 		return;
 	}
 
@@ -76,6 +80,7 @@ void WorldDatabase::GetCharSelectInfo(uint32 account_id, EQApplicationPacket **o
 	for (auto &e: characters) {
 		character_ids.push_back(e.id);
 	}
+	Log(Logs::General, Logs::Status, "CharSelect: account {} building {} chars", account_id, character_ids.size());
 
 	const auto& inventories = InventoryRepository::GetWhere(
 		*this,
@@ -113,6 +118,8 @@ void WorldDatabase::GetCharSelectInfo(uint32 account_id, EQApplicationPacket **o
 	cs->TotalChars = character_limit;
 
 	buff_ptr += sizeof(CharacterSelect_Struct);
+	int missing_dyn = 0;
+	int missing_other = 0;
 	for (auto &e: characters) {
 		auto                 *cse = (CharacterSelectEntry_Struct *) buff_ptr;
 		PlayerProfile_Struct pp;
@@ -337,6 +344,14 @@ void WorldDatabase::GetCharSelectInfo(uint32 account_id, EQApplicationPacket **o
 
 				item = inst->GetItem();
 				if (item == nullptr) {
+					uint32 item_id = inst->GetID();
+					if (item_id >= 1000000000) {
+						++missing_dyn;
+						Log(Logs::General, Logs::Error, "CharSelect: missing dynamic item {} (char {} slot {})", item_id, e.name, matslot);
+					} else {
+						++missing_other;
+						Log(Logs::General, Logs::Error, "CharSelect: missing item {} (char {} slot {})", item_id, e.name, matslot);
+					}
 					continue;
 				}
 
@@ -379,6 +394,14 @@ void WorldDatabase::GetCharSelectInfo(uint32 account_id, EQApplicationPacket **o
 			printf("Error loading inventory for %s\n", cse->Name);
 		}
 		buff_ptr += sizeof(CharacterSelectEntry_Struct);
+	}
+	auto total_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - total_start).count();
+	if (missing_dyn || missing_other) {
+		Log(Logs::General, Logs::Status, "CharSelect: account {} built {} chars in {} ms (missing dyn {}, missing other {})",
+		    account_id, character_count, total_ms, missing_dyn, missing_other);
+	} else {
+		Log(Logs::General, Logs::Status, "CharSelect: account {} built {} chars in {} ms",
+		    account_id, character_count, total_ms);
 	}
 }
 

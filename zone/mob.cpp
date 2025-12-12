@@ -5999,17 +5999,65 @@ void Mob::TryTwincast(Mob *caster, Mob *target, uint32 spell_id)
 	}
 
 	// New DEX-based twincast layer (additive with focus)
+	// Design spec: Twincast% = (DEX * Level) / CombatBalance::DEX_TWINCAST_DIVISOR, capped at 100%
 	if (RuleB(Combat, UseNewDexFormulas)) {
-		float dexChance = DexCritChanceNew(this);
-		// pets: use owner dex scaled
+		float dex_for_twincast = static_cast<float>(GetDEX());
+		int level = GetLevel();
+
 		if (IsPet() && GetOwner()) {
-			dexChance = DexCritChanceNew(GetOwner()) * CombatBalance::PET_DEX_TWINCAST_SCALAR;
+			dex_for_twincast = static_cast<float>(GetOwner()->GetDEX()) * CombatBalance::PET_DEX_TWINCAST_SCALAR;
+			level = GetOwner()->GetLevel();
 		}
-		if (dexChance > 0 && zone->random.Roll(dexChance)) {
-			if (IsClient()) {
-				Message(Chat::Spells, "You twincast %s!", spells[spell_id].name);
+
+		float dexChance = 0.0f;
+		if (level > 0 && dex_for_twincast > 0.0f) {
+			dexChance = (dex_for_twincast * static_cast<float>(level)) / CombatBalance::DEX_TWINCAST_DIVISOR;
+
+			// Non-primary casters get half the DEX-based twincast chance
+			switch (GetClass()) {
+			case Class::Enchanter:
+			case Class::Magician:
+			case Class::Necromancer:
+			case Class::Wizard:
+			case Class::Cleric:
+			case Class::Shaman:
+			case Class::Druid:
+				// full chance
+				break;
+			default:
+				dexChance *= 0.5f;
+				break;
 			}
-			SpellFinished(spell_id, target, EQ::spells::CastingSlot::Item, 0, -1, spells[spell_id].resist_difficulty);
+
+			if (dexChance > 100.0f) {
+				dexChance = 100.0f;
+			}
+		}
+
+		if (dexChance > 0.0f) {
+			// Use an explicit roll so we can see the RNG in logs
+			float roll = zone->random.Real(0.0f, 100.0f);
+
+			if (IsClient() && GetClass() == Class::Warrior) {
+				LogInfo(
+					"TW_DEBUG: DEX twincast check caster [{}] class [{}] lvl [{}] DEX [{}] spell [{}:{}] dexChance [{:.2f}] roll [{:.2f}]",
+					GetCleanName(),
+					static_cast<int>(GetClass()),
+					level,
+					GetDEX(),
+					spell_id,
+					spells[spell_id].name,
+					dexChance,
+					roll
+				);
+			}
+
+			if (roll <= dexChance) {
+				if (IsClient()) {
+					Message(Chat::Spells, "You twincast %s!", spells[spell_id].name);
+				}
+				SpellFinished(spell_id, target, EQ::spells::CastingSlot::Item, 0, -1, spells[spell_id].resist_difficulty);
+			}
 		}
 	}
 
@@ -6019,7 +6067,23 @@ void Mob::TryTwincast(Mob *caster, Mob *target, uint32 spell_id)
 
 		if (focus > 0)
 		{
-			if (zone->random.Roll(focus))
+			// Explicit roll so we can see focus-based chance in logs
+			float focus_roll = zone->random.Real(0.0f, 100.0f);
+
+			if (IsClient() && GetClass() == Class::Warrior) {
+				LogInfo(
+					"TW_DEBUG: FOCUS twincast check caster [{}] class [{}] lvl [{}] spell [{}:{}] focus [{}] roll [{:.2f}]",
+					GetCleanName(),
+					static_cast<int>(GetClass()),
+					GetLevel(),
+					spell_id,
+					spells[spell_id].name,
+					focus,
+					focus_roll
+				);
+			}
+
+			if (focus_roll <= static_cast<float>(focus))
 			{
 				if (IsClient()) {
 					Message(Chat::Spells,"You twincast %s!", spells[spell_id].name);

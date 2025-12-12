@@ -414,17 +414,35 @@ int64 Mob::GetActDoTDamage(uint16 spell_id, int64 value, Mob* target, bool from_
 		value -= extra_dmg;
 	}
 
-	if (RuleB(Combat, UseNewDexFormulas) && CombatBalance::ENABLE_DEX_DOT_TWINCAST) {
-		float dex_for_twincast = static_cast<float>(GetDEX());
-		if (IsPet() && GetOwner()) {
-			dex_for_twincast = static_cast<float>(GetOwner()->GetDEX()) * CombatBalance::PET_DEX_TWINCAST_SCALAR;
+		if (RuleB(Combat, UseNewDexFormulas) && CombatBalance::ENABLE_DEX_DOT_TWINCAST) {
+			float dex_for_twincast = static_cast<float>(GetDEX());
+			if (IsPet() && GetOwner()) {
+				dex_for_twincast = static_cast<float>(GetOwner()->GetDEX()) * CombatBalance::PET_DEX_TWINCAST_SCALAR;
+			}
+
+			float twincast_chance = dex_for_twincast / CombatBalance::DEX_DOT_TWINCAST_DIVISOR;
+
+			// Non-primary casters get half the DEX-based DOT twincast chance
+			switch (GetClass()) {
+			case Class::Enchanter:
+			case Class::Magician:
+			case Class::Necromancer:
+			case Class::Wizard:
+			case Class::Cleric:
+			case Class::Shaman:
+			case Class::Druid:
+				// full chance
+				break;
+			default:
+				twincast_chance *= 0.5f;
+				break;
+			}
+
+			twincast_chance = std::min(twincast_chance, 100.0f);
+			if (twincast_chance > 0.0f && zone->random.Roll(twincast_chance)) {
+				value *= 2;
+			}
 		}
-		float twincast_chance = dex_for_twincast / CombatBalance::DEX_DOT_TWINCAST_DIVISOR;
-		twincast_chance = std::min(twincast_chance, 100.0f);
-		if (twincast_chance > 0.0f && zone->random.Roll(twincast_chance)) {
-			value *= 2;
-		}
-	}
 
 	return value;
 }

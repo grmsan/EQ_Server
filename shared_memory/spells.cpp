@@ -23,6 +23,7 @@
 #include "../common/memory_mapped_file.h"
 #include "../common/eqemu_exception.h"
 #include "../common/spdat.h"
+#include "../common/path_manager.h"
 
 void LoadSpells(SharedDatabase *database, const std::string &prefix) {
 	EQ::IPCMutex mutex("spells");
@@ -34,8 +35,14 @@ void LoadSpells(SharedDatabase *database, const std::string &prefix) {
 
 	uint32 size = records * sizeof(SPDat_Spell_Struct) + sizeof(uint32);
 
-	auto Config = EQEmuConfig::get();
-	std::string file_name = Config->SharedMemDir + prefix + std::string("spells");
+	// Use the same shared memory path logic as the zone/world loader so both
+	// read and write the identical file (e.g., shared/spells or hotfix variants)
+	std::string file_name = fmt::format(
+		"{}/{}{}",
+		PathManager::Instance()->GetSharedMemoryPath(),
+		prefix,
+		std::string("spells")
+	);
 	EQ::MemoryMappedFile mmf(file_name, size);
 	mmf.ZeroFile();
 
@@ -43,4 +50,3 @@ void LoadSpells(SharedDatabase *database, const std::string &prefix) {
 	database->LoadSpells(ptr, records);
 	mutex.Unlock();
 }
-

@@ -969,6 +969,10 @@ void Client::SetLevel(uint8 set_level, bool command)
 			static_cast<float>(GetEXPForLevel(GetLevel() + 1) - GetEXPForLevel(GetLevel()))
 		);
 		lu->exp = static_cast<uint32>(330.0f * temporary_xp);
+
+		// Ensure stat-cap AAs (Planar Power / Innate Enlightenment) are auto-granted
+		// immediately when their level requirements are met during normal leveling.
+		AutoGrantAAPoints();
 	}
 
 	QueuePacket(outapp);

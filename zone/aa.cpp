@@ -1251,22 +1251,56 @@ void Client::IncrementAlternateAdvancementRank(int rank_id) {
 }
 
 void Client::ActivateAlternateAdvancementAbility(int rank_id, int target_id) {
+	LogInfo("AA DEBUG: requested rank_id [{}], target_id [{}] for [{}]", rank_id, target_id, GetCleanName());
+
 	AA::Rank *rank = zone->GetAlternateAdvancementRank(rank_id);
 
 	if (!rank) {
+		LogError("AA DEBUG: rank lookup failed for rank_id [{}] (client [{}])", rank_id, GetCleanName());
 		return;
 	}
 
 	AA::Ability *ability = rank->base_ability;
 	if (!ability) {
+		LogError("AA DEBUG: ability lookup failed for rank_id [{}] (client [{}])", rank_id, GetCleanName());
 		return;
 	}
 
 	if (!IsValidSpell(rank->spell)) {
+		// Extra diagnostics so we can see what the zone actually has loaded
+		extern int32 SPDAT_RECORDS;
+		extern const SPDat_Spell_Struct* spells;
+
+		const char* spell_name = "";
+		const char* spell_p1   = "";
+		if (spells && rank->spell < static_cast<uint32>(SPDAT_RECORDS)) {
+			spell_name = spells[rank->spell].name;
+			spell_p1   = spells[rank->spell].player_1;
+		}
+
+		LogError(
+			"AA DEBUG: invalid spell [{}] for aa_id [{}] rank_id [{}] (client [{}]) - SPDAT_RECORDS [{}], spells[{}].name='{}', player_1='{}'",
+			rank->spell,
+			ability->id,
+			rank_id,
+			GetCleanName(),
+			SPDAT_RECORDS,
+			rank->spell,
+			spell_name,
+			spell_p1
+		);
 		return;
 	}
 
 	if (!CanUseAlternateAdvancementRank(rank)) {
+		LogInfo(
+			"AA DEBUG: CanUseAlternateAdvancementRank returned false for aa_id [{}] rank_id [{}] (client [{}], class [{}], level [{}])",
+			ability->id,
+			rank_id,
+			GetCleanName(),
+			static_cast<int>(GetClass()),
+			static_cast<int>(GetLevel())
+		);
 		return;
 	}
 
@@ -1274,16 +1308,32 @@ void Client::ActivateAlternateAdvancementAbility(int rank_id, int target_id) {
 
 	//make sure it is not a passive
 	if (!rank->effects.empty() && !use_toggle_passive_hotkey) {
+		LogInfo("AA DEBUG: rank_id [{}] has passive effects and toggle hotkey not in use; aborting for [{}]", rank_id, GetCleanName());
 		return;
 	}
 
 	uint32 charges = 0;
 	// We don't have the AA
-	if (!GetAA(rank_id, &charges))
+	if (!GetAA(rank_id, &charges)) {
+		LogInfo(
+			"AA DEBUG: character [{}] does not have rank_id [{}] (aa_id [{}])",
+			GetCleanName(),
+			rank_id,
+			ability->id
+		);
 		return;
+	}
+
 	//if expendable make sure we have charges
-	if (ability->charges > 0 && charges < 1)
+	if (ability->charges > 0 && charges < 1) {
+		LogInfo(
+			"AA DEBUG: no remaining charges for expendable aa_id [{}] rank_id [{}] (client [{}])",
+			ability->id,
+			rank_id,
+			GetCleanName()
+		);
 		return;
+	}
 
 	//check cooldown
 	if (!p_timers.Expired(&database, rank->spell_type + pTimerAAStart, false)) {
@@ -1301,6 +1351,15 @@ void Client::ActivateAlternateAdvancementAbility(int rank_id, int target_id) {
 				aaremain_min, aaremain_sec);
 		}
 
+		LogInfo(
+			"AA DEBUG: cooldown not expired for aa_id [{}] rank_id [{}] (client [{}], remaining [{}]s, spell_type [{}])",
+			ability->id,
+			rank_id,
+			GetCleanName(),
+			aaremain,
+			rank->spell_type
+		);
+
 		return;
 	}
 
@@ -1308,6 +1367,16 @@ void Client::ActivateAlternateAdvancementAbility(int rank_id, int target_id) {
 	if (timer_duration < 0) {
 		timer_duration = 0;
 	}
+
+	LogInfo(
+		"AA DEBUG: proceeding to cast aa_id [{}] rank_id [{}], spell [{}], spell_type [{}], timer_duration [{}] for client [{}]",
+		ability->id,
+		rank_id,
+		rank->spell,
+		rank->spell_type,
+		timer_duration,
+		GetCleanName()
+	);
 
 	if (!IsCastWhileInvisibleSpell(rank->spell))
 		CommonBreakInvisible();
@@ -1339,16 +1408,63 @@ void Client::ActivateAlternateAdvancementAbility(int rank_id, int target_id) {
 		// Bards can cast instant cast AAs while they are casting or channeling item cast.
 		if (GetClass() == Class::Bard && IsCasting() && spells[rank->spell].cast_time == 0) {
 			if (!DoCastingChecksOnCaster(rank->spell, EQ::spells::CastingSlot::AltAbility)) {
+				LogInfo(
+					"AA DEBUG: DoCastingChecksOnCaster failed for aa_id [{}] rank_id [{}], spell [{}] (client [{}])",
+					ability->id,
+					rank_id,
+					rank->spell,
+					GetCleanName()
+				);
 				return;
 			}
 
-			if (!SpellFinished(rank->spell, entity_list.GetMob(target_id), EQ::spells::CastingSlot::AltAbility, spells[rank->spell].mana, -1, spells[rank->spell].resist_difficulty, false, -1,
-				rank->spell_type + pTimerAAStart, timer_duration, false, rank->id)) {
+			if (!SpellFinished(
+				rank->spell,
+				entity_list.GetMob(target_id),
+				EQ::spells::CastingSlot::AltAbility,
+				spells[rank->spell].mana,
+				-1,
+				spells[rank->spell].resist_difficulty,
+				false,
+				-1,
+				rank->spell_type + pTimerAAStart,
+				timer_duration,
+				false,
+				rank->id
+			)) {
+				LogInfo(
+					"AA DEBUG: SpellFinished failed for aa_id [{}] rank_id [{}], spell [{}], target_id [{}] (client [{}])",
+					ability->id,
+					rank_id,
+					rank->spell,
+					target_id,
+					GetCleanName()
+				);
 				return;
 			}
 		}
 		else {
-			if (!CastSpell(rank->spell, target_id, EQ::spells::CastingSlot::AltAbility, -1, -1, 0, -1, rank->spell_type + pTimerAAStart, timer_duration, nullptr, rank->id)) {
+			if (!CastSpell(
+				rank->spell,
+				target_id,
+				EQ::spells::CastingSlot::AltAbility,
+				-1,
+				-1,
+				0,
+				-1,
+				rank->spell_type + pTimerAAStart,
+				timer_duration,
+				nullptr,
+				rank->id
+			)) {
+				LogInfo(
+					"AA DEBUG: CastSpell failed for aa_id [{}] rank_id [{}], spell [{}], target_id [{}] (client [{}])",
+					ability->id,
+					rank_id,
+					rank->spell,
+					target_id,
+					GetCleanName()
+				);
 				return;
 			}
 		}
@@ -2094,33 +2210,93 @@ void Client::TogglePurchaseAlternativeAdvancementRank(int rank_id){
 void Client::AutoGrantAAPoints() {
 	int auto_grant_expansion = RuleI(Expansion, AutoGrantAAExpansion);
 
-	if (auto_grant_expansion == -1) {
-		return;
+	bool granted_any = false;
+
+	// General auto-grant path (expansion-based)
+	if (auto_grant_expansion != -1) {
+		//iterate through every AA
+		for (auto& iter : zone->aa_abilities) {
+			auto ability = iter.second.get();
+
+			if (ability->grant_only) {
+				continue;
+			}
+
+			if (ability->charges > 0) {
+				continue;
+			}
+
+			if (!ability->auto_grant_enabled) {
+				continue;
+			}
+
+			auto level = GetLevel();
+			auto p = 1;
+			auto rank = ability->first;
+			while (rank != nullptr) {
+				if (CanUseAlternateAdvancementRank(rank)) {
+					if (rank->expansion <= auto_grant_expansion && rank->level_req <= level && !HasAlreadyPurchasedRank(rank)) {
+						FinishAlternateAdvancementPurchase(rank, true, false);
+						granted_any = true;
+
+						if (rank->prev) {
+							MessageString(
+								Chat::Yellow,
+								AA_IMPROVE,
+								std::to_string(rank->title_sid).c_str(),
+								std::to_string(rank->prev->current_value).c_str(),
+								"0",
+								std::to_string(AA_POINTS).c_str()
+							);
+						}
+						else {
+							MessageString(
+								Chat::Yellow,
+								AA_GAIN_ABILITY,
+								std::to_string(rank->title_sid).c_str(),
+								"0",
+								std::to_string(AA_POINTS).c_str()
+							);
+						}
+					}
+				}
+				else {
+					break;
+				}
+
+				p++;
+				rank = rank->next;
+			}
+		}
 	}
 
-	//iterate through every AA
-	for (auto& iter : zone->aa_abilities) {
-		auto ability = iter.second.get();
+	// Custom auto-grant for massive stat-cap AAs even when general auto-grant is disabled.
+	// These are:
+	//   - Planar Power (aa_ability.id = 142)
+	//   - Innate Enlightenment (aa_ability.id = 144, 316)
+	if (auto_grant_expansion == -1) {
+		static const uint32 kStatAaAbilityIds[] = { 142, 144, 316 };
 
-		if (ability->grant_only) {
-			continue;
-		}
+		for (auto aa_id : kStatAaAbilityIds) {
+			auto ability = zone->GetAlternateAdvancementAbility(static_cast<int>(aa_id));
+			if (!ability) {
+				continue;
+			}
 
-		if (ability->charges > 0) {
-			continue;
-		}
+			if (ability->charges > 0) {
+				continue;
+			}
 
-		if (!ability->auto_grant_enabled) {
-			continue;
-		}
+			auto level = GetLevel();
+			auto rank = ability->first;
+			while (rank) {
+				if (!CanUseAlternateAdvancementRank(rank)) {
+					break;
+				}
 
-		auto level = GetLevel();
-		auto p = 1;
-		auto rank = ability->first;
-		while (rank != nullptr) {
-			if (CanUseAlternateAdvancementRank(rank)) {
-				if (rank->expansion <= auto_grant_expansion && rank->level_req <= level && !HasAlreadyPurchasedRank(rank)) {
+				if (rank->level_req <= level && !HasAlreadyPurchasedRank(rank)) {
 					FinishAlternateAdvancementPurchase(rank, true, false);
+					granted_any = true;
 
 					if (rank->prev) {
 						MessageString(
@@ -2142,14 +2318,14 @@ void Client::AutoGrantAAPoints() {
 						);
 					}
 				}
-			}
-			else {
-				break;
-			}
 
-			p++;
-			rank = rank->next;
+				rank = rank->next;
+			}
 		}
+	}
+
+	if (!granted_any) {
+		return;
 	}
 
 	SendClearLeadershipAA();

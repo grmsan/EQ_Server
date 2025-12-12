@@ -385,6 +385,30 @@ int main(int argc, char **argv)
 		LogError("Loading spells failed!");
 		return 1;
 	}
+	else {
+		// Snapshot what the zone actually has loaded for debugging custom spells/AAs
+		const uint32 spell_ids_to_check[] = { 65000, 65010 };
+
+		for (auto sid : spell_ids_to_check) {
+			bool in_range = (SPDAT_RECORDS > 0 && sid < static_cast<uint32>(SPDAT_RECORDS));
+			const char *sname = "";
+			const char *splayer1 = "";
+
+			if (in_range && spells) {
+				sname    = spells[sid].name;
+				splayer1 = spells[sid].player_1;
+			}
+
+			LogInfo(
+				"Spells DEBUG: SPDAT_RECORDS [{}], spell_id [{}], in_range [{}], name='{}', player_1='{}'",
+				SPDAT_RECORDS,
+				sid,
+				in_range ? "true" : "false",
+				sname,
+				splayer1
+			);
+		}
+	}
 
 
 	guild_mgr.LoadGuilds();

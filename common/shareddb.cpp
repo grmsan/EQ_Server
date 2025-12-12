@@ -1759,22 +1759,17 @@ void SharedDatabase::LoadSpells(void *data, int max_spells) {
 	int counter = 0;
 	const int col_count = results.ColumnCount();
 
-    for (auto& row = results.begin(); row != results.end(); ++row) {
-	    const int tempid = Strings::ToInt(row[0]);
-        if(tempid >= max_spells) {
+	for (auto& row = results.begin(); row != results.end(); ++row) {
+		const int tempid = Strings::ToInt(row[0]);
+		if (tempid >= max_spells) {
 			LogSpells("Non fatal error: spell.id >= max_spells, ignoring");
 			continue;
 		}
-		// Temporary guard: skip very high custom IDs if they cause instability
-		if (tempid >= 64000) {
-			LogSpells("Skipping high-id spell [{}] during load (temporary guard)", tempid);
-			continue;
-		}
 
-        ++counter;
-        sp[tempid].id = tempid;
-        strn0cpy(sp[tempid].name, row[1], sizeof(sp[tempid].name));
-        strn0cpy(sp[tempid].player_1, row[2], sizeof(sp[tempid].player_1));
+		++counter;
+		sp[tempid].id = tempid;
+		strn0cpy(sp[tempid].name, row[1], sizeof(sp[tempid].name));
+		strn0cpy(sp[tempid].player_1, row[2], sizeof(sp[tempid].player_1));
 		strn0cpy(sp[tempid].teleport_zone, row[3], sizeof(sp[tempid].teleport_zone));
 		strn0cpy(sp[tempid].you_cast, row[4], sizeof(sp[tempid].you_cast));
 		strn0cpy(sp[tempid].other_casts, row[5], sizeof(sp[tempid].other_casts));

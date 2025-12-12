@@ -102,21 +102,21 @@ INSERT INTO aa_ranks (
     expansion,
     prev_id,
     next_id
-) VALUES (
-    10000,                          -- id (Rank ID)
-    10000,                          -- upper_hotkey_sid (db_str id for name)
-    -1,                             -- lower_hotkey_sid (-1 = none)
-    10000,                          -- title_sid (db_str id for name)
-    10001,                          -- desc_sid (db_str id for description)
-    0,                              -- cost (0 AA points - free!)
-    5,                              -- level_req (Level 5 minimum)
-    65000,                          -- spell (Links to spell ID above)
-    1,                              -- spell_type (Timer group 1)
-    10,                             -- recast_time (10 seconds)
-    0,                              -- expansion (0 = base)
-    0,                              -- prev_id (no previous rank)
-    0                               -- next_id (no next rank)
-);
+  ) VALUES (
+      10000,                          -- id (Rank ID)
+      10000,                          -- upper_hotkey_sid (db_str id for name)
+      -1,                             -- lower_hotkey_sid (-1 = none)
+      10000,                          -- title_sid (db_str id for name)
+      10001,                          -- desc_sid (db_str id for description)
+      0,                              -- cost (0 AA points - free!)
+      5,                              -- level_req (Level 5 minimum)
+      65000,                          -- spell (Links to spell ID above)
+      20,                             -- spell_type (dedicated timer group for Heroic Throw)
+      10,                             -- recast_time (10 seconds)
+      0,                              -- expansion (0 = base)
+      0,                              -- prev_id (no previous rank)
+      0                               -- next_id (no next rank)
+  );
 
 -- ============================================================================
 -- INSTALLATION INSTRUCTIONS

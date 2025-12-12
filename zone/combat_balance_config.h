@@ -88,8 +88,8 @@ namespace CombatBalance {
 	constexpr float AGI_AVOID_DIVISOR   = 300.0f;  // avoidance base curve divisor
 	constexpr float AGI_AVOID_CAP       = 75.0f;   // base avoidance cap before class multiplier
 	constexpr float AGI_AVOID_SOFTCAP   = 85.0f;   // soft cap after class multiplier
-	constexpr float AGI_RUN_DIVISOR     = 200.0f;  // run speed cap curve divisor
-	constexpr float AGI_RUN_CAP         = 110.0f;  // % runspeed cap from AGI
+	constexpr float AGI_RUN_DIVISOR     = 200.0f;  // run speed cap curve divisor (AGI.md: RunSpeed% = RUN_CAP * AGI / (AGI + 200))
+	constexpr float AGI_RUN_CAP         = 200.0f;  // % runspeed cap from AGI (top-end target ~200% vs base)
 	constexpr float AGI_CAST_DIVISOR    = 500.0f;  // cast/GCD asymptotic divisor
 	constexpr float AGI_CAST_FLOOR_SEC  = 0.5f;    // minimum cast/GCD seconds floor
 
@@ -189,13 +189,13 @@ namespace CombatBalance {
 	 * TRUE: STR uses curved formula above STR_DIMINISHING_START
 	 * FALSE: STR is purely linear (simpler, recommended for initial tuning)
 	 *
-	 * Current: FALSE (start with linear, add curve only if needed)
+	 * Current: TRUE (linear for low/mid STR, gentle curve at high STR)
 	 *
 	 * Use Case: If top-end geared players reach 2000+ STR and damage feels
 	 * too explosive even after adjusting STR_LEVEL_DIVISOR, enable this to
 	 * gently reduce returns on ultra-high STR without hard caps.
 	 */
-	constexpr bool ENABLE_STR_DIMINISHING_RETURNS = false;
+	constexpr bool ENABLE_STR_DIMINISHING_RETURNS = true;
 
 	/**
 	 * @brief STR value at which diminishing returns begin

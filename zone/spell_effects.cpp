@@ -133,6 +133,7 @@ static int64 ComputeSpecialAttackDamage(const Mob* caster, int caster_level, con
 		dmg = cfg.min_damage;
 	}
 	dmg *= cfg.damage_mult;
+
 	return static_cast<int64>(dmg);
 }
 
@@ -3586,6 +3587,19 @@ int64 Mob::CalcSpellEffectValue(uint16 spell_id, int effect_id, int caster_level
 		// Damage override
 		if (spells[spell_id].effect_id[effect_id] == SpellEffect::CurrentHPOnce) {
 			int64 dmg = ComputeSpecialAttackDamage(caster, caster_level, cfg);
+
+			// Debug for Heroic Throw / Colossal Smash damage resolution
+			if (spell_id == 65000 || spell_id == 65010) {
+				LogSpells(
+					"SpecialAttackDamage: spell_id [{}], caster [{}], level [{}], effect_index [{}], final_damage [{}]",
+					spell_id,
+					(caster ? caster->GetCleanName() : "nullptr"),
+					caster_level,
+					effect_id,
+					dmg
+				);
+			}
+
 			return -dmg; // detrimental is negative
 		}
 		// AC debuff rider (scaled off damage)
@@ -3593,6 +3607,19 @@ int64 Mob::CalcSpellEffectValue(uint16 spell_id, int effect_id, int caster_level
 			int64 dmg = ComputeSpecialAttackDamage(caster, caster_level, cfg);
 			int32 debuff = static_cast<int32>(dmg * cfg.ac_debuff_pct_of_damage);
 			if (debuff < 1) debuff = 1;
+
+			if (spell_id == 65000 || spell_id == 65010) {
+				LogSpells(
+					"SpecialAttackACDebuff: spell_id [{}], caster [{}], level [{}], effect_index [{}], dmg [{}], ac_debuff [{}]",
+					spell_id,
+					(caster ? caster->GetCleanName() : "nullptr"),
+					caster_level,
+					effect_id,
+					dmg,
+					debuff
+				);
+			}
+
 			return -debuff; // debuff AC by this amount
 		}
 	}

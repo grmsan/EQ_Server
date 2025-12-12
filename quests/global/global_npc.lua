@@ -42,7 +42,7 @@ end
 -- Set to true to enable debug logging; false to disable all debug lines
 local UPGRADE_DEBUG = false
 local TEST_BASE_CHANCE_FULL = 10.5
-local TEST_UPGRADE_MODE = true       -- set to false when done testing
+local TEST_UPGRADE_MODE = false       -- set to false when done testing
 
 local function debug_print(...)
     if not UPGRADE_DEBUG then

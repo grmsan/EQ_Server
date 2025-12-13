@@ -2937,6 +2937,32 @@ void Mob::SendStatsWindow(Client* c, bool use_window)
 		).c_str()
 	);
 
+	if (IsClient()) {
+		auto *tc = CastToClient();
+		const uint16 classes_bits = tc->GetClassesBitmask();
+		const uint8 classes_count = tc->GetClassesCount();
+
+		std::vector<std::string> classes;
+		classes.reserve(4);
+		for (uint8 class_id = 1; class_id <= 16; ++class_id) {
+			if (tc->HasClass(class_id)) {
+				classes.emplace_back(GetClassIDName(class_id, tc->GetLevel()));
+			}
+		}
+
+		c->Message(
+			Chat::White,
+			fmt::format(
+				"Multiclass: {} classes_bitmask=0x{:04X} ({}) count={} classes={}",
+				RuleB(Custom, MulticlassingEnabled) ? "On" : "Off",
+				classes_bits,
+				classes_bits,
+				static_cast<int>(classes_count),
+				Strings::Implode(", ", classes)
+			).c_str()
+		);
+	}
+
 	if (c->Admin() >= AccountStatus::GMAdmin) {
 		c->Message(
 			Chat::White,

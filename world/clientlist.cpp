@@ -17,6 +17,7 @@
 */
 
 #include "../common/global_define.h"
+#include <fmt/format.h>
 #include "clientlist.h"
 #include "zoneserver.h"
 #include "zonelist.h"
@@ -34,9 +35,75 @@
 #include "web_interface.h"
 #include "wguild_mgr.h"
 #include "../common/zone_store.h"
+#include <unordered_map>
 #include <set>
 
 uint32 numplayers = 0;	//this really wants to be a member variable of ClientList...
+
+static uint8 CountBits16(uint16 bits)
+{
+	uint8 count = 0;
+	while (bits) {
+		count += (bits & 1) ? 1 : 0;
+		bits >>= 1;
+	}
+	return count;
+}
+
+static uint16 GetMulticlassBitsOrBase(uint32 character_id, uint8 base_class_id)
+{
+	const uint16 base_bit = GetPlayerClassBit(base_class_id);
+
+	if (!RuleB(Custom, MulticlassingEnabled)) {
+		return base_bit;
+	}
+
+	const auto bucket_key = RuleS(Custom, MulticlassBucketKey);
+	if (bucket_key.empty() || character_id == 0) {
+		return base_bit;
+	}
+
+	const auto query = fmt::format(
+		"SELECT value FROM data_buckets "
+		"WHERE `key` = '{}' AND character_id = {} AND account_id = 0 AND npc_id = 0 AND bot_id = 0 AND zone_id = 0 AND instance_id = 0 "
+		"LIMIT 1",
+		Strings::Escape(bucket_key),
+		character_id
+	);
+
+	auto results = database.QueryDatabase(query);
+	if (!results.Success() || results.RowCount() != 1) {
+		return base_bit;
+	}
+
+	auto row = results.begin();
+	const std::string raw = row[0] ? row[0] : "";
+	if (raw.empty()) {
+		return base_bit;
+	}
+
+	uint16 bits = static_cast<uint16>(Strings::ToUnsignedInt(raw, base_bit) & 0xFFFF);
+	bits |= base_bit;
+	return bits;
+}
+
+static std::string BuildMulticlassBaseList(uint16 bits)
+{
+	std::string out;
+	for (uint8 class_id = 1; class_id <= 16; ++class_id) {
+		if ((bits & GetPlayerClassBit(class_id)) == 0) {
+			continue;
+		}
+
+		if (!out.empty()) {
+			out += "/";
+		}
+
+		out += GetClassIDName(class_id);
+	}
+
+	return out;
+}
 
 ClientList::ClientList()
 	: CLStale_timer(10000),
@@ -649,6 +716,7 @@ void ClientList::SendWhoAll(uint32 fromid,const char* to, int16 admin, Who_All_S
 
 		uint32 totalusers=0;
 		uint32 totallength=0;
+		std::unordered_map<uint32, std::string> who_display_name_by_char_id;
 		countclients.Reset();
 		while (countclients.MoreElements()) {
 			countcle = countclients.GetData();
@@ -677,23 +745,62 @@ void ClientList::SendWhoAll(uint32 fromid,const char* to, int16 admin, Who_All_S
 				if ((countcle->Anon()>0 && admin >= countcle->Admin() && admin > AccountStatus::Player) || countcle->Anon()==0 ) {
 					totalusers++;
 					if (totalusers<=20 || admin >= AccountStatus::GMAdmin) {
+						std::string display_name = countcle->name();
+						const uint16 bits = GetMulticlassBitsOrBase(countcle->CharID(), countcle->class_());
+						if (CountBits16(bits) > 1) {
+							display_name = fmt::format("{} [{}]", countcle->name(), BuildMulticlassBaseList(bits));
+							if (display_name.size() >= 64) {
+								display_name.resize(63);
+							}
+						}
+						who_display_name_by_char_id[countcle->CharID()] = display_name;
+
 						totallength = totallength + strlen(countcle->name()) + strlen(countcle->AccountName()) +
 									strlen(guild_mgr.GetGuildName(countcle->GuildID())) + 5;
+						if (display_name.size() > strlen(countcle->name())) {
+							totallength += static_cast<uint32>(display_name.size() - strlen(countcle->name()));
+						}
 					}
 				} else if (((countcle->Anon() == 1 && admin <= countcle->Admin()) && whomlen != 0 &&
 							strncasecmp(countcle->name(), whom->whom, whomlen) == 0)) {
 					totalusers++;
 					if (totalusers <= 20 || admin >= AccountStatus::GMAdmin) {
+						std::string display_name = countcle->name();
+						const uint16 bits = GetMulticlassBitsOrBase(countcle->CharID(), countcle->class_());
+						if (CountBits16(bits) > 1) {
+							display_name = fmt::format("{} [{}]", countcle->name(), BuildMulticlassBaseList(bits));
+							if (display_name.size() >= 64) {
+								display_name.resize(63);
+							}
+						}
+						who_display_name_by_char_id[countcle->CharID()] = display_name;
+
 						totallength = totallength + strlen(countcle->name()) + strlen(countcle->AccountName()) +
 									strlen(guild_mgr.GetGuildName(countcle->GuildID())) + 5;
+						if (display_name.size() > strlen(countcle->name())) {
+							totallength += static_cast<uint32>(display_name.size() - strlen(countcle->name()));
+						}
 					}
 				} else if (((countcle->Anon() == 2 && admin <= countcle->Admin()) && whomlen != 0 &&
 							(strncasecmp(countcle->name(), whom->whom, whomlen) == 0 ||
 							strncasecmp(guild_mgr.GetGuildName(countcle->GuildID()), whom->whom, whomlen) == 0))) {
 					totalusers++;
 					if (totalusers <= 20 || admin >= AccountStatus::GMAdmin) {
+						std::string display_name = countcle->name();
+						const uint16 bits = GetMulticlassBitsOrBase(countcle->CharID(), countcle->class_());
+						if (CountBits16(bits) > 1) {
+							display_name = fmt::format("{} [{}]", countcle->name(), BuildMulticlassBaseList(bits));
+							if (display_name.size() >= 64) {
+								display_name.resize(63);
+							}
+						}
+						who_display_name_by_char_id[countcle->CharID()] = display_name;
+
 						totallength = totallength + strlen(countcle->name()) + strlen(countcle->AccountName()) +
 									strlen(guild_mgr.GetGuildName(countcle->GuildID())) + 5;
+						if (display_name.size() > strlen(countcle->name())) {
+							totallength += static_cast<uint32>(display_name.size() - strlen(countcle->name()));
+						}
 					}
 				}
 			}
@@ -870,7 +977,12 @@ void ClientList::SendWhoAll(uint32 fromid,const char* to, int16 admin, Who_All_S
 				//char plstatus[20]={0};
 				//sprintf(plstatus, "Status %i",cle->Admin());
 				char plname[64]={0};
-				strcpy(plname,cle->name());
+				auto it_name = who_display_name_by_char_id.find(cle->CharID());
+				if (it_name != who_display_name_by_char_id.end()) {
+					strncpy(plname, it_name->second.c_str(), sizeof(plname) - 1);
+				} else {
+					strcpy(plname, cle->name());
+				}
 
 				char placcount[30]={0};
 				if (admin>=cle->Admin() && admin > AccountStatus::Player) {
@@ -947,7 +1059,18 @@ void ClientList::SendFriendsWho(ServerFriendsWho_Struct *FriendsWho, WorldTCPCon
 		ClientListEntry* CLE = FindCharacter(Friend_);
 		if(CLE && CLE->name() && (CLE->Online() >= CLE_Status::Zoning) && !(CLE->GetGM() && CLE->Anon())) {
 			FriendsCLEs.push_back(CLE);
-			TotalLength += strlen(CLE->name());
+			{
+				std::string display_name = CLE->name();
+				const uint16 bits = GetMulticlassBitsOrBase(CLE->CharID(), CLE->class_());
+				if (CountBits16(bits) > 1) {
+					display_name = fmt::format("{} [{}]", CLE->name(), BuildMulticlassBaseList(bits));
+					if (display_name.size() >= 64) {
+						display_name.resize(63);
+					}
+				}
+
+				TotalLength += static_cast<uint32>(display_name.size());
+			}
 			int GuildNameLength = strlen(guild_mgr.GetGuildName(CLE->GuildID()));
 			if(GuildNameLength>0)
 				TotalLength += (GuildNameLength + 2);
@@ -1019,7 +1142,18 @@ void ClientList::SendFriendsWho(ServerFriendsWho_Struct *FriendsWho, WorldTCPCon
 			}
 
 			char PlayerName[64]={0};
-			strcpy(PlayerName,cle->name());
+			{
+				std::string display_name = cle->name();
+				const uint16 bits = GetMulticlassBitsOrBase(cle->CharID(), cle->class_());
+				if (CountBits16(bits) > 1) {
+					display_name = fmt::format("{} [{}]", cle->name(), BuildMulticlassBaseList(bits));
+					if (display_name.size() >= 64) {
+						display_name.resize(63);
+					}
+				}
+
+				strncpy(PlayerName, display_name.c_str(), sizeof(PlayerName) - 1);
+			}
 
 			WhoAllPlayerPart1* WAPP1 = (WhoAllPlayerPart1*)bufptr;
 

@@ -321,6 +321,7 @@ set(gm_command_sources
     command.cpp
     bot_command.cpp
     gm_commands/acceptrules.cpp
+    gm_commands/addclass.cpp
     gm_commands/advnpcspawn.cpp
     gm_commands/aggrozone.cpp
     gm_commands/ai.cpp
@@ -429,6 +430,7 @@ set(gm_command_sources
     gm_commands/randomfeatures.cpp
     gm_commands/refreshgroup.cpp
     gm_commands/reload.cpp
+    gm_commands/removeclass.cpp
     gm_commands/removeitem.cpp
     gm_commands/repop.cpp
     gm_commands/resetaa.cpp

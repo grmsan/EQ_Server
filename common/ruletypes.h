@@ -67,7 +67,7 @@ RULE_REAL(Character, GroupExpMultiplier, 0.5, "The experience in a group is mult
 RULE_REAL(Character, RaidExpMultiplier, 0.2, "The experience gained in raids is multiplied by (1-RaidExpMultiplier) ")
 RULE_REAL(Character, FinalRaidExpMultiplier, 1.0, "Multiplies all raid experience by this value. Default: 1.0")
 RULE_BOOL(Character, UseXPConScaling, true, "When activated, the experience is modified depending on the difference between player level and NPC level. The values from the rules GreenModifier to RedModifier are used")
-RULE_INT(Character, ShowExpValues, 0, "Show experience values. 0=normal, 1=show raw experience values, 2=show raw experience values and percent")
+RULE_INT(Character, ShowExpValues, 2, "Show experience values. 0=normal, 1=show raw experience values, 2=show raw experience values and percent")
 RULE_INT(Character, GreenModifier, 20, "The experience obtained for green con mobs is multiplied by value/100")
 RULE_INT(Character, LightBlueModifier, 40, "The experience obtained for light-blue con mobs is multiplied by value/100")
 RULE_INT(Character, BlueModifier, 90, "The experience obtained for blue con mobs is multiplied by value/100")
@@ -1185,6 +1185,13 @@ RULE_REAL(EvolvingItems, PercentOfGroupExperience, 0.1, "Percentage of group exp
 RULE_REAL(EvolvingItems, PercentOfRaidExperience, 0.1, "Percentage of raid experience allocated to evolving items that require experience.")
 RULE_INT(EvolvingItems, DelayUponEquipping, 30000, "Delay in ms before an evolving item will earn rewards after equipping.  Default is 30000ms or 30s.")
 RULE_BOOL(EvolvingItems, DestroyAugmentsOnEvolve, false, "If this is enabled, any augments in an item will be destroyed when the item evolves. Otherwise, send augments to the player via the parcel system (requires that the Parcel System be enabled).")
+RULE_CATEGORY_END()
+
+RULE_CATEGORY(Custom)
+RULE_BOOL(Custom, MulticlassingEnabled, true, "Enable multiclass foundations (server-side class bitmask stored in data buckets). Does not change core class logic yet.")
+RULE_INT(Custom, MulticlassMaxClasses, 3, "Maximum number of classes allowed in the classes bitmask (includes base class).")
+RULE_STRING(Custom, MulticlassBucketKey, "multiclass.classes_bitmask", "Character-scoped data bucket key where the class bitmask is stored.")
+RULE_BOOL(Custom, ServerAuthStats, true, "Compatibility rule used by multiclass-era quest scripts to gate server-authoritative stats features.")
 RULE_CATEGORY_END()
 
 #undef RULE_CATEGORY

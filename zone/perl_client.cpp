@@ -2002,6 +2002,21 @@ bool Perl_Client_HasDisciplineLearned(Client* self, uint16 spell_id)
 	return self->HasDisciplineLearned(spell_id);
 }
 
+bool Perl_Client_SetClassesBitmask(Client* self, uint16_t classes_bitmask)
+{
+	return self->SetClassesBitmask(classes_bitmask);
+}
+
+bool Perl_Client_AddExtraClass(Client* self, uint8_t class_id)
+{
+	return self->AddExtraClass(class_id);
+}
+
+bool Perl_Client_RemoveExtraClass(Client* self, uint8_t class_id)
+{
+	return self->RemoveExtraClass(class_id);
+}
+
 uint16_t Perl_Client_GetClassBitmask(Client* self)
 {
 	return GetPlayerClassBit(self->GetClass());
@@ -2009,9 +2024,7 @@ uint16_t Perl_Client_GetClassBitmask(Client* self)
 
 uint16_t Perl_Client_GetClassesBitmask(Client* self)
 {
-	// Compatibility alias for older multiclass-era quest/plugin code.
-	// Until true multiclass is implemented server-side, this returns the single current class bit.
-	return GetPlayerClassBit(self->GetClass());
+	return self->GetClassesBitmask();
 }
 
 uint32_t Perl_Client_GetDeityBitmask(Client* self)
@@ -3550,6 +3563,9 @@ void perl_register_client()
 	package.add("GetClassAbbreviation", &Perl_Client_GetClassAbbreviation);
 	package.add("GetClassBitmask", &Perl_Client_GetClassBitmask);
 	package.add("GetClassesBitmask", &Perl_Client_GetClassesBitmask);
+	package.add("SetClassesBitmask", &Perl_Client_SetClassesBitmask);
+	package.add("AddExtraClass", &Perl_Client_AddExtraClass);
+	package.add("RemoveExtraClass", &Perl_Client_RemoveExtraClass);
 	package.add("GetClientMaxLevel", &Perl_Client_GetClientMaxLevel);
 	package.add("GetClientVersion", &Perl_Client_GetClientVersion);
 	package.add("GetClientVersionBit", &Perl_Client_GetClientVersionBit);

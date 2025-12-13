@@ -284,6 +284,16 @@ public:
 	void SetPrimaryWeaponOrnamentation(uint32 model_id);
 	void SetSecondaryWeaponOrnamentation(uint32 model_id);
 
+	// ---- Multi-class foundations (databucket-backed) ----
+	// These APIs provide a server-side class bitmask used by quest/plugins.
+	// Core gameplay systems still use `GetClass()` until explicitly updated.
+	uint16 GetClassesBitmask();
+	bool SetClassesBitmask(uint16 classes_bitmask);
+	bool AddExtraClass(uint8 class_id);
+	bool RemoveExtraClass(uint8 class_id);
+	uint8 GetClassesCount();
+	bool HasClass(uint8 class_id);
+
 	void SendChatLineBreak(uint16 color = Chat::White);
 
 	bool GotoPlayer(const std::string& player_name);

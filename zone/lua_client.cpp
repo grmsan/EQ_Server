@@ -157,9 +157,31 @@ uint16 Lua_Client::GetClassBitmask() {
 
 uint16 Lua_Client::GetClassesBitmask() {
 	Lua_Safe_Call_Int();
-	// Compatibility alias for older multiclass-era quest code. Until true multiclass
-	// is implemented server-side, this returns the single current class bit.
-	return GetPlayerClassBit(self->GetClass());
+	return self->GetClassesBitmask();
+}
+
+bool Lua_Client::SetClassesBitmask(uint16 classes_bitmask)
+{
+	Lua_Safe_Call_Bool();
+	return self->SetClassesBitmask(classes_bitmask);
+}
+
+bool Lua_Client::AddExtraClass(uint8 class_id)
+{
+	Lua_Safe_Call_Bool();
+	return self->AddExtraClass(class_id);
+}
+
+bool Lua_Client::RemoveExtraClass(uint8 class_id)
+{
+	Lua_Safe_Call_Bool();
+	return self->RemoveExtraClass(class_id);
+}
+
+uint8 Lua_Client::GetClassesCount()
+{
+	Lua_Safe_Call_Int();
+	return self->GetClassesCount();
 }
 
 uint32 Lua_Client::GetDeityBitmask() {
@@ -3821,6 +3843,10 @@ luabind::scope lua_register_client() {
 	.def("GetClassAbbreviation", (std::string(Lua_Client::*)(void))&Lua_Client::GetClassAbbreviation)
 	.def("GetClassBitmask", (uint16(Lua_Client::*)(void))&Lua_Client::GetClassBitmask)
 	.def("GetClassesBitmask", (uint16(Lua_Client::*)(void))&Lua_Client::GetClassesBitmask)
+	.def("SetClassesBitmask", (bool(Lua_Client::*)(uint16))&Lua_Client::SetClassesBitmask)
+	.def("AddExtraClass", (bool(Lua_Client::*)(uint8))&Lua_Client::AddExtraClass)
+	.def("RemoveExtraClass", (bool(Lua_Client::*)(uint8))&Lua_Client::RemoveExtraClass)
+	.def("GetClassesCount", (uint8(Lua_Client::*)(void))&Lua_Client::GetClassesCount)
 	.def("GetClientMaxLevel", (int(Lua_Client::*)(void))&Lua_Client::GetClientMaxLevel)
 	.def("GetClientVersion", (int(Lua_Client::*)(void))&Lua_Client::GetClientVersion)
 	.def("GetClientVersionBit", (uint32(Lua_Client::*)(void))&Lua_Client::GetClientVersionBit)

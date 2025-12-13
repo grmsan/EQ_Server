@@ -13244,6 +13244,131 @@ std::string Client::GetAccountBucketRemaining(std::string bucket_name)
 	return DataBucket::GetDataRemaining(k);
 }
 
+uint16 Client::GetClassesBitmask()
+{
+	const uint16 base_bit = GetPlayerClassBit(GetClass());
+
+	if (!RuleB(Custom, MulticlassingEnabled)) {
+		return base_bit;
+	}
+
+	const auto bucket_key = RuleS(Custom, MulticlassBucketKey);
+	if (bucket_key.empty()) {
+		return base_bit;
+	}
+
+	const std::string raw = GetBucket(bucket_key);
+	if (raw.empty()) {
+		// Seed on first access so scripts can rely on this existing when enabled.
+		SetBucket(bucket_key, std::to_string(base_bit));
+		return base_bit;
+	}
+
+	uint16 bits = static_cast<uint16>(Strings::ToUnsignedInt(raw, base_bit) & 0xFFFF);
+	// Always include the base class bit to avoid orphaned/invalid states.
+	bits |= base_bit;
+	return bits;
+}
+
+bool Client::SetClassesBitmask(uint16 classes_bitmask)
+{
+	if (!RuleB(Custom, MulticlassingEnabled)) {
+		return false;
+	}
+
+	const auto bucket_key = RuleS(Custom, MulticlassBucketKey);
+	if (bucket_key.empty()) {
+		return false;
+	}
+
+	const uint16 base_bit = GetPlayerClassBit(GetClass());
+	uint16 bits = classes_bitmask | base_bit;
+
+	SetBucket(bucket_key, std::to_string(static_cast<uint32>(bits)));
+	return true;
+}
+
+static uint8 CountClassBits(uint16 bits)
+{
+	uint8 count = 0;
+	while (bits) {
+		count += (bits & 1) ? 1 : 0;
+		bits >>= 1;
+	}
+	return count;
+}
+
+uint8 Client::GetClassesCount()
+{
+	return CountClassBits(GetClassesBitmask());
+}
+
+bool Client::HasClass(uint8 class_id)
+{
+	if (!EQ::ValueWithin(class_id, 1, 16)) {
+		return false;
+	}
+
+	const uint16 bit = GetPlayerClassBit(class_id);
+	if (!RuleB(Custom, MulticlassingEnabled)) {
+		return GetClass() == class_id;
+	}
+
+	return (GetClassesBitmask() & bit) != 0;
+}
+
+bool Client::AddExtraClass(uint8 class_id)
+{
+	if (!RuleB(Custom, MulticlassingEnabled)) {
+		return false;
+	}
+
+	if (!EQ::ValueWithin(class_id, 1, 16)) {
+		return false;
+	}
+
+	const uint16 add_bit = GetPlayerClassBit(class_id);
+	uint16 bits = GetClassesBitmask();
+
+	if (bits & add_bit) {
+		return false;
+	}
+
+	const int max_classes = RuleI(Custom, MulticlassMaxClasses);
+	if (max_classes > 0 && CountClassBits(bits) >= max_classes) {
+		return false;
+	}
+
+	bits |= add_bit;
+	return SetClassesBitmask(bits);
+}
+
+bool Client::RemoveExtraClass(uint8 class_id)
+{
+	if (!RuleB(Custom, MulticlassingEnabled)) {
+		return false;
+	}
+
+	if (!EQ::ValueWithin(class_id, 1, 16)) {
+		return false;
+	}
+
+	// Prevent removing the base class.
+	if (class_id == GetClass()) {
+		return false;
+	}
+
+	const uint16 remove_bit = GetPlayerClassBit(class_id);
+	uint16 bits = GetClassesBitmask();
+
+	if ((bits & remove_bit) == 0) {
+		return false;
+	}
+
+	bits &= ~remove_bit;
+	return SetClassesBitmask(bits);
+}
+
 std::string Client::GetBandolierName(uint8 bandolier_slot)
 {
 	if (!EQ::ValueWithin(bandolier_slot, 0, 3)) {

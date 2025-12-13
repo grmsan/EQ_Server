@@ -59,6 +59,10 @@ public:
 	void SetBaseGender(int v);
 	uint16 GetClassBitmask();
 	uint16 GetClassesBitmask();
+	bool SetClassesBitmask(uint16 classes_bitmask);
+	bool AddExtraClass(uint8 class_id);
+	bool RemoveExtraClass(uint8 class_id);
+	uint8 GetClassesCount();
 	uint32 GetDeityBitmask();
 	uint16 GetRaceBitmask();
 	int GetBaseFace();

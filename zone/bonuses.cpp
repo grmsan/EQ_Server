@@ -105,9 +105,18 @@ void Client::CalcBonuses()
 	CalcCR();
 	CalcCorrup();
 
+	const auto old_max_hp   = max_hp;
+	const auto old_max_mana = max_mana;
+	const auto old_max_end  = max_end;
+
 	CalcMaxHP();
 	CalcMaxMana();
 	CalcMaxEndurance();
+
+	// Keep the client UI synchronized when max pools change (buffs, gear, AAs).
+	if (old_max_hp != max_hp || old_max_mana != max_mana || old_max_end != max_end) {
+		SendHPUpdate(true);
+	}
 
 	SetAttackTimer();
 
@@ -118,18 +127,8 @@ void Client::CalcBonuses()
 	if (GetMaxXTargets() != 5 + aabonuses.extra_xtargets)
 		SetMaxXTargets(5 + aabonuses.extra_xtargets);
 
-	// Push authoritative stats to client (UI override) whenever bonuses change.
-	{
-		std::ostringstream ss;
-		ss << "CalcBonuses final DEX base=" << DEX
-		   << " itembonus=" << itembonuses.DEX
-		   << " spellbonus=" << spellbonuses.DEX
-		   << " aabonus=" << aabonuses.DEX
-		   << " total=" << GetDEX()
-		   << " char='" << GetCleanName() << "' spawn=" << GetID();
-		STAT_LOG(ss.str());
-	}
 	SendServerStatsUpdate();
+	SendEdgeStats();
 
 	// hmm maybe a better way to do this
 	int metabolism = spellbonuses.Metabolism + itembonuses.Metabolism + aabonuses.Metabolism;
@@ -138,7 +137,6 @@ void Client::CalcBonuses()
 	if (timer != consume_food_timer.GetTimerTime())
 		consume_food_timer.SetTimer(timer);
 
-	SendEdgeStats();
 }
 
 int Mob::CalcRecommendedLevelBonus(uint8 current_level, uint8 recommended_level, int base_stat)
@@ -170,18 +168,7 @@ void Mob::CalcItemBonuses(StatBonuses* b) {
 			continue;
 		}
 
-		int32_t before_dex = b->DEX;
 		AddItemBonuses(inst, b, false, false, 0, (i == EQ::invslot::slotAmmo));
-		int32_t after_dex = b->DEX;
-		if (after_dex != before_dex) {
-			const auto* item = inst->GetItem();
-			std::ostringstream ss;
-			ss << "CalcItemBonuses slot=" << i;
-			if (item) ss << " item_id=" << item->ID << " name='" << item->Name << "'";
-			ss << " dex_before=" << before_dex << " dex_after=" << after_dex << " dex_delta=" << (after_dex - before_dex);
-			ss << " char='" << GetCleanName() << "' spawn=" << GetID();
-			STAT_LOG(ss.str());
-		}
 
 		//These are given special flags due to how often they are checked for various spell effects.
 		const auto* item = inst->GetItem();
@@ -2109,11 +2096,6 @@ void Mob::ApplySpellsBonuses(uint16 spell_id, uint8 casterlevel, StatBonuses *ne
 
 			case SpellEffect::DEX:
 			{
-				{
-					std::ostringstream ss;
-					ss << "ApplySpellsBonuses ADD DEX spell=" << spell_id << " caster=" << casterId << " slot=" << buffslot << " value=" << effect_value << " target='" << GetCleanName() << "' spawn=" << GetID();
-					STAT_LOG(ss.str());
-				}
 				new_bonus->DEX += effect_value;
 				break;
 			}
@@ -2152,11 +2134,6 @@ void Mob::ApplySpellsBonuses(uint16 spell_id, uint8 casterlevel, StatBonuses *ne
 
 			case SpellEffect::AllStats:
 			{
-				{
-					std::ostringstream ss;
-					ss << "ApplySpellsBonuses ALLSTATS spell=" << spell_id << " caster=" << casterId << " slot=" << buffslot << " value=" << effect_value << " target='" << GetCleanName() << "' spawn=" << GetID();
-					STAT_LOG(ss.str());
-				}
 				new_bonus->STR += effect_value;
 				new_bonus->DEX += effect_value;
 				new_bonus->AGI += effect_value;

@@ -34,6 +34,9 @@
 //#pragma comment(lib, "Iphlpapi.lib")
 
 void LogDebug(const char* format, ...) {
+	if (!isDebugLoggingEnabled) {
+		return;
+	}
 	FILE* file;
 	if (fopen_s(&file, "dinput8_debug.log", "a") == 0) {
 		std::time_t now = std::time(nullptr);
@@ -50,35 +53,200 @@ void LogDebug(const char* format, ...) {
 	}
 }
 
+enum HookTag : LONG {
+	Hook_None = 0,
+	Hook_HandleWorldMessage = 1,
+	Hook_MaxHP = 2,
+	Hook_CurHP = 3,
+	Hook_GetGaugeValueFromEQ = 4,
+	Hook_GetLabelFromEQ = 5
+};
+
+static volatile LONG g_last_hook_tag = Hook_None;
+
+// Deferred install helpers for server-authoritative stats detours.
+void EnsureServerAuthoritativeStatsInstallArmed();
+void EdgeStats_MaybeInstallDetoursFromMainThread();
+
+// Write-watch helper (defined later)
+static bool IsWriteWatchExpectedAV(DWORD code, ULONG_PTR info0, ULONG_PTR info1);
+
+// Forward declaration (defined later)
+static void DumpRecentPackets(FILE* f, size_t count);
+
+static void LogRawDebug(const char* format, ...)
+{
+	FILE* file = nullptr;
+	if (fopen_s(&file, "dinput8_debug.log", "a") != 0 || !file) {
+		return;
+	}
+	std::time_t now = std::time(nullptr);
+	char buf[20];
+	std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
+	fprintf(file, "[%s] ", buf);
+	va_list args;
+	va_start(args, format);
+	vfprintf(file, format, args);
+	va_end(args);
+	fprintf(file, "\n");
+	fclose(file);
+}
+
+static LONG CALLBACK CrashLogVEH(PEXCEPTION_POINTERS ep)
+{
+	if (!ep || !ep->ExceptionRecord) {
+		return EXCEPTION_CONTINUE_SEARCH;
+	}
+
+	const DWORD code = ep->ExceptionRecord->ExceptionCode;
+	// Log only potentially fatal exceptions
+	switch (code) {
+		case EXCEPTION_ACCESS_VIOLATION:
+		case EXCEPTION_ILLEGAL_INSTRUCTION:
+		case EXCEPTION_STACK_OVERFLOW:
+		case EXCEPTION_ARRAY_BOUNDS_EXCEEDED:
+		case EXCEPTION_DATATYPE_MISALIGNMENT:
+		case EXCEPTION_IN_PAGE_ERROR:
+		case EXCEPTION_PRIV_INSTRUCTION:
+			break;
+		default:
+			return EXCEPTION_CONTINUE_SEARCH;
+	}
+
+#ifdef _M_X64
+	void* ip = (void*)ep->ContextRecord->Rip;
+	void* sp = (void*)ep->ContextRecord->Rsp;
+#else
+	void* ip = (void*)ep->ContextRecord->Eip;
+	void* sp = (void*)ep->ContextRecord->Esp;
+#endif
+
+	ULONG_PTR info0 = 0;
+	ULONG_PTR info1 = 0;
+	if (ep->ExceptionRecord->NumberParameters >= 1) {
+		info0 = ep->ExceptionRecord->ExceptionInformation[0];
+	}
+	if (ep->ExceptionRecord->NumberParameters >= 2) {
+		info1 = ep->ExceptionRecord->ExceptionInformation[1];
+	}
+
+	// Suppress noisy "crash" logs for write-watch induced access violations that are expected to be handled.
+	if (IsWriteWatchExpectedAV(code, info0, info1)) {
+		return EXCEPTION_CONTINUE_SEARCH;
+	}
+
+	DWORD tid = GetCurrentThreadId();
+	int safe_get_gamestate = -9999;
+	__try {
+		safe_get_gamestate = GetGameState();
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		safe_get_gamestate = -9998;
+	}
+
+	LogRawDebug(
+		"CRASH_VEH tid=%lu code=0x%08X ex_addr=%p ip=%p info0=%llu info1=%p last_hook=%ld gamestate=%lu get_gamestate=%d sp=%p",
+		(unsigned long)tid,
+		code,
+		ep->ExceptionRecord->ExceptionAddress,
+		ip,
+		(unsigned long long)info0,
+		(void*)info1,
+		(long)g_last_hook_tag,
+		(unsigned long)gGameState,
+		safe_get_gamestate,
+		sp
+	);
+	LogRawDebug("CRASH_VEH baseAddress=0x%08X ip_rva=0x%08X", (unsigned)baseAddress, (unsigned)((uintptr_t)ip - (uintptr_t)baseAddress));
+	// Dump some recent packets if available
+	{
+		FILE* rf = nullptr;
+		if (fopen_s(&rf, "dinput8_debug.log", "a") == 0 && rf) {
+			fprintf(rf, "CRASH_VEH recent packets:\n");
+			DumpRecentPackets(rf, 40);
+			fclose(rf);
+		}
+	}
+
+	return EXCEPTION_CONTINUE_SEARCH;
+}
+
+static void InstallCrashDiagnostics()
+{
+	static LONG installed = 0;
+	if (InterlockedCompareExchange(&installed, 1, 0) != 0) {
+		return;
+	}
+	AddVectoredExceptionHandler(0, CrashLogVEH);
+	LogDebug("Crash diagnostics installed (VEH)");
+}
+
+static void LogDetourTargetBytes(const char* name, DWORD addr)
+{
+	unsigned char b[16] = {0};
+	bool ok = false;
+	__try {
+		memcpy(b, (void*)addr, sizeof(b));
+		ok = true;
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		ok = false;
+	}
+
+	if (!ok) {
+		LogDebug("DetourTarget %s addr=0x%08X read FAILED", name, (unsigned)addr);
+		return;
+	}
+
+	LogDebug(
+		"DetourTarget %s addr=0x%08X bytes=%02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X",
+		name, (unsigned)addr,
+		b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7],
+		b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]
+	);
+}
+
 static void ConditionalDumpOpcode(uint16_t op, const char* buf, size_t size, const char* toggle_filename)
 {
-	// Toggle file lives in the repo logs folder. If present, dump the packet for offline analysis.
-	const char* repo_toggle_prefix = "C:\\Users\\marsh\\OneDrive\\Documents\\GitHub\\EQ_Server\\logs\\";
-	char fulltoggle[1024];
-	snprintf(fulltoggle, sizeof(fulltoggle), "%s%s", repo_toggle_prefix, toggle_filename);
-	FILE* tf = nullptr;
-	if (fopen_s(&tf, fulltoggle, "r") == 0 && tf) {
-		fclose(tf);
-		// toggle file exists -> write dump
-		time_t now = time(nullptr);
-		struct tm* tmv = localtime(&now);
-		char tb[32] = {0};
-		strftime(tb, sizeof(tb), "%Y%m%d_%H%M%S", tmv);
-		char dumpname[1024];
-		snprintf(dumpname, sizeof(dumpname), "C:\\Users\\marsh\\OneDrive\\Documents\\GitHub\\EQ_Server\\logs\\dumps\\packet_%s_%04x.bin", tb, op & 0xFFFF);
-		FILE* df = nullptr;
-		// Ensure dumps directory exists (best-effort)
-		// We won't create directories portably here; assume it exists or the user will create it.
-		if (fopen_s(&df, dumpname, "wb") == 0 && df) {
-			fwrite(buf, 1, size, df);
-			fclose(df);
-		}
-		// Also append a short human-readable line to the repo stats log
-		FILE* lf = nullptr;
-		if (fopen_s(&lf, "C:\\Users\\marsh\\OneDrive\\Documents\\GitHub\\EQ_Server\\logs\\stats_debug.log", "a") == 0 && lf) {
-			fprintf(lf, "%s DUMP opcode=0x%04x size=%zu -> %s\n", tb, op & 0xFFFF, size, dumpname);
-			fclose(lf);
-		}
+	// Toggle files are intentionally ignored; dump behavior is controlled via `_options.h` booleans.
+	(void)toggle_filename;
+
+	if (!isDebugLoggingEnabled) {
+		return;
+	}
+
+	// Respect per-opcode dump toggles
+	const uint16_t lop = op & 0xFFFF;
+	if (lop == 0x1338 && !isEdgeStatLabelDumpEnabled) {
+		return;
+	}
+	if (lop == 0x575b && !isOpcode575bDumpEnabled) {
+		return;
+	}
+
+	// Ensure repo logs/dumps exists
+	const char* repo_logs_dir = "C:\\Users\\marsh\\OneDrive\\Documents\\GitHub\\EQ_Server\\logs";
+	const char* repo_dumps_dir = "C:\\Users\\marsh\\OneDrive\\Documents\\GitHub\\EQ_Server\\logs\\dumps";
+	CreateDirectoryA(repo_logs_dir, nullptr);
+	CreateDirectoryA(repo_dumps_dir, nullptr);
+
+	time_t now = time(nullptr);
+	struct tm* tmv = localtime(&now);
+	char tb[32] = {0};
+	strftime(tb, sizeof(tb), "%Y%m%d_%H%M%S", tmv);
+	char dumpname[1024];
+	snprintf(dumpname, sizeof(dumpname), "C:\\Users\\marsh\\OneDrive\\Documents\\GitHub\\EQ_Server\\logs\\dumps\\packet_%s_%04x.bin", tb, lop);
+	FILE* df = nullptr;
+	if (fopen_s(&df, dumpname, "wb") == 0 && df) {
+		fwrite(buf, 1, size, df);
+		fclose(df);
+	}
+
+	// Also append a short human-readable line to the repo stats log
+	FILE* lf = nullptr;
+	if (fopen_s(&lf, "C:\\Users\\marsh\\OneDrive\\Documents\\GitHub\\EQ_Server\\logs\\stats_debug.log", "a") == 0 && lf) {
+		fprintf(lf, "%s DUMP opcode=0x%04x size=%zu -> %s\n", tb, lop, size, dumpname);
+		fclose(lf);
 	}
 }
 
@@ -88,9 +256,13 @@ static int g_last_logged_hp = INT_MIN;
 static int g_last_logged_mana = INT_MIN;
 static int g_last_logged_end = INT_MIN;
 
-static void ConditionalLogEdgeStat(const char* buf, size_t size, const char* /*toggle_filename*/)
+static void ConditionalLogEdgeStat(const char* buf, size_t size, const char* toggle_filename)
 {
-	// Always parse and append EdgeStat entries to the repo stats_debug.log
+	(void)toggle_filename;
+	if (!isEdgeStatLabelLoggingEnabled) {
+		return;
+	}
+
 	if (!buf || size < 4) return;
 	uint32_t count = 0;
 	memcpy(&count, buf, sizeof(uint32_t));
@@ -682,6 +854,103 @@ ServerProfileCache g_serverProfile;
 static bool logged_profile_candidate = false;
 static int packetCount = 0;
 
+// EdgeStatLabel (opcode 0x1338) key/value stat cache
+static constexpr uint32_t kEdgeStatMaxKey = 4096;
+static uint64_t g_edgeStatValue[kEdgeStatMaxKey]{};
+static uint8_t  g_edgeStatHas[kEdgeStatMaxKey]{};
+
+static void ApplyEdgeStatLabelPacket(const char* buf, size_t size)
+{
+	// Payload:
+	//   uint32 count
+	//   repeated count times: { uint32 key; uint64 value; }
+	if (!buf || size < sizeof(uint32_t)) {
+		return;
+	}
+
+	uint32_t count = 0;
+	memcpy(&count, buf, sizeof(uint32_t));
+	if (count > 2000) {
+		return;
+	}
+
+	size_t off = sizeof(uint32_t);
+	for (uint32_t i = 0; i < count; ++i) {
+		if (off + sizeof(uint32_t) + sizeof(uint64_t) > size) {
+			break;
+		}
+
+		uint32_t key = 0;
+		uint64_t value = 0;
+		memcpy(&key, buf + off, sizeof(uint32_t));
+		memcpy(&value, buf + off + sizeof(uint32_t), sizeof(uint64_t));
+		off += sizeof(uint32_t) + sizeof(uint64_t);
+
+		if (key < kEdgeStatMaxKey) {
+			g_edgeStatValue[key] = value;
+			g_edgeStatHas[key] = 1;
+		}
+	}
+
+	// Keep IDs aligned with extras/classless-dll-main/eqgame_dll/MQ2Labels.cpp (eStatEntry).
+	constexpr uint32_t kCurHP   = 2;
+	constexpr uint32_t kCurMana = 3;
+	constexpr uint32_t kCurEnd  = 4;
+	constexpr uint32_t kMaxHP   = 5;
+	constexpr uint32_t kMaxMana = 6;
+	constexpr uint32_t kMaxEnd  = 7;
+	constexpr uint32_t kSTR     = 24;
+	constexpr uint32_t kSTA     = 25;
+	constexpr uint32_t kDEX     = 26;
+	constexpr uint32_t kAGI     = 27;
+	constexpr uint32_t kINT     = 28;
+	constexpr uint32_t kWIS     = 29;
+	constexpr uint32_t kCHA     = 30;
+
+	auto get_i32 = [](uint32_t key) -> int {
+		if (key >= kEdgeStatMaxKey || !g_edgeStatHas[key]) {
+			return -1;
+		}
+		const uint64_t v = g_edgeStatValue[key];
+		if (v >= static_cast<uint64_t>(INT_MAX - 1)) {
+			return INT_MAX - 1;
+		}
+		return static_cast<int>(v);
+	};
+
+	const int cur_hp = get_i32(kCurHP);
+	const int max_hp = get_i32(kMaxHP);
+	if (cur_hp >= 0) g_serverCurHP = cur_hp;
+	if (max_hp >= 0) g_serverMaxHP = max_hp;
+
+	const int cur_mana = get_i32(kCurMana);
+	const int max_mana = get_i32(kMaxMana);
+	if (cur_mana >= 0) g_serverCurMana = cur_mana;
+	if (max_mana >= 0) g_serverMaxMana = max_mana;
+
+	const int cur_end = get_i32(kCurEnd);
+	const int max_end = get_i32(kMaxEnd);
+	if (cur_end >= 0) g_serverCurEnd = cur_end;
+	if (max_end >= 0) g_serverMaxEnd = max_end;
+
+	// Seed attribute cache for future label/tooltip overrides.
+	g_serverProfile.has_profile = true;
+	const int str = get_i32(kSTR);
+	const int sta = get_i32(kSTA);
+	const int dex = get_i32(kDEX);
+	const int agi = get_i32(kAGI);
+	const int intl = get_i32(kINT);
+	const int wis = get_i32(kWIS);
+	const int cha = get_i32(kCHA);
+	if (str >= 0) g_serverProfile.str = str;
+	if (sta >= 0) g_serverProfile.sta = sta;
+	if (dex >= 0) g_serverProfile.dex = dex;
+	if (agi >= 0) g_serverProfile.agi = agi;
+	if (intl >= 0) g_serverProfile.intl = intl;
+	if (wis >= 0) g_serverProfile.wis = wis;
+	if (cha >= 0) g_serverProfile.cha = cha;
+}
+
 // Recent packet circular buffer to assist debugging crashes/zoning sequences
 struct RecentPacket {
 	uint16_t opcode;
@@ -744,43 +1013,76 @@ static void ResetServerCaches()
     g_serverMaxMana = -1;
     g_serverProfile = ServerProfileCache{};
     logged_profile_candidate = false;
+	memset(g_edgeStatHas, 0, sizeof(g_edgeStatHas));
+	memset(g_edgeStatValue, 0, sizeof(g_edgeStatValue));
 }
 
 // --- Write-watch for local-player stat writes (VEH) ---
 static PVOID g_stat_watch_handler = nullptr;
-static void* g_stat_watch_page = nullptr;
-static size_t g_stat_watch_page_size = 0;
 static bool g_stat_watch_active = false;
+static volatile LONG g_stat_watch_timer_started = 0;
+
+static void*  g_stat_watch_pages[4] = { nullptr, nullptr, nullptr, nullptr };
+static size_t g_stat_watch_page_sizes[4] = { 0, 0, 0, 0 };
+static DWORD  g_stat_watch_old_protect[4] = { 0, 0, 0, 0 };
+static int    g_stat_watch_page_count = 0;
 
 static void DisableStatWriteWatch();
+
+static bool IsWriteWatchExpectedAV(DWORD code, ULONG_PTR info0, ULONG_PTR info1)
+{
+	if (code != EXCEPTION_ACCESS_VIOLATION) {
+		return false;
+	}
+	// 1 == write access
+	if (info0 != 1 || !g_stat_watch_active) {
+		return false;
+	}
+
+	uintptr_t target = (uintptr_t)info1;
+	for (int i = 0; i < 4; ++i) {
+		uintptr_t page_base = (uintptr_t)g_stat_watch_pages[i];
+		size_t page_size = g_stat_watch_page_sizes[i];
+		if (!page_base || page_size == 0) continue;
+		if (target >= page_base && target < page_base + page_size) {
+			return true;
+		}
+	}
+	return false;
+}
 
 static LONG CALLBACK StatWriteWatchHandler(PEXCEPTION_POINTERS ep)
 {
 	if (!ep || !ep->ExceptionRecord) return EXCEPTION_CONTINUE_SEARCH;
 	DWORD code = (DWORD)ep->ExceptionRecord->ExceptionCode;
-	// Access violation on write (1 == write)
+	// Access violation: ExceptionInformation[0] indicates type: 0=read, 1=write, 8=execute.
 	if (code == EXCEPTION_ACCESS_VIOLATION && ep->ExceptionRecord->NumberParameters >= 2) {
-		uintptr_t fault_addr = (uintptr_t)ep->ExceptionRecord->ExceptionInformation[1];
-		uintptr_t page_base = (uintptr_t)g_stat_watch_page;
-		size_t page_size = g_stat_watch_page_size;
-		if (g_stat_watch_active && page_base && fault_addr >= page_base && fault_addr < page_base + page_size) {
-			// Log the faulting IP and target address (x86 uses Eip)
-#ifdef _M_X64
-			void* ip = (void*)ep->ContextRecord->Rip;
-#else
-			void* ip = (void*)ep->ContextRecord->Eip;
-#endif
-			LogDebug("[WRITE_WATCH_FAULT] ip=%p target=%p", ip, (void*)fault_addr);
+		const ULONG_PTR access_type = ep->ExceptionRecord->ExceptionInformation[0];
+		const uintptr_t fault_addr = (uintptr_t)ep->ExceptionRecord->ExceptionInformation[1];
+		if (g_stat_watch_active && access_type == 1) {
+			for (int i = 0; i < 4; ++i) {
+				uintptr_t page_base = (uintptr_t)g_stat_watch_pages[i];
+				size_t page_size = g_stat_watch_page_sizes[i];
+				if (!page_base || page_size == 0) continue;
+				if (fault_addr < page_base || fault_addr >= page_base + page_size) continue;
 
-			// Temporarily make the page writable so the instruction can complete.
-			DWORD old = 0;
-			if (VirtualProtect((LPVOID)page_base, page_size, PAGE_READWRITE, &old)) {
-				// Allow the instruction to continue and perform the write.
-				return EXCEPTION_CONTINUE_EXECUTION;
-			} else {
-				// If we can't change protection, remove the watch to avoid lockout.
-				DisableStatWriteWatch();
-				return EXCEPTION_CONTINUE_SEARCH;
+				// Log the faulting IP and target address (x86 uses Eip)
+#ifdef _M_X64
+				void* ip = (void*)ep->ContextRecord->Rip;
+#else
+				void* ip = (void*)ep->ContextRecord->Eip;
+#endif
+				LogDebug("[WRITE_WATCH_FAULT] ip=%p target=%p page=%p", ip, (void*)fault_addr, (void*)page_base);
+
+				// Restore the original page protection so the instruction can complete.
+				DWORD tmp = 0;
+				DWORD restore = g_stat_watch_old_protect[i] ? g_stat_watch_old_protect[i] : PAGE_READWRITE;
+				if (VirtualProtect((LPVOID)page_base, page_size, restore, &tmp)) {
+					return EXCEPTION_CONTINUE_EXECUTION;
+				} else {
+					DisableStatWriteWatch();
+					return EXCEPTION_CONTINUE_SEARCH;
+				}
 			}
 		}
 	}
@@ -789,6 +1091,9 @@ static LONG CALLBACK StatWriteWatchHandler(PEXCEPTION_POINTERS ep)
 
 static void EnableStatWriteWatchForSpawn(void* spawn_ptr)
 {
+	if (!isStatWriteWatchEnabled) {
+		return;
+	}
 	if (!spawn_ptr) return;
 	SYSTEM_INFO si;
 	GetSystemInfo(&si);
@@ -796,41 +1101,67 @@ static void EnableStatWriteWatchForSpawn(void* spawn_ptr)
 	uintptr_t addr = (uintptr_t)spawn_ptr;
 	uintptr_t page_base = addr & ~(page - 1);
 
-	g_stat_watch_page = (void*)page_base;
-	g_stat_watch_page_size = page; // watch a single page covering spawn
+	// Avoid re-adding a page we already watch.
+	for (int i = 0; i < 4; ++i) {
+		if (g_stat_watch_pages[i] == (void*)page_base) {
+			return;
+		}
+	}
 
-	// Protect page to trigger VEH on writes
+	// Find a free slot; if none, disable existing watch and reuse slot 0.
+	int slot = -1;
+	for (int i = 0; i < 4; ++i) {
+		if (!g_stat_watch_pages[i]) { slot = i; break; }
+	}
+	if (slot == -1) {
+		DisableStatWriteWatch();
+		slot = 0;
+	}
+
+	// Protect page as read-only so reads continue normally; first write triggers VEH.
 	DWORD old = 0;
-	if (VirtualProtect(g_stat_watch_page, g_stat_watch_page_size, PAGE_NOACCESS, &old)) {
+	if (VirtualProtect((LPVOID)page_base, page, PAGE_READONLY, &old)) {
 		if (!g_stat_watch_handler) {
 			g_stat_watch_handler = AddVectoredExceptionHandler(1, StatWriteWatchHandler);
 		}
+		g_stat_watch_pages[slot] = (void*)page_base;
+		g_stat_watch_page_sizes[slot] = page;
+		g_stat_watch_old_protect[slot] = old;
+		g_stat_watch_page_count++;
 		g_stat_watch_active = true;
-		LogDebug("[WRITE_WATCH_ENABLE] page=%p size=%zu", g_stat_watch_page, g_stat_watch_page_size);
+		LogDebug("[WRITE_WATCH_ENABLE] page=%p size=%zu old=0x%08X", (void*)page_base, page, (unsigned)old);
 		// Start a short-lived timer to automatically disable the watch after 15 seconds
-		std::thread([]() {
-			std::this_thread::sleep_for(std::chrono::seconds(15));
-			DisableStatWriteWatch();
-		}).detach();
+		if (InterlockedCompareExchange(&g_stat_watch_timer_started, 1, 0) == 0) {
+			std::thread([]() {
+				std::this_thread::sleep_for(std::chrono::seconds(15));
+				DisableStatWriteWatch();
+			}).detach();
+		}
 	} else {
-		LogDebug("[WRITE_WATCH_ENABLE_FAIL] could not protect page=%p", g_stat_watch_page);
+		LogDebug("[WRITE_WATCH_ENABLE_FAIL] could not protect page=%p", (void*)page_base);
 		g_stat_watch_active = false;
 	}
 }
 
 static void DisableStatWriteWatch()
 {
-	if (g_stat_watch_page && g_stat_watch_page_size) {
-		DWORD old = 0;
-		VirtualProtect(g_stat_watch_page, g_stat_watch_page_size, PAGE_READWRITE, &old);
+	for (int i = 0; i < 4; ++i) {
+		if (g_stat_watch_pages[i] && g_stat_watch_page_sizes[i]) {
+			DWORD tmp = 0;
+			DWORD restore = g_stat_watch_old_protect[i] ? g_stat_watch_old_protect[i] : PAGE_READWRITE;
+			VirtualProtect(g_stat_watch_pages[i], g_stat_watch_page_sizes[i], restore, &tmp);
+		}
+		g_stat_watch_pages[i] = nullptr;
+		g_stat_watch_page_sizes[i] = 0;
+		g_stat_watch_old_protect[i] = 0;
 	}
 	if (g_stat_watch_handler) {
 		RemoveVectoredExceptionHandler(g_stat_watch_handler);
 		g_stat_watch_handler = nullptr;
 	}
-	g_stat_watch_page = nullptr;
-	g_stat_watch_page_size = 0;
 	g_stat_watch_active = false;
+	g_stat_watch_page_count = 0;
+	InterlockedExchange(&g_stat_watch_timer_started, 0);
 	LogDebug("[WRITE_WATCH_DISABLE]");
 }
 
@@ -874,11 +1205,15 @@ static uint32_t ReadUInt32Safe(const char* buf, size_t size, size_t offset)
     return v;
 }
 
-unsigned char __fastcall HandleWorldMessage_Trampoline(DWORD *con, DWORD edx, unsigned __int32 unk, unsigned __int32 opcode, char* buf, size_t size);
+	unsigned char __fastcall HandleWorldMessage_Trampoline(DWORD *con, DWORD edx, unsigned __int32 unk, unsigned __int32 opcode, char* buf, size_t size);
 unsigned char __fastcall HandleWorldMessage_Detour(DWORD *con, DWORD edx, unsigned __int32 unk, unsigned __int32 opcode, char* buf, size_t size)
 {
     try {
         packetCount++;
+		g_last_hook_tag = Hook_HandleWorldMessage;
+		if (isRecentPacketTraceEnabled) {
+			AddRecentPacket(opcode, buf, size);
+		}
         // If we swapped characters/spawn, clear cached values so we don't leak old stats to the new toon.
 				if (GetCharInfo() && GetCharInfo()->pSpawn) {
             PSPAWNINFO me = reinterpret_cast<PSPAWNINFO>(GetCharInfo()->pSpawn);
@@ -913,11 +1248,12 @@ unsigned char __fastcall HandleWorldMessage_Detour(DWORD *con, DWORD edx, unsign
                 }
 				g_localSpawnId = me->SpawnID;
 
-				// Enable a short-lived write-watch on both the local spawn and character info pages
-				// to catch unexpected writers who may be double-applying item stats during zone-in.
-				EnableStatWriteWatchForSpawn((void*)me);
-				if (GetCharInfo()) {
-					EnableStatWriteWatchForSpawn((void*)GetCharInfo());
+				// Optional write-watch diagnostics (disabled by default; see `_options.h`).
+				if (isStatWriteWatchEnabled) {
+					EnableStatWriteWatchForSpawn((void*)me);
+					if (GetCharInfo()) {
+						EnableStatWriteWatchForSpawn((void*)GetCharInfo());
+					}
 				}
 				// Also log a concise structured client-side spawn parse line for correlation
 				{
@@ -952,6 +1288,7 @@ unsigned char __fastcall HandleWorldMessage_Detour(DWORD *con, DWORD edx, unsign
 		{
 			uint16_t lop = opcode & 0xFFFF;
 			if (lop == 0x1338) {
+				ApplyEdgeStatLabelPacket(buf, size);
 				ConditionalDumpOpcode(lop, buf, size, "enable_dump_1338");
 				// Also write a readable, parsed EdgeStat log when toggled
 				ConditionalLogEdgeStat(buf, size, "enable_log_1338");
@@ -1238,20 +1575,45 @@ unsigned char __fastcall HandleWorldMessage_Detour(DWORD *con, DWORD edx, unsign
         }
     }
 
-    if (size >= 10 && (op == hp_opcode || op == end_opcode || op == mob_end_opcode || op == mana_opcode || op == mob_mana_opcode)) {
+    // Capture server HP / Endurance / Mana updates for the local player so the label hook can use server-authoritative values.
+    // RoF2 OP_HPUpdate payload ordering differs from emu/common (spawn_id first).
+    if (
+        (op == hp_opcode && size >= 10) ||
+        (op == end_opcode && size >= 10) ||
+        (op == mana_opcode && size >= 10) ||
+        // mob_* opcodes are percent-based (smaller) and handled elsewhere; keep them out of this 10-byte parser
+        false
+    ) {
         try {
 #pragma pack(push,1)
-            struct HpUpdatePayload {
-                uint32_t cur_hp;
-                int32_t  max_hp;
+            struct HpUpdatePayload_EmuOrder {
+                uint32_t cur;
+                int32_t  max;
                 uint16_t spawn_id;
+            };
+
+            struct HpUpdatePayload_RoF2HPOrder {
+                uint16_t spawn_id;
+                uint32_t cur;
+                int32_t  max;
             };
 #pragma pack(pop)
 
-            const auto* hp = reinterpret_cast<const HpUpdatePayload*>(buf);
-            uint32_t cur   = hp->cur_hp;
-            int32_t  max   = hp->max_hp;
-            uint16_t spawn = hp->spawn_id;
+            uint32_t cur = 0;
+            int32_t max = 0;
+            uint16_t spawn = 0;
+
+            if (op == hp_opcode) {
+                const auto* hp = reinterpret_cast<const HpUpdatePayload_RoF2HPOrder*>(buf);
+                cur = hp->cur;
+                max = hp->max;
+                spawn = hp->spawn_id;
+            } else {
+                const auto* hp = reinterpret_cast<const HpUpdatePayload_EmuOrder*>(buf);
+                cur = hp->cur;
+                max = hp->max;
+                spawn = hp->spawn_id;
+            }
 
             PSPAWNINFO me = nullptr;
             if (GetCharInfo()) {
@@ -1264,7 +1626,7 @@ unsigned char __fastcall HandleWorldMessage_Detour(DWORD *con, DWORD edx, unsign
 					g_serverCurHP = static_cast<int>(cur);
 					g_serverMaxHP = static_cast<int>(max);
 					LogPacketDetail("[HP_PACKET_APPLIED]", opcode, size, cur, max, spawn, prev_max, "HPUpdate");
-				} else if (op == end_opcode || op == mob_end_opcode) { // endurance updates
+				} else if (op == end_opcode) { // endurance updates
 					int prev_max = g_serverMaxEnd;
 					g_serverCurEnd = static_cast<int>(cur);
 					g_serverMaxEnd = static_cast<int>(max);
@@ -1419,10 +1781,13 @@ DETOUR_TRAMPOLINE_EMPTY(unsigned char __fastcall SendMessage_Trampoline(DWORD*, 
 DETOUR_TRAMPOLINE_EMPTY(unsigned char __fastcall SetDeviceGammaRamp_Trampoline(HDC hdc, LPVOID lpRamp));
 
 // Detours: prefer server-provided max stats when available
-DETOUR_TRAMPOLINE_EMPTY(int __cdecl EQCharacter_MaxHP_Tramp(int, int));
-int __cdecl EQCharacter_MaxHP_Detour(int a1, int a2)
+// NOTE: These are EQ_Character member functions (thiscall). When detouring, we
+// use __fastcall with (this, edx, args...) to preserve calling convention.
+DETOUR_TRAMPOLINE_EMPTY(int __fastcall EQCharacter_MaxHP_Tramp(void*, void*, int, int));
+int __fastcall EQCharacter_MaxHP_Detour(void* This, void* edx, int a1, int a2)
 {
-	int nativeVal = EQCharacter_MaxHP_Tramp(a1, a2);
+	g_last_hook_tag = Hook_MaxHP;
+	int nativeVal = EQCharacter_MaxHP_Tramp(This, edx, a1, a2);
 	int used = nativeVal;
 	int server = g_serverMaxHP;
 	if (server > 0) {
@@ -1439,10 +1804,105 @@ int __cdecl EQCharacter_MaxHP_Detour(int a1, int a2)
 	return used;
 }
 
-DETOUR_TRAMPOLINE_EMPTY(int __cdecl EQCharacter_MaxMana_Tramp(int));
-int __cdecl EQCharacter_MaxMana_Detour(int a1)
+DETOUR_TRAMPOLINE_EMPTY(int __fastcall EQCharacter_CurHP_Tramp(void*, void*, int, unsigned char));
+int __fastcall EQCharacter_CurHP_Detour(void* This, void* edx, int a1, unsigned char a2)
 {
-	int nativeVal = EQCharacter_MaxMana_Tramp(a1);
+	g_last_hook_tag = Hook_CurHP;
+	int nativeVal = EQCharacter_CurHP_Tramp(This, edx, a1, a2);
+	int used = nativeVal;
+	int server = g_serverCurHP;
+	if (server > 0) {
+		used = server;
+	}
+	if (pLocalPlayer) {
+		static int g_last_logged_cur_hp = INT_MIN;
+		if (g_last_logged_cur_hp != used) {
+			g_last_logged_cur_hp = used;
+			LogDebug("CLIENT_DETOUR stat=CurHP server=%d native=%d used=%d", server, nativeVal, used);
+		}
+	}
+	return used;
+}
+
+// UI gauge + label hooks (used by stock UI for HP/Mana/End display)
+DETOUR_TRAMPOLINE_EMPTY(int __cdecl GetGaugeValueFromEQ_Tramp(int, class CXStr *, bool *, unsigned long *));
+static int __cdecl GetGaugeValueFromEQ_Detour(int eq_type, class CXStr *out, bool *arg3, unsigned long *colorout)
+{
+	g_last_hook_tag = Hook_GetGaugeValueFromEQ;
+	int ret = GetGaugeValueFromEQ_Tramp(eq_type, out, arg3, colorout);
+
+	// Empirically (and in classless), gauge values are 0..1000.
+	auto calc_1000 = [](int cur, int max) -> int {
+		if (max <= 0 || cur < 0) {
+			return -1;
+		}
+		if (cur > max) {
+			cur = max;
+		}
+		return static_cast<int>((static_cast<double>(cur) / static_cast<double>(max)) * 1000.0);
+	};
+
+	if (eq_type == 1) { // HP gauge
+		int v = (g_serverMaxHP > 0) ? calc_1000(g_serverCurHP, g_serverMaxHP) : -1;
+		if (v >= 0) {
+			ret = v;
+		}
+	} else if (eq_type == 2) { // Mana gauge
+		int v = (g_serverMaxMana > 0) ? calc_1000(g_serverCurMana, g_serverMaxMana) : -1;
+		if (v >= 0) {
+			ret = v;
+		}
+	} else if (eq_type == 3) { // Endurance gauge
+		int v = (g_serverMaxEnd > 0) ? calc_1000(g_serverCurEnd, g_serverMaxEnd) : -1;
+		if (v >= 0) {
+			ret = v;
+		}
+	}
+
+	return ret;
+}
+
+DETOUR_TRAMPOLINE_EMPTY(int __cdecl GetLabelFromEQ_Tramp(int, class CXStr *, bool *, unsigned long *));
+static int __cdecl GetLabelFromEQ_Detour(int eq_type, class CXStr *out, bool *arg3, unsigned long *colorout)
+{
+	g_last_hook_tag = Hook_GetLabelFromEQ;
+	int ret = GetLabelFromEQ_Tramp(eq_type, out, arg3, colorout);
+
+	// In classless, EQType==29 is the HP% label.
+	if (eq_type == 29 && out && out->Ptr && g_serverMaxHP > 0 && g_serverCurHP >= 0) {
+		int cur = g_serverCurHP;
+		int max = g_serverMaxHP;
+		if (cur > max) {
+			cur = max;
+		}
+		int pct = static_cast<int>((static_cast<double>(cur) / static_cast<double>(max)) * 100.0);
+		char tmp[16] = {0};
+		snprintf(tmp, sizeof(tmp), "%d", pct);
+		SetCXStr(&out->Ptr, (PCHAR)tmp);
+	}
+
+	return ret;
+}
+
+static volatile LONG g_ui_detours_installed = 0;
+static void InstallUiDetours()
+{
+	if (InterlockedCompareExchange(&g_ui_detours_installed, 1, 0) != 0) {
+		return;
+	}
+
+	LogDebug("Installing UI detours (__GetGaugeValueFromEQ/__GetLabelFromEQ)...");
+	LogDetourTargetBytes("__GetGaugeValueFromEQ", __GetGaugeValueFromEQ);
+	LogDetourTargetBytes("__GetLabelFromEQ", __GetLabelFromEQ);
+	EzDetour(__GetGaugeValueFromEQ, GetGaugeValueFromEQ_Detour, GetGaugeValueFromEQ_Tramp);
+	EzDetour(__GetLabelFromEQ, GetLabelFromEQ_Detour, GetLabelFromEQ_Tramp);
+	LogDebug("UI detours installed");
+}
+
+DETOUR_TRAMPOLINE_EMPTY(int __fastcall EQCharacter_MaxMana_Tramp(void*, void*, int));
+int __fastcall EQCharacter_MaxMana_Detour(void* This, void* edx, int a1)
+{
+	int nativeVal = EQCharacter_MaxMana_Tramp(This, edx, a1);
 	int used = nativeVal;
 	int server = g_serverMaxMana;
 	if (server > 0) used = server;
@@ -1455,10 +1915,10 @@ int __cdecl EQCharacter_MaxMana_Detour(int a1)
 	return used;
 }
 
-DETOUR_TRAMPOLINE_EMPTY(int __cdecl EQCharacter_MaxEnd_Tramp(int));
-int __cdecl EQCharacter_MaxEnd_Detour(int a1)
+DETOUR_TRAMPOLINE_EMPTY(int __fastcall EQCharacter_MaxEnd_Tramp(void*, void*, int));
+int __fastcall EQCharacter_MaxEnd_Detour(void* This, void* edx, int a1)
 {
-	int nativeVal = EQCharacter_MaxEnd_Tramp(a1);
+	int nativeVal = EQCharacter_MaxEnd_Tramp(This, edx, a1);
 	int used = nativeVal;
 	int server = g_serverMaxEnd;
 	if (server > 0) used = server;
@@ -1481,6 +1941,118 @@ signed int ProcessGameEvents_Hook()
 {
    DWORD oldTimeGetTimeVal = 0;
    return return_ProcessGameEvents();
+}
+
+// ---- Server-authoritative stats: deferred detour install (main thread) ----
+//
+// We cannot reliably install these detours during DLL_PROCESS_ATTACH or during early
+// client startup (pre-charselect). We arm a lightweight main-thread hook and only
+// install the real detours once the client is fully in-game.
+
+extern CRITICAL_SECTION gDetourCS;
+
+static volatile LONG g_server_stats_arm_installed = 0;
+static volatile LONG g_server_stats_detours_installed = 0;
+static volatile LONG g_server_stats_wait_logged = 0;
+
+DETOUR_TRAMPOLINE_EMPTY(BOOL Trampoline_ProcessGameEvents_StatsInstall(VOID));
+static BOOL Detour_ProcessGameEvents_StatsInstall(VOID)
+{
+	// Main thread heartbeat; safe place to query game state and install detours.
+	EdgeStats_MaybeInstallDetoursFromMainThread();
+	return Trampoline_ProcessGameEvents_StatsInstall();
+}
+
+static void InstallServerAuthoritativeStatsDetours_Now()
+{
+	if (InterlockedCompareExchange(&g_server_stats_detours_installed, 1, 0) != 0) {
+		return;
+	}
+
+	if (!baseAddress) {
+		LogDebug("Server-authoritative stats: baseAddress is null; cannot install detours");
+		InterlockedExchange(&g_server_stats_detours_installed, 0);
+		return;
+	}
+
+	if (!EQ_Character__Max_HP || !EQ_Character__Cur_HP || !EQ_Character__Max_Mana || !EQ_Character__Max_Endurance) {
+		LogDebug("Server-authoritative stats: required offsets not initialized; cannot install detours");
+		InterlockedExchange(&g_server_stats_detours_installed, 0);
+		return;
+	}
+
+	EnterCriticalSection(&gDetourCS);
+	__try {
+		const DWORD handle_world_msg = (((DWORD)0x004C3250 - 0x400000) + baseAddress);
+		LogDebug("Server-authoritative stats: installing detours NOW (baseAddress=0x%08X)", (unsigned)baseAddress);
+		LogDetourTargetBytes("HandleWorldMessage", (DWORD)handle_world_msg);
+		LogDetourTargetBytes("EQ_Character__Max_HP", (DWORD)EQ_Character__Max_HP);
+		LogDetourTargetBytes("EQ_Character__Cur_HP", (DWORD)EQ_Character__Cur_HP);
+		LogDetourTargetBytes("EQ_Character__Max_Mana", (DWORD)EQ_Character__Max_Mana);
+		LogDetourTargetBytes("EQ_Character__Max_Endurance", (DWORD)EQ_Character__Max_Endurance);
+		LogDetourTargetBytes("__GetGaugeValueFromEQ", __GetGaugeValueFromEQ);
+		LogDetourTargetBytes("__GetLabelFromEQ", __GetLabelFromEQ);
+
+		EzDetour((DWORD)handle_world_msg, HandleWorldMessage_Detour, HandleWorldMessage_Trampoline);
+		EzDetour((DWORD)EQ_Character__Max_HP, EQCharacter_MaxHP_Detour, EQCharacter_MaxHP_Tramp);
+		EzDetour((DWORD)EQ_Character__Cur_HP, EQCharacter_CurHP_Detour, EQCharacter_CurHP_Tramp);
+		EzDetour((DWORD)EQ_Character__Max_Mana, EQCharacter_MaxMana_Detour, EQCharacter_MaxMana_Tramp);
+		EzDetour((DWORD)EQ_Character__Max_Endurance, EQCharacter_MaxEnd_Detour, EQCharacter_MaxEnd_Tramp);
+		InstallUiDetours();
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		LogDebug("Server-authoritative stats: exception while installing detours");
+		InterlockedExchange(&g_server_stats_detours_installed, 0);
+	}
+	LeaveCriticalSection(&gDetourCS);
+}
+
+void EdgeStats_MaybeInstallDetoursFromMainThread()
+{
+	if (!isServerAuthoritativeStatsEnabled) {
+		return;
+	}
+
+	int gs = -1;
+	__try { gs = GetGameState(); }
+	__except (EXCEPTION_EXECUTE_HANDLER) { gs = -1; }
+
+	// Only install once we are in-game.
+	if (gs != GAMESTATE_INGAME) {
+		if (InterlockedCompareExchange(&g_server_stats_wait_logged, 1, 0) == 0) {
+			LogDebug("Server-authoritative stats: waiting for GAMESTATE_INGAME (gs=%d gGameState=%lu)", gs, (unsigned long)gGameState);
+		}
+		return;
+	}
+
+	InstallServerAuthoritativeStatsDetours_Now();
+}
+
+static void EnsureProcessGameEventsDetourForStatsInstalled()
+{
+	// When MQ2 injects are enabled, MQ2Pulse already detours ProcessGameEvents.
+	// We'll piggyback via MQ2Pulse's detour instead (see MQ2Pulse.cpp).
+	if (isMQInjectsEnabled) {
+		LogDebug("Server-authoritative stats: MQ2 injects enabled; skipping local ProcessGameEvents detour");
+		return;
+	}
+
+	if (!ProcessGameEvents) {
+		LogDebug("Server-authoritative stats: ProcessGameEvents offset not initialized yet");
+		return;
+	}
+
+	LogDebug("Server-authoritative stats: arming ProcessGameEvents detour (addr=0x%08X)", (unsigned)(DWORD)ProcessGameEvents);
+	LogDetourTargetBytes("ProcessGameEvents", (DWORD)ProcessGameEvents);
+	EzDetour(ProcessGameEvents, Detour_ProcessGameEvents_StatsInstall, Trampoline_ProcessGameEvents_StatsInstall);
+}
+
+void EnsureServerAuthoritativeStatsInstallArmed()
+{
+	if (InterlockedCompareExchange(&g_server_stats_arm_installed, 1, 0) != 0) {
+		return;
+	}
+	EnsureProcessGameEventsDetourForStatsInstalled();
 }
 
 void SkipLicense()
@@ -1622,6 +2194,7 @@ extern CRITICAL_SECTION gDetourCS;
 void InitHooks()
 {
 	LogDebug("InitHooks: Started");
+	InstallCrashDiagnostics();
 	//rename("arena.eqg", "arena.eqg.bak");
 	//rename("highpasshold.eqg", "highpasshold.eqg.bak");
 	//rename("nektulos.eqg", "nektulos.eqg.bak");
@@ -1643,6 +2216,8 @@ void InitHooks()
 		InitializeMapPlugin();
 		InitializeMQ2ItemDisplay();
 		InitializeMQ2Labels();
+	} else {
+		LogDebug("InitHooks: MQ2 injects disabled");
 	}
 
 	if (!baseAddress) {
@@ -1697,25 +2272,13 @@ void InitHooks()
 	}
 
 	var = (((DWORD)0x004C3250 - 0x400000) + baseAddress);
-#if 0
-	// Disabled: installing the world-message detour caused instability/crashes
-	// during recent investigations. Keep the code here for reference but do
-	// not activate it so the client runs with the unmodified packet handler.
-	EzDetour((DWORD)var, HandleWorldMessage_Detour, HandleWorldMessage_Trampoline);
-#endif
-
-	// Install detours so that the game's native Max_* accessors return the
-	// authoritative server-provided values when we have them. This keeps
-	// UI and other systems consistent without mutating spawn memory.
-	// Temporarily disable Max_* accessor detours to restore a stable baseline
-	// for the DLL while we investigate crash causes. Re-enable only after
-	// the packet-order/write-source is identified and a surgical detour is
-	// implemented.
-#if 0
-	EzDetour((DWORD)EQ_Character__Max_HP, EQCharacter_MaxHP_Detour, EQCharacter_MaxHP_Tramp);
-	EzDetour((DWORD)EQ_Character__Max_Mana, EQCharacter_MaxMana_Detour, EQCharacter_MaxMana_Tramp);
-	EzDetour((DWORD)EQ_Character__Max_Endurance, EQCharacter_MaxEnd_Detour, EQCharacter_MaxEnd_Tramp);
-#endif
+	if (isServerAuthoritativeStatsEnabled) {
+		// NOTE: Installing these detours too early (and especially from DllMain during
+		// DLL_PROCESS_ATTACH) can destabilize the client before character select.
+		// We defer detour installation until we are safely in-game on the main thread.
+		LogDebug("Server-authoritative stats noticed: deferring detour install until in-game (baseAddress=0x%08X)", (unsigned)baseAddress);
+		EnsureServerAuthoritativeStatsInstallArmed();
+	}
 
 	// TotalEffect detour disabled (was causing instability). See comment above.
 
@@ -2020,6 +2583,18 @@ DllGetClassObjectProc m_pDllGetClassObject;
 DllRegisterServerProc m_pDllRegisterServer;
 DllUnregisterServerProc m_pDllUnregisterServer;
 GetdfDIJoystickProc m_pGetdfDIJoystick;
+
+static void EnsureInitHooksOnce()
+{
+	static volatile LONG done = 0;
+	if (InterlockedCompareExchange(&done, 1, 0) != 0) {
+		return;
+	}
+	LogDebug("InitHooksOnce: starting");
+	InitHooks();
+	LogDebug("InitHooksOnce: finished");
+}
+
 bool WINAPI DllMain(HMODULE hModule, DWORD dwReason, LPVOID lpReserved)
 {
    static HMODULE dinput8dll = nullptr;
@@ -2028,6 +2603,8 @@ bool WINAPI DllMain(HMODULE hModule, DWORD dwReason, LPVOID lpReserved)
    switch (dwReason) {
    case DLL_PROCESS_ATTACH:
 	   LogDebug("DllMain: DLL_PROCESS_ATTACH started");
+	   DisableThreadLibraryCalls(hModule);
+	   InstallCrashDiagnostics();
 	   // Load dll
 	   char path[MAX_PATH];
 	   GetSystemDirectoryA(path, MAX_PATH);
@@ -2048,9 +2625,7 @@ bool WINAPI DllMain(HMODULE hModule, DWORD dwReason, LPVOID lpReserved)
 	   szProcessName = strrchr(szFilename, '.');
 	   szProcessName[0] = '\0';
 	   szProcessName = strrchr(szFilename, '\\') + 1;
-	   LogDebug("DllMain: Calling InitHooks");
-	   InitHooks();
-	   LogDebug("DllMain: InitHooks returned");
+	   LogDebug("DllMain: deferred InitHooks (will run on first DirectInput8Create)");
 	   // remove full information about my command line
 	 // memset(&pbi.PebBaseAddress->ProcessParameters->ImagePathName.Buffer, 0, pbi.PebBaseAddress->ProcessParameters->ImagePathName.Length);
 
@@ -2085,6 +2660,7 @@ HRESULT WINAPI DirectInput8Create(HINSTANCE hinst, DWORD dwVersion, REFIID riidl
                                   LPVOID* ppvOut, LPUNKNOWN punkOuter)
 {
    LogDebug("DirectInput8Create called");
+   EnsureInitHooksOnce();
    if (!m_pDirectInput8Create) {
       return E_FAIL;
    }

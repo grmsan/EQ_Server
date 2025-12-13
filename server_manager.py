@@ -40,6 +40,7 @@ class ServerManagerApp(tk.Tk):
         self.vcpkg_bin_dir = os.path.join(os.getcwd(), "vcpkg", "vcpkg-export-x64", "installed", "x64-windows", "bin")
         # Default EQ client directory for exports/copies
         self.eq_dir_var = tk.StringVar(value=r"D:\Rof2")
+        self.build_target_var = tk.StringVar(value="all")
 
         self.create_widgets()
         self.update_status_loop()
@@ -101,6 +102,25 @@ class ServerManagerApp(tk.Tk):
 
         self.clean_btn = ttk.Button(build_frame, text="Clean Build", command=self.clean_build)
         self.clean_btn.pack(side="left", padx=5, pady=5)
+
+        ttk.Label(build_frame, text="Target:").pack(side="left", padx=(10, 2))
+        self.build_target_combo = ttk.Combobox(
+            build_frame,
+            textvariable=self.build_target_var,
+            width=18,
+            state="readonly",
+            values=[
+                "all",
+                "zone",
+                "world",
+                "loginserver",
+                "ucs",
+                "queryserv",
+                "shared_memory",
+                "eqlaunch",
+            ],
+        )
+        self.build_target_combo.pack(side="left", padx=5, pady=5)
 
         self.build_status_lbl = ttk.Label(build_frame, text="Ready")
         self.build_status_lbl.pack(side="left", padx=5, pady=5)
@@ -295,6 +315,21 @@ class ServerManagerApp(tk.Tk):
         self.gm_level.pack(side="left", padx=5)
         ttk.Button(gm_frame, text="Set GM Level",
                   command=self.set_gm_level).pack(side="left", padx=5)
+
+        # Launcher Zones Section (controls how many zones are pre-booted by launchers)
+        launcher_frame = ttk.LabelFrame(db_frame, text="Launcher Zones (Pre-Booted)")
+        launcher_frame.pack(fill="x", pady=5)
+
+        launcher_row = ttk.Frame(launcher_frame)
+        launcher_row.pack(fill="x", padx=5, pady=5)
+
+        ttk.Label(launcher_row, text="Keep per launcher:").pack(side="left")
+        self.launcher_keep_count = ttk.Spinbox(launcher_row, from_=0, to=100, width=10)
+        self.launcher_keep_count.set("1")
+        self.launcher_keep_count.pack(side="left", padx=5)
+
+        ttk.Button(launcher_row, text="List launcher_zones", command=self.list_launcher_zones).pack(side="left", padx=5)
+        ttk.Button(launcher_row, text="Trim launcher_zones", command=self.trim_launcher_zones).pack(side="left", padx=5)
 
         # Database Scripts Section
         scripts_frame = ttk.LabelFrame(db_frame, text="Database Diagnostic Scripts")
@@ -536,6 +571,160 @@ class ServerManagerApp(tk.Tk):
             return
 
         self.run_python_script_with_output(script, [account, level], self.db_output)
+
+    def list_launcher_zones(self):
+        def run():
+            try:
+                self.db_output.delete(1.0, "end")
+
+                db_cfg = self._load_db_config()
+                conn = mysql.connector.connect(**db_cfg)
+                cur = conn.cursor()
+
+                cur.execute("SHOW TABLES LIKE 'launcher_zones'")
+                if not cur.fetchone():
+                    self.db_output.insert("end", "Table launcher_zones not found in this database.\n")
+                    self.db_output.see("end")
+                    cur.close()
+                    conn.close()
+                    return
+
+                cur.execute("SHOW COLUMNS FROM launcher_zones")
+                columns = [r[0] for r in cur.fetchall()]
+                self.db_output.insert("end", f"launcher_zones columns: {', '.join(columns)}\n\n")
+
+                order_cols = [c for c in ["launcher", "zone", "port", "number", "startzone"] if c in columns]
+                if not order_cols:
+                    order_cols = [columns[0]]
+
+                q = f"SELECT * FROM launcher_zones ORDER BY {', '.join(order_cols)} LIMIT 200"
+                cur.execute(q)
+                rows = cur.fetchall()
+
+                self.db_output.insert("end", f"Showing up to {len(rows)} rows:\n")
+                for row in rows:
+                    self.db_output.insert("end", f"{row}\n")
+                self.db_output.see("end")
+
+                cur.close()
+                conn.close()
+            except Exception as e:
+                self.db_output.insert("end", f"Error listing launcher_zones: {e}\n")
+                self.db_output.see("end")
+
+        threading.Thread(target=run, daemon=True).start()
+
+    def trim_launcher_zones(self):
+        def run():
+            try:
+                keep = int(self.launcher_keep_count.get())
+                if keep < 0:
+                    keep = 0
+
+                if not messagebox.askyesno(
+                    "Trim launcher_zones",
+                    f"This will keep only {keep} launcher_zones rows per launcher (based on sorted order) and delete the rest.\n\nContinue?",
+                ):
+                    return
+
+                self.db_output.delete(1.0, "end")
+                self.db_output.insert("end", f"Trimming launcher_zones to {keep} per launcher...\n")
+
+                db_cfg = self._load_db_config()
+                conn = mysql.connector.connect(**db_cfg)
+                cur = conn.cursor()
+
+                cur.execute("SHOW TABLES LIKE 'launcher_zones'")
+                if not cur.fetchone():
+                    self.db_output.insert("end", "Table launcher_zones not found in this database.\n")
+                    self.db_output.see("end")
+                    cur.close()
+                    conn.close()
+                    return
+
+                cur.execute("SHOW COLUMNS FROM launcher_zones")
+                columns = [r[0] for r in cur.fetchall()]
+
+                id_col = "id" if "id" in columns else None
+                launcher_col = "launcher" if "launcher" in columns else None
+
+                order_cols = [c for c in ["launcher", "zone", "port", "number", "startzone"] if c in columns]
+                if not order_cols:
+                    order_cols = [columns[0]]
+
+                select_cols = []
+                if id_col:
+                    select_cols.append(id_col)
+                if launcher_col and launcher_col not in select_cols:
+                    select_cols.append(launcher_col)
+                for c in ["zone", "port", "number", "startzone"]:
+                    if c in columns and c not in select_cols:
+                        select_cols.append(c)
+
+                # Fallback to all columns if we couldn't find a stable key.
+                if not select_cols:
+                    select_cols = columns[:]
+
+                q = f"SELECT {', '.join(select_cols)} FROM launcher_zones ORDER BY {', '.join(order_cols)}"
+                cur.execute(q)
+                rows = cur.fetchall()
+
+                def get_launcher_key(row):
+                    if launcher_col and launcher_col in select_cols:
+                        return row[select_cols.index(launcher_col)]
+                    return "__all__"
+
+                to_delete = []
+                seen = {}
+                for row in rows:
+                    lk = get_launcher_key(row)
+                    seen.setdefault(lk, 0)
+                    seen[lk] += 1
+                    if keep == 0 or seen[lk] > keep:
+                        to_delete.append(row)
+
+                if not to_delete:
+                    self.db_output.insert("end", "Nothing to delete.\n")
+                    self.db_output.see("end")
+                    cur.close()
+                    conn.close()
+                    return
+
+                deleted = 0
+                if id_col:
+                    id_idx = select_cols.index(id_col)
+                    cur.executemany("DELETE FROM launcher_zones WHERE id = %s", [(r[id_idx],) for r in to_delete])
+                    deleted = cur.rowcount
+                else:
+                    where_cols = [c for c in ["launcher", "zone", "port", "number", "startzone"] if c in select_cols]
+                    if not where_cols:
+                        where_cols = select_cols[:]
+
+                    for row in to_delete:
+                        parts = []
+                        params = []
+                        for c in where_cols:
+                            v = row[select_cols.index(c)]
+                            if v is None:
+                                parts.append(f"{c} IS NULL")
+                            else:
+                                parts.append(f"{c} = %s")
+                                params.append(v)
+                        cur.execute(f"DELETE FROM launcher_zones WHERE {' AND '.join(parts)}", params)
+                        deleted += cur.rowcount
+
+                conn.commit()
+                self.db_output.insert("end", f"Deleted {deleted} rows.\n")
+                self.db_output.insert("end", "Done.\n")
+                self.db_output.see("end")
+
+                cur.close()
+                conn.close()
+            except Exception as e:
+                self.db_output.insert("end", f"Error trimming launcher_zones: {e}\n")
+                self.db_output.see("end")
+
+        threading.Thread(target=run, daemon=True).start()
 
     def run_db_script(self, script):
         """Run a database diagnostic script"""
@@ -1057,7 +1246,8 @@ class ServerManagerApp(tk.Tk):
     def run_build(self):
         self.build_btn.config(state="disabled")
         self.clean_btn.config(state="disabled")
-        self.build_status_lbl.config(text="Building...")
+        build_target = (self.build_target_var.get() or "all").strip()
+        self.build_status_lbl.config(text=f"Building ({build_target})...")
 
         try:
             if not os.path.exists(self.build_dir):
@@ -1078,7 +1268,10 @@ class ServerManagerApp(tk.Tk):
                 return
 
             self.log("Running CMake Build...")
-            cmd_build = ["cmake", "--build", "build", "--config", "RelWithDebInfo", "--parallel"]
+            cmd_build = ["cmake", "--build", "build"]
+            if build_target and build_target != "all":
+                cmd_build += ["--target", build_target]
+            cmd_build += ["--config", "RelWithDebInfo", "--parallel"]
             proc = subprocess.Popen(cmd_build, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
             while True:
                 line = proc.stdout.readline()

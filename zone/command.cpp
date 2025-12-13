@@ -169,6 +169,9 @@ int command_init(void)
 		command_add("myskills", "Show details about your current skill levels", AccountStatus::Player, command_myskills) ||
 		command_add("mysql", "[Help|Query] [SQL Query] - Mysql CLI, see 'Help' for options.", AccountStatus::GMImpossible, command_mysql) ||
 		command_add("mystats", "Show details about you or your pet", AccountStatus::Guide, command_mystats) ||
+		command_add("hpdiag", "HP UI diagnostics + force update", AccountStatus::Guide, command_hpdiag) ||
+		command_add("itemdiag", "Show equipped item scaling/custom data", AccountStatus::Guide, command_itemdiag) ||
+		command_add("hptest", "Send raw HP packets to self", AccountStatus::Guide, command_hptest) ||
 		command_add("npccast", "[targetname/entityid] [spellid] - Causes NPC target to cast spellid on targetname/entityid", AccountStatus::QuestTroupe, command_npccast) ||
 		command_add("npcedit", "[column] [value] - Mega NPC editing command", AccountStatus::GMAdmin, command_npcedit) ||
 		command_add("npceditmass", "[name-search] [column] [value] - Mass (Zone wide) NPC data editing command", AccountStatus::GMAdmin, command_npceditmass) ||

@@ -274,10 +274,15 @@ void Heartbeat()
 // Function:    ProcessGameEvents 
 // Description: Our ProcessGameEvents Hook
 // *************************************************************************** 
+extern void EdgeStats_MaybeInstallDetoursFromMainThread();
+
 BOOL Trampoline_ProcessGameEvents(VOID); 
 BOOL Detour_ProcessGameEvents(VOID) 
 { 
     Heartbeat();
+	// If server-authoritative stats are enabled, this is a safe main-thread hook
+	// to install the detours once we are fully in-game.
+	EdgeStats_MaybeInstallDetoursFromMainThread();
 #ifdef ISXEQ
     if (!pISInterface->ScriptEngineActive()) 
         pISInterface->LavishScriptPulse();

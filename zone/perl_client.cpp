@@ -2007,6 +2007,13 @@ uint16_t Perl_Client_GetClassBitmask(Client* self)
 	return GetPlayerClassBit(self->GetClass());
 }
 
+uint16_t Perl_Client_GetClassesBitmask(Client* self)
+{
+	// Compatibility alias for older multiclass-era quest/plugin code.
+	// Until true multiclass is implemented server-side, this returns the single current class bit.
+	return GetPlayerClassBit(self->GetClass());
+}
+
 uint32_t Perl_Client_GetDeityBitmask(Client* self)
 {
 	return Deity::GetBitmask(self->GetDeity());
@@ -3542,6 +3549,7 @@ void perl_register_client()
 	package.add("GetCharacterFactionLevel", &Perl_Client_GetCharacterFactionLevel);
 	package.add("GetClassAbbreviation", &Perl_Client_GetClassAbbreviation);
 	package.add("GetClassBitmask", &Perl_Client_GetClassBitmask);
+	package.add("GetClassesBitmask", &Perl_Client_GetClassesBitmask);
 	package.add("GetClientMaxLevel", &Perl_Client_GetClientMaxLevel);
 	package.add("GetClientVersion", &Perl_Client_GetClientVersion);
 	package.add("GetClientVersionBit", &Perl_Client_GetClientVersionBit);

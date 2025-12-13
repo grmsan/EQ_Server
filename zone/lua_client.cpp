@@ -155,6 +155,13 @@ uint16 Lua_Client::GetClassBitmask() {
 	return GetPlayerClassBit(self->GetClass());
 }
 
+uint16 Lua_Client::GetClassesBitmask() {
+	Lua_Safe_Call_Int();
+	// Compatibility alias for older multiclass-era quest code. Until true multiclass
+	// is implemented server-side, this returns the single current class bit.
+	return GetPlayerClassBit(self->GetClass());
+}
+
 uint32 Lua_Client::GetDeityBitmask() {
 	Lua_Safe_Call_Int();
 	return Deity::GetBitmask(GetDeity());
@@ -3813,6 +3820,7 @@ luabind::scope lua_register_client() {
 	.def("GetCharacterFactionLevel", (int(Lua_Client::*)(int))&Lua_Client::GetCharacterFactionLevel)
 	.def("GetClassAbbreviation", (std::string(Lua_Client::*)(void))&Lua_Client::GetClassAbbreviation)
 	.def("GetClassBitmask", (uint16(Lua_Client::*)(void))&Lua_Client::GetClassBitmask)
+	.def("GetClassesBitmask", (uint16(Lua_Client::*)(void))&Lua_Client::GetClassesBitmask)
 	.def("GetClientMaxLevel", (int(Lua_Client::*)(void))&Lua_Client::GetClientMaxLevel)
 	.def("GetClientVersion", (int(Lua_Client::*)(void))&Lua_Client::GetClientVersion)
 	.def("GetClientVersionBit", (uint32(Lua_Client::*)(void))&Lua_Client::GetClientVersionBit)

@@ -20,6 +20,7 @@
 #include "../common/spdat.h"
 #include "../common/strings.h"
 #include "../common/misc_functions.h"
+#include "../common/opcodemgr.h"
 
 #include "../common/repositories/bot_data_repository.h"
 #include "../common/repositories/character_data_repository.h"
@@ -223,6 +224,7 @@ Mob::Mob(
 
 	last_hp_percent = 0;
 	last_hp         = 0;
+	last_max_hp     = 0;
 
 	current_speed = base_runspeed;
 
@@ -1024,24 +1026,6 @@ int64 Mob::CalcMaxHP() {
 
 	max_hp = after_percent + flat;
 
-	// Lightweight one-time-per-client logging to repo stats_debug.log to avoid spam
-	if (IsClient()) {
-		static std::unordered_set<uint32> logged_ids;
-		const uint32 id = GetID();
-		if (logged_ids.insert(id).second) {
-			FILE* lf = nullptr;
-			if (fopen_s(&lf, "C:\\Users\\marsh\\OneDrive\\Documents\\GitHub\\EQ_Server\\logs\\stats_debug.log", "a") == 0 && lf) {
-				time_t now = time(nullptr);
-				struct tm* tmv = localtime(&now);
-				char tb[32] = {0};
-				strftime(tb, sizeof(tb), "%Y%m%d_%H%M%S", tmv);
-				fprintf(lf, "%s CALC_MaxHP id=%u name=%s base=%lld percent=%.4f after_percent=%lld flat=%lld result=%lld\n",
-					tb, id, GetName(), (long long)base, percent, (long long)after_percent, (long long)flat, (long long)max_hp);
-				fclose(lf);
-			}
-		}
-	}
-
 	return max_hp;
 }
 
@@ -1540,15 +1524,15 @@ void Mob::CreateDespawnPacket(EQApplicationPacket* app, bool Decay)
 void Mob::CreateHPPacket(EQApplicationPacket* app)
 {
 	app->SetOpcode(OP_MobHealth);
-	app->size = sizeof(SpawnHPUpdate_Struct2);
+	app->size = sizeof(MobHealth_Struct);
 	safe_delete_array(app->pBuffer);
 	app->pBuffer = new uchar[app->size];
-	memset(app->pBuffer, 0, sizeof(SpawnHPUpdate_Struct2));
-	SpawnHPUpdate_Struct2* ds = (SpawnHPUpdate_Struct2*)app->pBuffer;
+	memset(app->pBuffer, 0, sizeof(MobHealth_Struct));
+	MobHealth_Struct* ds = (MobHealth_Struct*)app->pBuffer;
 
-	ds->spawn_id = GetID();
+	ds->entity_id = GetID();
 	// they don't need to know the real hp
-	ds->hp = (int)GetHPRatio();
+	ds->hp = static_cast<uint8>(GetIntHPRatio());
 
 	// hp event
 	if (IsNPC() && (GetNextHPEvent() > 0)) {
@@ -1577,7 +1561,7 @@ void Mob::SendHPUpdate(bool force_update_all)
 
 	// If our HP is different from last HP update call - let's update selves
 	if (IsClient()) {
-		if (current_hp != last_hp || force_update_all) {
+		if (current_hp != last_hp || max_hp != last_max_hp || force_update_all) {
 
 			LogHPUpdate(
 				"Update HP of self [{}] current_hp [{}] max_hp [{}] last_hp [{}]",
@@ -1587,19 +1571,59 @@ void Mob::SendHPUpdate(bool force_update_all)
 				last_hp
 			);
 
-			static EQApplicationPacket p(OP_HPUpdate, sizeof(SpawnHPUpdate_Struct));
-			auto b = (SpawnHPUpdate_Struct*) p.pBuffer;
-			// Send full server-side values (uncapped), do not subtract item HP
-			b->cur_hp   = static_cast<uint32>(CastToClient()->GetHP());
-			b->spawn_id = GetID();
-			b->max_hp   = CastToClient()->GetMaxHP();
-			CastToClient()->QueuePacket(&p);
+			// RoF2: empirically verified that the client consumes OP_HPUpdate in the raw
+			// [uint16 spawn_id][uint32 cur_hp][int32 max_hp] layout (see #hptest 1).
+			// Sending via the raw layout here avoids any struct-strategy mismatch and
+			// ensures the self HP UI updates reliably.
+			bool sent_raw_rof2_hpupdate = false;
+			{
+				auto *eqs = CastToClient()->Connection();
+				auto *opm = eqs ? eqs->GetOpcodeManager() : nullptr;
+				const uint16 hpupdate_eq = opm ? opm->EmuToEQ(OP_HPUpdate) : 0;
+
+				if (hpupdate_eq != 0 && CastToClient()->ClientVersion() == EQ::versions::ClientVersion::RoF2) {
+					auto *p = new EQApplicationPacket(OP_HPUpdate, 10);
+					p->SetOpcodeBypass(hpupdate_eq);
+
+					auto *buf = p->pBuffer;
+					*reinterpret_cast<uint16 *>(buf + 0) = static_cast<uint16>(GetID());
+					*reinterpret_cast<uint32 *>(buf + 2) = static_cast<uint32>(CastToClient()->GetHP());
+					*reinterpret_cast<int32 *>(buf + 6)  = static_cast<int32>(CastToClient()->GetMaxHP());
+
+					CastToClient()->QueuePacket(p);
+					safe_delete(p);
+					sent_raw_rof2_hpupdate = true;
+				}
+			}
+
+			if (!sent_raw_rof2_hpupdate) {
+				auto p = new EQApplicationPacket(OP_HPUpdate, sizeof(SpawnHPUpdate_Struct));
+				auto b = (SpawnHPUpdate_Struct*)p->pBuffer;
+				// Send full server-side values (uncapped), do not subtract item HP
+				b->cur_hp   = static_cast<uint32>(CastToClient()->GetHP());
+				b->spawn_id = GetID();
+				b->max_hp   = CastToClient()->GetMaxHP();
+				CastToClient()->QueuePacket(p);
+				safe_delete(p);
+			}
+
+			// RoF2 clients can be sensitive to HP update paths; also send the percent-based OP_MobHealth
+			// packet to self so the UI has an additional supported signal to move the HP bar.
+			{
+				EQApplicationPacket self_hp_percent_packet;
+				CreateHPPacket(&self_hp_percent_packet);
+				CastToClient()->QueuePacket(&self_hp_percent_packet);
+			}
+
+			// If a UI/DLL override is in use, push authoritative values when HP changes.
+			CastToClient()->SendServerStatsUpdate();
 			CastToClient()->SendEdgeStats();
 
 			ResetHPUpdateTimer();
 
 			// Used to check if HP has changed to update self next round
 			last_hp = current_hp;
+			last_max_hp = max_hp;
 		}
 	}
 

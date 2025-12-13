@@ -179,13 +179,20 @@ bool RegularOpcodeManager::ReloadOpcodes(const char *filename, bool report_error
 }
 
 uint16 RegularOpcodeManager::EmuToEQ(const EmuOpcode emu_op) {
-	//opcode is checked for validity in GetEQOpcode
-	uint16 res;
+	uint16 res = 0;
+	const bool in_range = (uint32(emu_op) < EmuOpcodeCount);
 	MOpcodes.lock();
-	res = emu_to_eq[emu_op];
+	if (in_range) {
+		res = emu_to_eq[emu_op];
+	}
 	MOpcodes.unlock();
 
-	LogNetcodeDetail("[Opcode Manager] Translate emu [{}] ({:#06x}) eq [{:#06x}]", OpcodeNames[emu_op], emu_op, res);
+	LogNetcodeDetail(
+		"[Opcode Manager] Translate emu [{}] ({:#06x}) eq [{:#06x}]",
+		in_range ? OpcodeNames[emu_op] : "OP_Invalid",
+		emu_op,
+		res
+	);
 
 #ifdef DEBUG_TRANSLATE
 	fprintf(stderr, "M Translate Emu %s (%d) to EQ 0x%.4x\n", OpcodeNames[emu_op], emu_op, res);
@@ -198,9 +205,11 @@ EmuOpcode RegularOpcodeManager::EQToEmu(const uint16 eq_op) {
 //Disabled since current live EQ uses the entire uint16 bitspace for opcodes
 //	if(eq_op > MAX_EQ_OPCODE)
 //		return(OP_Unknown);
-	EmuOpcode res;
+	EmuOpcode res = OP_Unknown;
 	MOpcodes.lock();
-	res = eq_to_emu[eq_op];
+	if (eq_op < EQOpcodeCount) {
+		res = eq_to_emu[eq_op];
+	}
 	MOpcodes.unlock();
 #ifdef DEBUG_TRANSLATE
 	fprintf(stderr, "M Translate EQ 0x%.4x to Emu %s (%d)\n", eq_op, OpcodeNames[res], res);
@@ -276,4 +285,3 @@ void EmptyOpcodeManager::SetOpcode(EmuOpcode emu_op, uint16 eq_op) {
 	emu_to_eq[emu_op] = eq_op;
 	eq_to_emu[eq_op] = emu_op;
 }
-

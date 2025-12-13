@@ -32,6 +32,7 @@
 extern volatile bool RunLoops;
 
 #include "../common/eqemu_logsys.h"
+#include "../common/opcodemgr.h"
 #include "../common/features.h"
 #include "../common/spdat.h"
 #include "../common/guilds.h"
@@ -2516,7 +2517,6 @@ void Client::SendManaUpdate()
 	mana_update->spawn_id = GetID();
 	QueuePacket(mana_app);
 	safe_delete(mana_app);
-	SendEdgeStats();
 }
 
 // sends endurance update to self
@@ -2529,7 +2529,6 @@ void Client::SendEnduranceUpdate()
 	endurance_update->spawn_id = GetID();
 	QueuePacket(end_app);
 	safe_delete(end_app);
-	SendEdgeStats();
 }
 
 void Client::FillSpawnStruct(NewSpawn_Struct* ns, Mob* ForWho)
@@ -9189,7 +9188,17 @@ void Client::SendHPUpdateMarquee(){
 
 void Client::SendServerStatsUpdate()
 {
+	if (!RuleB(Character, EnableServerStatsUpdate)) {
+		return;
+	}
+
 	if (!(ClientVersionBit() & EQ::versions::maskSoFAndLater)) {
+		return;
+	}
+
+	// This is a custom opcode; if the patch/opcode file doesn't map it for this client,
+	// sending it will use protocol opcode 0 and can confuse clients/tools.
+	if (!eqs || !eqs->GetOpcodeManager() || eqs->GetOpcodeManager()->EmuToEQ(OP_ServerStatsUpdate) == 0) {
 		return;
 	}
 
@@ -9212,32 +9221,6 @@ void Client::SendServerStatsUpdate()
 	auto outapp = new EQApplicationPacket(OP_ServerStatsUpdate, sizeof(ServerStatsUpdate_Struct));
 	memcpy(outapp->pBuffer, &s, sizeof(ServerStatsUpdate_Struct));
 	outapp->priority = 5;
-
-	// Mirror server-side ServerStatsUpdate values to repo logs for debugging
-	{
-		FILE* lf = nullptr;
-		if (fopen_s(&lf, "C:\\Users\\marsh\\OneDrive\\Documents\\GitHub\\EQ_Server\\logs\\stats_debug.log", "a") == 0 && lf) {
-			time_t now = time(nullptr);
-			struct tm* tmv = localtime(&now);
-			char tb[32] = {0};
-			strftime(tb, sizeof(tb), "%Y%m%d_%H%M%S", tmv);
-			fprintf(lf, "%s SERVER_SEND_ServerStatsUpdate spawn=%u cur_hp=%lld max_hp=%lld cur_mana=%lld max_mana=%lld cur_end=%lld max_end=%lld\n",
-				tb, s.spawn_id, (long long)s.cur_hp, (long long)s.max_hp, (long long)s.cur_mana, (long long)s.max_mana, (long long)s.cur_end, (long long)s.max_end);
-
-			// Also log per-stat breakdowns for core stats at the time of this send
-			fprintf(lf, "    breakdown STR base=%d item=%d spell=%d aa=%d total=%d\n", m_pp.STR, itembonuses.STR, spellbonuses.STR, aabonuses.STR, GetSTR());
-			fprintf(lf, "    breakdown STA base=%d item=%d spell=%d aa=%d total=%d\n", m_pp.STA, itembonuses.STA, spellbonuses.STA, aabonuses.STA, GetSTA());
-			fprintf(lf, "    breakdown AGI base=%d item=%d spell=%d aa=%d total=%d\n", m_pp.AGI, itembonuses.AGI, spellbonuses.AGI, aabonuses.AGI, GetAGI());
-			fprintf(lf, "    breakdown DEX base=%d item=%d spell=%d aa=%d total=%d\n", m_pp.DEX, itembonuses.DEX, spellbonuses.DEX, aabonuses.DEX, GetDEX());
-			fprintf(lf, "    breakdown INT base=%d item=%d spell=%d aa=%d total=%d\n", m_pp.INT, itembonuses.INT, spellbonuses.INT, aabonuses.INT, GetINT());
-			fprintf(lf, "    breakdown WIS base=%d item=%d spell=%d aa=%d total=%d\n", m_pp.WIS, itembonuses.WIS, spellbonuses.WIS, aabonuses.WIS, GetWIS());
-			fprintf(lf, "    breakdown CHA base=%d item=%d spell=%d aa=%d total=%d\n", m_pp.CHA, itembonuses.CHA, spellbonuses.CHA, aabonuses.CHA, GetCHA());
-			fprintf(lf, "    breakdown MAXHP cur=%lld max=%lld\n", (long long)s.cur_hp, (long long)s.max_hp);
-			fprintf(lf, "    breakdown MAXMANA cur=%lld max=%lld\n", (long long)s.cur_mana, (long long)s.max_mana);
-			fprintf(lf, "    breakdown MAXEND cur=%lld max=%lld\n", (long long)s.cur_end, (long long)s.max_end);
-			fclose(lf);
-		}
-	}
 
 	FastQueuePacket(&outapp);
 }
@@ -13356,172 +13339,65 @@ bool Client::UncompleteTask(int task_id)
 
 void Client::SendEdgeStats()
 {
-	// Count how many stats we are sending
-	const int max_stats = 100; // ample buffer
-	size_t packet_size = sizeof(EdgeStat_Struct) + (max_stats * sizeof(EdgeStatEntry_Struct));
-
-	auto out = (EdgeStat_Struct*)new uint8_t[packet_size];
-	memset(out, 0, packet_size);
-	out->count = 0;
-
-	auto AddStat = [&](uint32_t key, uint64_t value) {
-		if (out->count < max_stats) {
-			out->entries[out->count].statKey = key;
-			out->entries[out->count].statValue = value;
-			out->count++;
-		}
-	};
-
-	AddStat(eStatCurHP, GetHP());
-	AddStat(eStatCurMana, GetMana());
-	AddStat(eStatCurEndur, GetEndurance());
-	AddStat(eStatMaxHP, GetMaxHP());
-	AddStat(eStatMaxMana, GetMaxMana());
-	AddStat(eStatMaxEndur, GetMaxEndurance());
-
-	AddStat(eStatAC, GetAC());
-	AddStat(eStatATK, GetATK());
-	AddStat(eStatSTR, GetSTR());
-	AddStat(eStatSTA, GetSTA());
-	AddStat(eStatDEX, GetDEX());
-	AddStat(eStatAGI, GetAGI());
-	AddStat(eStatINT, GetINT());
-	AddStat(eStatWIS, GetWIS());
-	AddStat(eStatCHA, GetCHA());
-
-	AddStat(eStatMR, GetMR());
-	AddStat(eStatFR, GetFR());
-	AddStat(eStatCR, GetCR());
-	AddStat(eStatPR, GetPR());
-	AddStat(eStatDR, GetDR());
-
-	AddStat(eStatMeleeHaste, itembonuses.haste + spellbonuses.haste + aabonuses.haste);
-
-	AddStat(eStatMeleeCrit, itembonuses.CriticalHitChance[0]);
-	AddStat(eStatSpellCrit, itembonuses.CriticalSpellChance);
-	AddStat(eStatHealingCrit, itembonuses.CriticalHealChance);
-
-	AddStat(eStatMitigation, itembonuses.MeleeMitigation);
-	AddStat(eStatAAPoints, GetAAPoints());
-
-	// Send packet
-	size_t actual_size = sizeof(EdgeStat_Struct) + (out->count * sizeof(EdgeStatEntry_Struct));
-
-	// Mirror server-side EdgeStat contents to repo logs for debugging with change detection
-	{
-		static std::unordered_map<uint32_t, std::vector<std::pair<uint32_t, uint64_t>>> s_last_edge_stats;
-		FILE* lf = nullptr;
-		if (fopen_s(&lf, "C:\\Users\\marsh\\OneDrive\\Documents\\GitHub\\EQ_Server\\logs\\stats_debug.log", "a") == 0 && lf) {
-			time_t now = time(nullptr);
-			struct tm* tmv = localtime(&now);
-			char tb[32] = {0};
-			strftime(tb, sizeof(tb), "%Y%m%d_%H%M%S", tmv);
-
-			uint32_t spawn_id = GetID();
-
-			// Build current snapshot
-			std::vector<std::pair<uint32_t, uint64_t>> cur;
-			cur.reserve(out->count);
-			for (uint32_t i = 0; i < out->count; ++i) {
-				cur.emplace_back(out->entries[i].statKey, out->entries[i].statValue);
-			}
-
-			auto it = s_last_edge_stats.find(spawn_id);
-			if (it == s_last_edge_stats.end()) {
-				// First time we see this spawn -> log full snapshot
-				fprintf(lf, "%s SERVER_SEND_EDGE spawn=%u count=%u\n", tb, spawn_id, out->count);
-				for (uint32_t i = 0; i < out->count; ++i) {
-					uint32_t key = out->entries[i].statKey;
-					uint64_t value = out->entries[i].statValue;
-					fprintf(lf, "  stat[%u] key=%u value=%llu\n", i, key, (unsigned long long)value);
-					// If this entry is a core stat, also log a breakdown of components
-					if (key == eStatSTR) {
-						fprintf(lf, "    breakdown STR base=%d item=%d spell=%d aa=%d total=%d\n", m_pp.STR, itembonuses.STR, spellbonuses.STR, aabonuses.STR, GetSTR());
-					} else if (key == eStatSTA) {
-						fprintf(lf, "    breakdown STA base=%d item=%d spell=%d aa=%d total=%d\n", m_pp.STA, itembonuses.STA, spellbonuses.STA, aabonuses.STA, GetSTA());
-					} else if (key == eStatAGI) {
-						fprintf(lf, "    breakdown AGI base=%d item=%d spell=%d aa=%d total=%d\n", m_pp.AGI, itembonuses.AGI, spellbonuses.AGI, aabonuses.AGI, GetAGI());
-					} else if (key == eStatDEX) {
-						fprintf(lf, "    breakdown DEX base=%d item=%d spell=%d aa=%d total=%d\n", m_pp.DEX, itembonuses.DEX, spellbonuses.DEX, aabonuses.DEX, GetDEX());
-					} else if (key == eStatINT) {
-						fprintf(lf, "    breakdown INT base=%d item=%d spell=%d aa=%d total=%d\n", m_pp.INT, itembonuses.INT, spellbonuses.INT, aabonuses.INT, GetINT());
-					} else if (key == eStatWIS) {
-						fprintf(lf, "    breakdown WIS base=%d item=%d spell=%d aa=%d total=%d\n", m_pp.WIS, itembonuses.WIS, spellbonuses.WIS, aabonuses.WIS, GetWIS());
-					} else if (key == eStatCHA) {
-						fprintf(lf, "    breakdown CHA base=%d item=%d spell=%d aa=%d total=%d\n", m_pp.CHA, itembonuses.CHA, spellbonuses.CHA, aabonuses.CHA, GetCHA());
-					} else if (key == eStatMaxHP) {
-						fprintf(lf, "    breakdown MAXHP cur=%lld max=%lld\n", (long long)GetHP(), (long long)GetMaxHP());
-					} else if (key == eStatMaxMana) {
-						fprintf(lf, "    breakdown MAXMANA cur=%lld max=%lld\n", (long long)GetMana(), (long long)GetMaxMana());
-					} else if (key == eStatMaxEndur) {
-						fprintf(lf, "    breakdown MAXEND cur=%lld max=%lld\n", (long long)GetEndurance(), (long long)GetMaxEndurance());
-					}
-				}
-				s_last_edge_stats[spawn_id] = cur;
-			} else {
-				// Compare to previous snapshot and log only changes
-				const auto &prev = it->second;
-				// Build lookup for previous by key
-				std::unordered_map<uint32_t, uint64_t> prev_map;
-				prev_map.reserve(prev.size()*2 + 1);
-				for (const auto &p : prev) prev_map[p.first] = p.second;
-
-				std::vector<std::tuple<uint32_t, uint64_t, uint64_t>> changes; // key, old, new
-				for (const auto &p : cur) {
-					uint32_t key = p.first;
-					uint64_t val = p.second;
-					auto pit = prev_map.find(key);
-					if (pit == prev_map.end()) {
-						changes.emplace_back(key, (uint64_t)0, val);
-					} else if (pit->second != val) {
-						changes.emplace_back(key, pit->second, val);
-					}
-				}
-
-				if (changes.empty()) {
-					// nothing changed -> write a compact note (optional)
-					//fprintf(lf, "%s SERVER_SEND_EDGE spawn=%u unchanged\n", tb, spawn_id);
-				} else {
-					fprintf(lf, "%s SERVER_SEND_EDGE_DELTA spawn=%u changes=%zu\n", tb, spawn_id, changes.size());
-					for (size_t i = 0; i < changes.size(); ++i) {
-						uint32_t key; uint64_t oldv; uint64_t newv;
-						std::tie(key, oldv, newv) = changes[i];
-						fprintf(lf, "  changed key=%u old=%llu new=%llu\n", key, (unsigned long long)oldv, (unsigned long long)newv);
-						// Also log breakdown for core stats when they changed
-						if (key == eStatSTR) {
-							fprintf(lf, "    breakdown STR base=%d item=%d spell=%d aa=%d total=%d\n", m_pp.STR, itembonuses.STR, spellbonuses.STR, aabonuses.STR, GetSTR());
-						} else if (key == eStatSTA) {
-							fprintf(lf, "    breakdown STA base=%d item=%d spell=%d aa=%d total=%d\n", m_pp.STA, itembonuses.STA, spellbonuses.STA, aabonuses.STA, GetSTA());
-						} else if (key == eStatAGI) {
-							fprintf(lf, "    breakdown AGI base=%d item=%d spell=%d aa=%d total=%d\n", m_pp.AGI, itembonuses.AGI, spellbonuses.AGI, aabonuses.AGI, GetAGI());
-						} else if (key == eStatDEX) {
-							fprintf(lf, "    breakdown DEX base=%d item=%d spell=%d aa=%d total=%d\n", m_pp.DEX, itembonuses.DEX, spellbonuses.DEX, aabonuses.DEX, GetDEX());
-						} else if (key == eStatINT) {
-							fprintf(lf, "    breakdown INT base=%d item=%d spell=%d aa=%d total=%d\n", m_pp.INT, itembonuses.INT, spellbonuses.INT, aabonuses.INT, GetINT());
-						} else if (key == eStatWIS) {
-							fprintf(lf, "    breakdown WIS base=%d item=%d spell=%d aa=%d total=%d\n", m_pp.WIS, itembonuses.WIS, spellbonuses.WIS, aabonuses.WIS, GetWIS());
-						} else if (key == eStatCHA) {
-							fprintf(lf, "    breakdown CHA base=%d item=%d spell=%d aa=%d total=%d\n", m_pp.CHA, itembonuses.CHA, spellbonuses.CHA, aabonuses.CHA, GetCHA());
-						} else if (key == eStatMaxHP) {
-							fprintf(lf, "    breakdown MAXHP cur=%lld max=%lld\n", (long long)GetHP(), (long long)GetMaxHP());
-						} else if (key == eStatMaxMana) {
-							fprintf(lf, "    breakdown MAXMANA cur=%lld max=%lld\n", (long long)GetMana(), (long long)GetMaxMana());
-						} else if (key == eStatMaxEndur) {
-							fprintf(lf, "    breakdown MAXEND cur=%lld max=%lld\n", (long long)GetEndurance(), (long long)GetMaxEndurance());
-						}
-					}
-				}
-				// Update stored snapshot
-				it->second = std::move(cur);
-			}
-
-			fclose(lf);
-		}
+	// EdgeStatLabel is a custom/raw opcode (0x1338). We send it via opcode bypass so it does not require
+	// patch_*.conf mapping and does not go through struct encoding.
+	if (ClientVersion() != EQ::versions::ClientVersion::RoF2) {
+		return;
 	}
 
-	EQApplicationPacket* app = new EQApplicationPacket((EmuOpcode)OP_EdgeStatLabel, actual_size);
-	memcpy(app->pBuffer, out, actual_size);
-	FastQueuePacket(&app);
+	// Keep IDs aligned with extras/classless-dll-main/eqgame_dll/MQ2Labels.cpp (eStatEntry).
+	constexpr uint32 kCurHP   = 2;
+	constexpr uint32 kCurMana = 3;
+	constexpr uint32 kCurEnd  = 4;
+	constexpr uint32 kMaxHP   = 5;
+	constexpr uint32 kMaxMana = 6;
+	constexpr uint32 kMaxEnd  = 7;
+	constexpr uint32 kSTR     = 24;
+	constexpr uint32 kSTA     = 25;
+	constexpr uint32 kDEX     = 26;
+	constexpr uint32 kAGI     = 27;
+	constexpr uint32 kINT     = 28;
+	constexpr uint32 kWIS     = 29;
+	constexpr uint32 kCHA     = 30;
 
-	delete[] (uint8_t*)out;
+	struct Pair {
+		uint32 key;
+		uint64 value;
+	};
+
+	const Pair pairs[] = {
+		{ kCurHP,   static_cast<uint64>(GetHP()) },
+		{ kMaxHP,   static_cast<uint64>(GetMaxHP()) },
+		{ kCurMana, static_cast<uint64>(GetMana()) },
+		{ kMaxMana, static_cast<uint64>(GetMaxMana()) },
+		{ kCurEnd,  static_cast<uint64>(GetEndurance()) },
+		{ kMaxEnd,  static_cast<uint64>(GetMaxEndurance()) },
+		{ kSTR,     static_cast<uint64>(GetSTR()) },
+		{ kSTA,     static_cast<uint64>(GetSTA()) },
+		{ kDEX,     static_cast<uint64>(GetDEX()) },
+		{ kAGI,     static_cast<uint64>(GetAGI()) },
+		{ kINT,     static_cast<uint64>(GetINT()) },
+		{ kWIS,     static_cast<uint64>(GetWIS()) },
+		{ kCHA,     static_cast<uint64>(GetCHA()) }
+	};
+
+	constexpr uint32 count = static_cast<uint32>(sizeof(pairs) / sizeof(pairs[0]));
+	constexpr uint16 edge_opcode = 0x1338;
+	const uint32 payload_size = sizeof(uint32) + count * (sizeof(uint32) + sizeof(uint64));
+
+	auto *outapp = new EQApplicationPacket(OP_Unknown, payload_size);
+	outapp->SetOpcodeBypass(edge_opcode);
+	outapp->priority = 5;
+
+	auto *buf = outapp->pBuffer;
+	*reinterpret_cast<uint32 *>(buf) = count;
+	size_t off = sizeof(uint32);
+	for (const auto &p : pairs) {
+		*reinterpret_cast<uint32 *>(buf + off) = p.key;
+		off += sizeof(uint32);
+		*reinterpret_cast<uint64 *>(buf + off) = p.value;
+		off += sizeof(uint64);
+	}
+
+	FastQueuePacket(&outapp);
 }

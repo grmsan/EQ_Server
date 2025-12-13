@@ -533,19 +533,9 @@ int Client::HandlePacket(const EQApplicationPacket *app)
 // Finish client connecting state
 void Client::CompleteConnect()
 {
-	std::ofstream debugFile("debug_item_packet.txt", std::ios::app);
-	if (debugFile.is_open()) {
-		std::time_t now = std::time(nullptr);
-		char buf[20];
-		std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
-		debugFile << "[" << buf << "] Client::CompleteConnect ENTRY for " << GetName() << std::endl;
-		debugFile.close();
-	}
-
 	UpdateWho();
 	client_state = CLIENT_CONNECTED;
 	SendAllPackets();
-	SendEdgeStats();
 	hpupdate_timer.Start();
 	autosave_timer.Start();
 	SetDuelTarget(0);
@@ -1775,36 +1765,11 @@ void Client::Handle_Connect_OP_ZoneEntry(const EQApplicationPacket *app)
 	// Do NOT overwrite m_pp here; send_pp remains a snapshot of stored base values.
 	PlayerProfile_Struct send_pp = m_pp;
 
-	// One-time-per-client debug snapshot to confirm we are sending uncapped values to the client
-	if (IsClient()) {
-		static std::unordered_set<uint32> s_logged_profile_ids;
-		const uint32 _id = GetID();
-		if (s_logged_profile_ids.insert(_id).second) {
-			LogInfo(
-				"Sending uncapped profile stats STR={} STA={} AGI={} DEX={} INT={} WIS={} CHA={} HP={}/{} Mana={}/{} Endur={}/{} for id={} name={}",
-				send_pp.STR, send_pp.STA, send_pp.AGI, send_pp.DEX, send_pp.INT, send_pp.WIS, send_pp.CHA,
-				send_pp.cur_hp, GetMaxHP(), send_pp.mana, GetMaxMana(), send_pp.endurance, GetMaxEndurance(), _id, GetCleanName()
-			);
-
-			// Detailed breakdown: base (stored in m_pp), item bonuses, spell bonuses, AA bonuses, and computed total
-			LogInfo("Profile stat breakdown for id={} name={}: STR base={} item={} spell={} aa={} total={}",
-				_id, GetCleanName(), m_pp.STR, itembonuses.STR, spellbonuses.STR, aabonuses.STR, GetSTR());
-			LogInfo("Profile stat breakdown for id={} name={}: STA base={} item={} spell={} aa={} total={}",
-				_id, GetCleanName(), m_pp.STA, itembonuses.STA, spellbonuses.STA, aabonuses.STA, GetSTA());
-			LogInfo("Profile stat breakdown for id={} name={}: AGI base={} item={} spell={} aa={} total={}",
-				_id, GetCleanName(), m_pp.AGI, itembonuses.AGI, spellbonuses.AGI, aabonuses.AGI, GetAGI());
-			LogInfo("Profile stat breakdown for id={} name={}: DEX base={} item={} spell={} aa={} total={}",
-				_id, GetCleanName(), m_pp.DEX, itembonuses.DEX, spellbonuses.DEX, aabonuses.DEX, GetDEX());
-			LogInfo("Profile stat breakdown for id={} name={}: INT base={} item={} spell={} aa={} total={}",
-				_id, GetCleanName(), m_pp.INT, itembonuses.INT, spellbonuses.INT, aabonuses.INT, GetINT());
-			LogInfo("Profile stat breakdown for id={} name={}: WIS base={} item={} spell={} aa={} total={}",
-				_id, GetCleanName(), m_pp.WIS, itembonuses.WIS, spellbonuses.WIS, aabonuses.WIS, GetWIS());
-			LogInfo("Profile stat breakdown for id={} name={}: CHA base={} item={} spell={} aa={} total={}",
-				_id, GetCleanName(), m_pp.CHA, itembonuses.CHA, spellbonuses.CHA, aabonuses.CHA, GetCHA());
-			LogInfo("Profile HP/Mana/Endur for id={} name={}: cur_hp={} max_hp={} mana={} max_mana={} endur={} max_endur={}",
-				_id, GetCleanName(), send_pp.cur_hp, GetMaxHP(), send_pp.mana, GetMaxMana(), send_pp.endurance, GetMaxEndurance());
-		}
-	}
+	// Ensure outbound profile current pools match the authoritative Mob values.
+	// SetHP/Mob::SetMana/SetEndurance can clamp without mutating m_pp's stored values.
+	send_pp.cur_hp     = static_cast<uint32>(GetHP());
+	send_pp.mana       = static_cast<uint32>(GetMana());
+	send_pp.endurance  = static_cast<uint32>(GetEndurance());
 
 	/* Update LFP in case any (or all) of our group disbanded while we were zoning. */
 	if (IsLFP()) { UpdateLFP(); }
@@ -1853,28 +1818,6 @@ outapp = new EQApplicationPacket(OP_PlayerProfile, sizeof(PlayerProfile_Struct))
 send_pp.entityid = GetID(); // group leadership AA uses this field client-side
 memcpy(outapp->pBuffer, &send_pp, outapp->size);
 outapp->priority = 6;
-// Append a concise trace of the outgoing PlayerProfile for forensic correlation
-	{
-		FILE* pf = nullptr;
-		if (fopen_s(&pf, "logs/packet_trace.log", "a") == 0 && pf) {
-			auto now = std::chrono::system_clock::now();
-			auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
-			time_t tnow = std::chrono::system_clock::to_time_t(now);
-			struct tm tmv{};
-#ifdef _WIN32
-			localtime_s(&tmv, &tnow);
-#else
-			localtime_r(&tnow, &tmv);
-#endif
-			char tb[40] = {0};
-			strftime(tb, sizeof(tb), "%Y%m%d_%H%M%S", &tmv);
-			fprintf(pf, "%s_%03d OP_PlayerProfile spawn=%u send_pp.DEX=%d m_pp.DEX=%d GetDEX=%d\n",
-				tb, (int)ms.count(), send_pp.entityid, send_pp.DEX, m_pp.DEX, GetDEX());
-			fprintf(pf, "    breakdown DEX base=%d item=%d spell=%d aa=%d total=%d\n",
-				m_pp.DEX, itembonuses.DEX, spellbonuses.DEX, aabonuses.DEX, GetDEX());
-			fclose(pf);
-		}
-	}
 
 FastQueuePacket(&outapp);
 // Push authoritative stats immediately after profile so the client/DLL has correct values on connect.

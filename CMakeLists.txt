@@ -1,5 +1,12 @@
 CMAKE_MINIMUM_REQUIRED(VERSION 3.12)
 
+# CMake 4.0+ removed compatibility with CMake < 3.5. Some third-party submodules
+# (e.g. recastnavigation) still declare older minimum versions. This cache
+# variable allows those projects to configure without editing the submodule.
+IF(CMAKE_VERSION VERSION_GREATER_EQUAL "4.0" AND NOT DEFINED CMAKE_POLICY_VERSION_MINIMUM)
+	SET(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "Minimum policy version for legacy subprojects" FORCE)
+ENDIF()
+
 SET(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/" ${CMAKE_MODULE_PATH})
 
 IF(POLICY CMP0074)

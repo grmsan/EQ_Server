@@ -31,21 +31,26 @@ Warriors take the hit. They don't rely on RNG (Avoidance) or Magic (Runes).
 2.  **Blade Flurry (Passive):** Chance to strike all enemies in front of the Warrior (Frontal AE).
 3.  **Execute (Disc):** A custom Combat Ability (Spell) that deals massive damage, but fails if the target is above 20% HP.
 4.  **Bash/Kick:** Interrupts casting and deals minor damage.
+5.  **Heroic Throw (Disc):** A ranged weapon toss that pulls a target, generates high aggro, and starts building Fervor before the Warrior is in melee range.
+6.  **Colossal Smash (Disc):** A crushing overhead blow that applies an "Armor Shattered" debuff, reducing the target's physical mitigation for a short duration and amplifying all incoming melee damage.
 
 ### B. Mitigation Tools
 1.  **Defensive Discipline:** The ultimate "Oh Shit" button. Reduces all incoming damage by 50% but lowers damage output.
 2.  **Stonewall (Passive):** If the Warrior stands still for 3 seconds, they gain increased AC and Knockback resistance.
 3.  **Second Wind (Disc):** Instantly heals the Warrior for 40% HP (Long Cooldown).
+4.  **Last Bastion (Disc):** When dropped below 30% HP, the Warrior can trigger this to gain an additional burst of damage reduction and crowd-control immunity for a few seconds, letting them stabilize through lethal spikes.
 
 ### C. Utility
 1.  **Taunt/Bellow:** Forces the enemy to attack the Warrior (Essential for pet protection if using clicky pets).
 2.  **War Cry:** AOE Buff that increases Party/Pet Attack Power and Haste.
 3.  **Intimidate:** Chance to Fear a target (CC).
+4.  **Battle Standard (Disc):** Plants a temporary banner at the Warrior's location that grants nearby allies bonus HP and minor damage mitigation, reinforcing their role as the center of the fight.
 
 ### D. Area Effect (AE) Potential
 *   **Rampage (Passive):** Passive chance to hit surrounding mobs on every swing.
 *   **Whirlwind (Disc):** **(10s Cooldown)** Active AE attack hitting all targets within melee range.
 *   **Thunderclap (Disc):** **(12s Cooldown)** Short range PBAOE that generates massive aggro and deals damage. Replaces the long-cooldown "Area Taunt".
+*   **Shockwave Charge (Disc):** A short-range charge that closes the gap to a target and releases a point-blank shockwave on impact, dealing light damage and applying a brief stun or slow to nearby enemies.
 
 ---
 

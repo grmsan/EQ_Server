@@ -429,26 +429,6 @@ void Mob::SendWearChange(uint8 material_slot, Client *one_client)
 			return;
 		}
 		last_key = dedupe_key;
-		// Append a minimal trace of outgoing WearChange for forensic correlation
-		{
-			FILE* pf = nullptr;
-			if (fopen_s(&pf, "logs/packet_trace.log", "a") == 0 && pf) {
-				auto now = std::chrono::system_clock::now();
-				auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
-				time_t tnow = std::chrono::system_clock::to_time_t(now);
-				struct tm tmv{};
-#ifdef _WIN32
-				localtime_s(&tmv, &tnow);
-#else
-				localtime_r(&tnow, &tmv);
-#endif
-				char tb[40] = {0};
-				strftime(tb, sizeof(tb), "%Y%m%d_%H%M%S", &tmv);
-				fprintf(pf, "%s_%03d OP_WearChange char=%u spawn=%u client=%u wear_slot=%u material=%u elite=%u hero_model=%u color=0x%08x\n",
-					tb, (int)ms.count(), client->GetID(), GetID(), client->GetID(), (unsigned)w->wear_slot_id, (unsigned)w->material, (unsigned)w->elite_material, (unsigned)w->hero_forge_model, (unsigned)w->color.Color);
-				fclose(pf);
-			}
-		}
 		client->QueuePacket(packet, true, Client::CLIENT_CONNECTED);
 	};
 

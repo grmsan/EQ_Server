@@ -57,16 +57,60 @@
 			"group": "build"
 		},
 		{
-			"label": "Build EQ Core DLL (Release) Win32 v143",
+			"label": "CMake: Build zone (RelWithDebInfo)",
 			"type": "shell",
-			"command": "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\MSBuild\\Current\\Bin\\MSBuild.exe",
+			"command": "cmake",
 			"args": [
-				"extras\\eq-core-dll-main\\eq-core-dll-visualstudio2022.sln",
-				"/p:Configuration=Release",
-				"/p:Platform=Win32",
-				"/p:PlatformToolset=v143"
+				"--build",
+				"build",
+				"--target",
+				"zone",
+				"--config",
+				"RelWithDebInfo",
+				"--parallel"
 			],
-			"isBackground": false,
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"problemMatcher": "$msCompile",
+			"group": "build"
+		},
+		{
+			"label": "CMake: Build world (RelWithDebInfo)",
+			"type": "shell",
+			"command": "cmake",
+			"args": [
+				"--build",
+				"build",
+				"--target",
+				"world",
+				"--config",
+				"RelWithDebInfo",
+				"--parallel"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"problemMatcher": "$msCompile",
+			"group": "build"
+		},
+		{
+			"label": "CMake: Build loginserver (RelWithDebInfo)",
+			"type": "shell",
+			"command": "cmake",
+			"args": [
+				"--build",
+				"build",
+				"--target",
+				"loginserver",
+				"--config",
+				"RelWithDebInfo",
+				"--parallel"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"problemMatcher": "$msCompile",
 			"group": "build"
 		}
 	]

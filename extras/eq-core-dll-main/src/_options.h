@@ -32,6 +32,10 @@ bool isHeroicDisabled = false;
 // It also applies fixes where hp/mana/endurance state is more believed from server than client, this can cause strange status bar reports if client is out of sync
 bool isMaxHPFixEnabled = false;
 
+// isServerAuthoritativeStatsEnabled installs packet and accessor detours so the server can drive UI stats (HP/Mana/End/attributes)
+// via custom packets (e.g., EdgeStatLabel opcode 0x1338 or OP_ServerStatsUpdate 0x7330).
+bool isServerAuthoritativeStatsEnabled = true;
+
 // isPatchmeDisabled if set to true will let you double click eqgame.exe and not get the "Please run EverQuest" message, will start properly
 bool isPatchmeDisabled = true;
 
@@ -48,6 +52,27 @@ bool isSpellDataCRCEnabled = false;
 // it is the main cause of players falling unconsious while the server still thinks they're alive
 // also can help with bouncing healthbar issues
 bool isCombatDamageDoubleAppliedFixEnabled = false;
+
+// ---- Debug/Diagnostics ----
+
+// Enable verbose logging in dinput8_debug.log (client folder) for debugging packet/stat issues.
+bool isDebugLoggingEnabled = true;
+
+// Track a circular buffer of recent incoming world packets (opcode/size/head/tail) to assist debugging zoning/stat issues.
+bool isRecentPacketTraceEnabled = true;
+
+// Log parsed EdgeStatLabel packets (0x1338) into repo logs/stats_debug.log (no toggle files needed).
+bool isEdgeStatLabelLoggingEnabled = true;
+
+// Dump raw EdgeStatLabel packets (0x1338) into repo logs/dumps/ (directory auto-created).
+bool isEdgeStatLabelDumpEnabled = false;
+
+// Dump raw opcode 0x575b packets into repo logs/dumps/ (directory auto-created).
+bool isOpcode575bDumpEnabled = false;
+
+// Enable write-watch diagnostics during zone-in (guards selected pages to detect first writer).
+// WARNING: This is invasive; leave off unless actively debugging stat corruption.
+bool isStatWriteWatchEnabled = false;
 
 // isChecksumFixEnabled if set to true will override the normal checksum logic, if your server is not supporting checksums, can be left false
 bool isChecksumFixEnabled = false;

@@ -120,6 +120,8 @@ $searchPaths = @(Join-Path $PSScriptRoot "src"),
                (Join-Path $PSScriptRoot "src\$Configuration"),
                (Join-Path $PSScriptRoot "src\x86\$Configuration"),
                (Join-Path $PSScriptRoot "src\x64\$Configuration"),
+               (Join-Path $PSScriptRoot "Release"),
+               (Join-Path $PSScriptRoot "bin"),
                (Join-Path $PSScriptRoot "bin\$Configuration")
 
 $genDlls = @()
@@ -132,6 +134,9 @@ foreach ($sp in $searchPaths) {
 
 if ($genDlls -and $genDlls.Count -gt 0) {
     foreach ($dll in $genDlls) {
+        $destPath = Join-Path $targetDir $dll.Name
+        if ($dll.FullName -ieq $destPath) { continue }
+
         Copy-Item -Path $dll.FullName -Destination $targetDir -Force
         Write-Host "Copied $($dll.Name) to $targetDir" -ForegroundColor Green
     }

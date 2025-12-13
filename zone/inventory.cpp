@@ -3004,30 +3004,6 @@ uint32 Client::GetEquipmentColor(uint8 material_slot) const
 // Send an item packet (including all subitems of the item)
 void Client::SendItemPacket(int16 slot_id, const EQ::ItemInstance* inst, ItemPacketType packet_type)
 {
-	// Explicit debug to disk - writing to root to avoid path issues
-	// Log unconditionally at start of function with timestamp
-	static int packet_count = 0;
-	packet_count++;
-	{
-		std::ofstream debugFile("debug_item_packet.txt", std::ios::app);
-		if (debugFile.is_open()) {
-			std::time_t now = std::time(nullptr);
-			char buf[20];
-			std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
-			debugFile << "[" << buf << "] [TX #" << packet_count << "] SendItemPacket: Slot " << slot_id;
-			if (inst) {
-				debugFile << ", InstPtr: " << (void*)inst;
-				if (inst->GetItem()) {
-					debugFile << ", ItemID: " << inst->GetItem()->ID << ", Name: " << inst->GetItem()->Name;
-				}
-			} else {
-				debugFile << ", InstPtr: NULL";
-			}
-			debugFile << std::endl;
-			debugFile.close();
-		}
-	}
-
 	if (!inst) {
 		return;
 	}
@@ -3036,11 +3012,6 @@ void Client::SendItemPacket(int16 slot_id, const EQ::ItemInstance* inst, ItemPac
 		return;
 	}
 
-	// Debug logging for Item Packet
-	if (inst->GetItem()) {
-		LogError("Sending ItemPacket: Slot {}, ItemID {}, Name {}, Scaled: {}",
-			slot_id, inst->GetItem()->ID, inst->GetItem()->Name, inst->IsScaling() ? "Yes" : "No");
-	}
 	if (packet_type != ItemPacketMerchant) {
 		if (slot_id <= EQ::invslot::POSSESSIONS_END && slot_id >= EQ::invslot::POSSESSIONS_BEGIN) {
 			if ((((uint64)1 << slot_id) & GetInv().GetLookup()->PossessionsBitmask) == 0) {
@@ -3087,31 +3058,6 @@ void Client::SendItemPacket(int16 slot_id, const EQ::ItemInstance* inst, ItemPac
 #if EQDEBUG >= 9
 		DumpPacket(outapp);
 #endif
-	// Append minimal trace of outgoing ItemPacket for forensic correlation
-		{
-			FILE* pf = nullptr;
-			if (fopen_s(&pf, "logs/packet_trace.log", "a") == 0 && pf) {
-				auto now = std::chrono::system_clock::now();
-				auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
-				time_t tnow = std::chrono::system_clock::to_time_t(now);
-				struct tm tmv{};
-#ifdef _WIN32
-				localtime_s(&tmv, &tnow);
-#else
-				localtime_r(&tnow, &tmv);
-#endif
-				char tb[40] = {0};
-				strftime(tb, sizeof(tb), "%Y%m%d_%H%M%S", &tmv);
-				int itemid = 0;
-				if (inst && inst->GetItem()) itemid = inst->GetItem()->ID;
-				fprintf(pf, "%s_%03d OP_ItemPacket char=%u slot=%d itemid=%d packet_type=%d serialized_len=%zu itembonus.DEX=%d GetDEX=%d\n",
-					tb, (int)ms.count(), GetID(), slot_id, itemid, (int)packet_type, packet.length(), itembonuses.DEX, GetDEX());
-				// Write a truncated view of the serialized payload to aid debugging
-				const size_t max_snip = 200;
-				fprintf(pf, "    serialized_snip=%.*s\n", (int)std::min(packet.length(), max_snip), packet.c_str());
-				fclose(pf);
-			}
-		}
 
 	FastQueuePacket(&outapp);
 }

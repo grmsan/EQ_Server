@@ -6928,10 +6928,10 @@ namespace RoF2
 				ob.overwrite(count_pos, (const char*)&subitem_count, sizeof(uint32));
 		}
 
-		// Append custom stat data for client DLL to apply per-instance
+		// Append custom stat data for client DLL to apply per-instance (optional)
 		// Format: magic marker (4 bytes) + count (2 bytes) + key-value pairs
 		// This prevents the client from polluting the global Item Definition cache
-		if (!inst->GetCustomDataString().empty()) {
+		if (RuleB(Items, SendCustomItemStatsToClient) && !inst->GetCustomDataString().empty()) {
 			uint32 magic = 0x1337C0DE; // Magic marker for custom stats
 			ob.write((const char*)&magic, sizeof(uint32));
 

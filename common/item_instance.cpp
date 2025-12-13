@@ -1690,6 +1690,15 @@ void EQ::ItemInstance::ScaleDynamicItem(int level) {
 void EQ::ItemInstance::ApplyCustomStats() {
 	if (!m_item) return;
 
+	// If disabled, always revert to base item data and skip any dynamic scaling/custom overrides.
+	if (!RuleB(Items, EnableCustomItemStats)) {
+		if (m_scaledItem) {
+			delete m_scaledItem;
+			m_scaledItem = nullptr;
+		}
+		return;
+	}
+
 	// Helper to write to logs/inf/item_scaling.log
 	auto LogInf = [this](const std::string& msg) {
 		std::ofstream logfile("logs/inf/item_scaling.log", std::ios::app);

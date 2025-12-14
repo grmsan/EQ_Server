@@ -1548,6 +1548,7 @@ INITIALIZE_EQGAME_OFFSET(CSliderWnd__GetValue);
 INITIALIZE_EQGAME_OFFSET(CSliderWnd__SetValue);
 INITIALIZE_EQGAME_OFFSET(CSliderWnd__SetNumTicks);
 
+INITIALIZE_EQGAME_OFFSET(CSpellBookWnd__CanStartMemming);
 INITIALIZE_EQGAME_OFFSET(CSpellBookWnd__MemorizeSet);
 
 INITIALIZE_EQGAME_OFFSET(CStmlWnd__AppendSTML);
@@ -1636,19 +1637,25 @@ INITIALIZE_EQGAME_OFFSET(CDBStr__GetString);
 
 INITIALIZE_EQGAME_OFFSET(EQ_Character__CastRay);
 INITIALIZE_EQGAME_OFFSET(EQ_Character__CastSpell);
-INITIALIZE_EQGAME_OFFSET(EQ_Character__Cur_HP);
-INITIALIZE_EQGAME_OFFSET(EQ_Character__GetAACastingTimeModifier);
-INITIALIZE_EQGAME_OFFSET(EQ_Character__GetCharInfo2);
-INITIALIZE_EQGAME_OFFSET(EQ_Character__GetFocusCastingTimeModifier);
-INITIALIZE_EQGAME_OFFSET(EQ_Character__GetFocusRangeModifier);
-INITIALIZE_EQGAME_OFFSET(EQ_Character__Max_Endurance);
-INITIALIZE_EQGAME_OFFSET(EQ_Character__Max_HP);
-INITIALIZE_EQGAME_OFFSET(EQ_Character__Max_Mana);
+    INITIALIZE_EQGAME_OFFSET(EQ_Character__Cur_HP);
+    INITIALIZE_EQGAME_OFFSET(EQ_Character__GetAACastingTimeModifier);
+    INITIALIZE_EQGAME_OFFSET(EQ_Character__GetCharInfo2);
+    INITIALIZE_EQGAME_OFFSET(EQ_Character__GetUsableClasses);
+    INITIALIZE_EQGAME_OFFSET(EQ_Character__GetFocusCastingTimeModifier);
+    INITIALIZE_EQGAME_OFFSET(EQ_Character__GetFocusRangeModifier);
+	INITIALIZE_EQGAME_OFFSET(EQ_Character__IsSpellcaster);
+	INITIALIZE_EQGAME_OFFSET(EQ_Character__IsSpellcaster_2);
+	INITIALIZE_EQGAME_OFFSET(EQ_Character__IsSpellcaster_3);
+    INITIALIZE_EQGAME_OFFSET(EQ_Character__Max_Endurance);
+    INITIALIZE_EQGAME_OFFSET(EQ_Character__Max_HP);
+    INITIALIZE_EQGAME_OFFSET(EQ_Character__Max_Mana);
 INITIALIZE_EQGAME_OFFSET(EQ_Character__doCombatAbility);
 INITIALIZE_EQGAME_OFFSET(EQ_Character__UseSkill);
 INITIALIZE_EQGAME_OFFSET(EQ_Character__GetConLevel);
 INITIALIZE_EQGAME_OFFSET(EQ_Character__IsExpansionFlag);
 INITIALIZE_EQGAME_OFFSET(EQ_Character__TotalEffect);
+
+	INITIALIZE_EQGAME_OFFSET(EQ_Spell__GetSpellLevelNeeded);
 
 INITIALIZE_EQGAME_OFFSET(EQ_Item__CanDrop);
 INITIALIZE_EQGAME_OFFSET(EQ_Item__CreateItemTagString);

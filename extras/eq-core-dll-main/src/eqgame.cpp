@@ -59,7 +59,14 @@ enum HookTag : LONG {
 	Hook_MaxHP = 2,
 	Hook_CurHP = 3,
 	Hook_GetGaugeValueFromEQ = 4,
-	Hook_GetLabelFromEQ = 5
+	Hook_GetLabelFromEQ = 5,
+	Hook_GetUsableClasses = 6,
+	Hook_IsSpellcaster = 7,
+	Hook_IsSpellcaster2 = 8,
+	Hook_IsSpellcaster3 = 9,
+	Hook_CanStartMemming = 10,
+	Hook_GetSpellLevelNeeded = 11,
+	Hook_GetPcSkillLimit = 12
 };
 
 static volatile LONG g_last_hook_tag = Hook_None;
@@ -859,6 +866,11 @@ static constexpr uint32_t kEdgeStatMaxKey = 4096;
 static uint64_t g_edgeStatValue[kEdgeStatMaxKey]{};
 static uint8_t  g_edgeStatHas[kEdgeStatMaxKey]{};
 
+// Server-reported multiclass classes bitmask (from EdgeStatLabel key 200).
+// The server sends this as an "item classes" bitmask: bit positions are (class_id - 1).
+// This matches how EQ uses class bitmasks for item/spell usability (and the merchant "Show Usable Items" filter).
+static uint32_t g_serverUsableClassesMask = 0;
+
 static void ApplyEdgeStatLabelPacket(const char* buf, size_t size)
 {
 	// Payload:
@@ -906,6 +918,8 @@ static void ApplyEdgeStatLabelPacket(const char* buf, size_t size)
 	constexpr uint32_t kINT     = 28;
 	constexpr uint32_t kWIS     = 29;
 	constexpr uint32_t kCHA     = 30;
+	// Custom keys (server-side: zone/client.cpp::SendEdgeStats)
+	constexpr uint32_t kClassesBitmask = 200;
 
 	auto get_i32 = [](uint32_t key) -> int {
 		if (key >= kEdgeStatMaxKey || !g_edgeStatHas[key]) {
@@ -949,6 +963,19 @@ static void ApplyEdgeStatLabelPacket(const char* buf, size_t size)
 	if (intl >= 0) g_serverProfile.intl = intl;
 	if (wis >= 0) g_serverProfile.wis = wis;
 	if (cha >= 0) g_serverProfile.cha = cha;
+
+		// Multiclass classes bitmask used for client-side filtering (AA window, usability, etc).
+	if (kClassesBitmask < kEdgeStatMaxKey && g_edgeStatHas[kClassesBitmask]) {
+		const uint32_t prev = g_serverUsableClassesMask;
+		g_serverUsableClassesMask = static_cast<uint32_t>(g_edgeStatValue[kClassesBitmask] & 0xFFFF);
+		if (isDebugLoggingEnabled && prev != g_serverUsableClassesMask) {
+			LogDebug(
+				"EDGE_STAT multiclass classes_bitmask=0x%04X (%u)",
+				g_serverUsableClassesMask,
+				g_serverUsableClassesMask
+			);
+		}
+	}
 }
 
 // Recent packet circular buffer to assist debugging crashes/zoning sequences
@@ -1012,6 +1039,7 @@ static void ResetServerCaches()
     g_serverCurMana = -1;
     g_serverMaxMana = -1;
     g_serverProfile = ServerProfileCache{};
+	g_serverUsableClassesMask = 0;
     logged_profile_candidate = false;
 	memset(g_edgeStatHas, 0, sizeof(g_edgeStatHas));
 	memset(g_edgeStatValue, 0, sizeof(g_edgeStatValue));
@@ -1787,11 +1815,24 @@ DETOUR_TRAMPOLINE_EMPTY(int __fastcall EQCharacter_MaxHP_Tramp(void*, void*, int
 int __fastcall EQCharacter_MaxHP_Detour(void* This, void* edx, int a1, int a2)
 {
 	g_last_hook_tag = Hook_MaxHP;
-	int nativeVal = EQCharacter_MaxHP_Tramp(This, edx, a1, a2);
+	int nativeVal = 0;
+	__try {
+		nativeVal = EQCharacter_MaxHP_Tramp(This, edx, a1, a2);
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		if (isDebugLoggingEnabled) {
+			LogDebug("CLIENT_DETOUR stat=HP native trampoline faulted (MaxHP); falling back");
+		}
+		nativeVal = 0;
+	}
 	int used = nativeVal;
 	int server = g_serverMaxHP;
 	if (server > 0) {
 		used = server;
+	}
+	if (used <= 0) {
+		// Avoid returning 0 which can break gauge math in some UI paths.
+		used = 1;
 	}
 	// Log first use or changes for local player (simple static int to avoid
 	// global container construction order problems)
@@ -1808,11 +1849,26 @@ DETOUR_TRAMPOLINE_EMPTY(int __fastcall EQCharacter_CurHP_Tramp(void*, void*, int
 int __fastcall EQCharacter_CurHP_Detour(void* This, void* edx, int a1, unsigned char a2)
 {
 	g_last_hook_tag = Hook_CurHP;
-	int nativeVal = EQCharacter_CurHP_Tramp(This, edx, a1, a2);
+	int nativeVal = 0;
+	__try {
+		nativeVal = EQCharacter_CurHP_Tramp(This, edx, a1, a2);
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		if (isDebugLoggingEnabled) {
+			LogDebug("CLIENT_DETOUR stat=CurHP native trampoline faulted; falling back");
+		}
+		nativeVal = 0;
+	}
 	int used = nativeVal;
 	int server = g_serverCurHP;
 	if (server > 0) {
 		used = server;
+	}
+	if (used <= 0 && g_serverProfile.has_profile && g_serverProfile.hp_cur > 0) {
+		used = g_serverProfile.hp_cur;
+	}
+	if (used < 0) {
+		used = 0;
 	}
 	if (pLocalPlayer) {
 		static int g_last_logged_cur_hp = INT_MIN;
@@ -1887,6 +1943,15 @@ static int __cdecl GetLabelFromEQ_Detour(int eq_type, class CXStr *out, bool *ar
 static volatile LONG g_ui_detours_installed = 0;
 static void InstallUiDetours()
 {
+	// MQ2Labels (and other MQ2 components) already detour these UI helpers. Installing our own detours
+	// on top of MQ2's can produce invalid trampolines and crash (e.g., null trampoline call).
+	if (isMQInjectsEnabled) {
+		if (isDebugLoggingEnabled) {
+			LogDebug("Skipping UI detours (__GetGaugeValueFromEQ/__GetLabelFromEQ) because MQ2 injects are enabled");
+		}
+		return;
+	}
+
 	if (InterlockedCompareExchange(&g_ui_detours_installed, 1, 0) != 0) {
 		return;
 	}
@@ -1902,7 +1967,16 @@ static void InstallUiDetours()
 DETOUR_TRAMPOLINE_EMPTY(int __fastcall EQCharacter_MaxMana_Tramp(void*, void*, int));
 int __fastcall EQCharacter_MaxMana_Detour(void* This, void* edx, int a1)
 {
-	int nativeVal = EQCharacter_MaxMana_Tramp(This, edx, a1);
+	int nativeVal = 0;
+	__try {
+		nativeVal = EQCharacter_MaxMana_Tramp(This, edx, a1);
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		if (isDebugLoggingEnabled) {
+			LogDebug("CLIENT_DETOUR stat=Mana native trampoline faulted (MaxMana); falling back");
+		}
+		nativeVal = 0;
+	}
 	int used = nativeVal;
 	int server = g_serverMaxMana;
 	if (server > 0) used = server;
@@ -1918,7 +1992,16 @@ int __fastcall EQCharacter_MaxMana_Detour(void* This, void* edx, int a1)
 DETOUR_TRAMPOLINE_EMPTY(int __fastcall EQCharacter_MaxEnd_Tramp(void*, void*, int));
 int __fastcall EQCharacter_MaxEnd_Detour(void* This, void* edx, int a1)
 {
-	int nativeVal = EQCharacter_MaxEnd_Tramp(This, edx, a1);
+	int nativeVal = 0;
+	__try {
+		nativeVal = EQCharacter_MaxEnd_Tramp(This, edx, a1);
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		if (isDebugLoggingEnabled) {
+			LogDebug("CLIENT_DETOUR stat=Endurance native trampoline faulted (MaxEnd); falling back");
+		}
+		nativeVal = 0;
+	}
 	int used = nativeVal;
 	int server = g_serverMaxEnd;
 	if (server > 0) used = server;
@@ -1931,7 +2014,253 @@ int __fastcall EQCharacter_MaxEnd_Detour(void* This, void* edx, int a1)
 	return used;
 }
 
-// NOTE: TotalEffect detour removed — attempting to detour member functions
+// Override "usable classes" mask for client-side filters (AA window, item/spell usability).
+DETOUR_TRAMPOLINE_EMPTY(int __fastcall EQCharacter_GetUsableClasses_Tramp(void*, void*, int, DWORD));
+int __fastcall EQCharacter_GetUsableClasses_Detour(void* This, void* edx, int a1, DWORD a2)
+{
+	g_last_hook_tag = Hook_GetUsableClasses;
+
+	// Prefer the server-provided mask when available. Avoid calling the native trampoline when
+	// it is still an "empty trampoline" (it will intentionally fault if invoked).
+	if (isMulticlassUsableClassesOverrideEnabled && g_serverUsableClassesMask != 0) {
+		return static_cast<int>(g_serverUsableClassesMask & 0xFFFF);
+	}
+
+	// If we don't have server data yet, prefer a conservative local baseline (base class only)
+	// over returning -1 (all classes), which can break class-based filters (spell merchants, AA UI, etc).
+	if (isMulticlassUsableClassesOverrideEnabled && g_serverUsableClassesMask == 0) {
+		if (pLocalPlayer) {
+			const uint8_t cls = static_cast<uint8_t>(pLocalPlayer->Data.Class);
+			if (cls >= 1 && cls <= 16) {
+				return static_cast<int>(1u << (cls - 1));
+			}
+		}
+	}
+
+	int nativeVal = -1;
+	__try {
+		nativeVal = EQCharacter_GetUsableClasses_Tramp(This, edx, a1, a2);
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		if (isDebugLoggingEnabled) {
+			LogDebug("CLIENT_DETOUR stat=UsableClasses native trampoline faulted; returning -1 fallback");
+		}
+		nativeVal = -1;
+	}
+
+	// If we don't have server data yet, return -1 (all classes) as a safe fallback to avoid client UI crashes.
+	return nativeVal;
+}
+
+// Override spell required-level lookups so client-side usability filters (merchant "Show Usable Items", spellbook, etc)
+// behave correctly for multiclass characters. The client calls into EQ_Spell::GetSpellLevelNeeded(classId); we return the
+// minimum required level across all owned classes.
+//
+// NOTE: Despite the name, RoF2 uses a global-style function at EQ_Spell__GetSpellLevelNeeded that takes a single `spellid`
+// argument (see classless DLL in extras/). The detour target bytes confirm a stack-arg function (mov eax,[esp+4]).
+DETOUR_TRAMPOLINE_EMPTY(int __cdecl EQSpell_GetSpellLevelNeeded_Tramp(int));
+int __cdecl EQSpell_GetSpellLevelNeeded_Detour(int spellId)
+{
+	g_last_hook_tag = Hook_GetSpellLevelNeeded;
+
+	int nativeVal = 255;
+	__try {
+		nativeVal = EQSpell_GetSpellLevelNeeded_Tramp(spellId);
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		if (isDebugLoggingEnabled) {
+			LogDebug("CLIENT_DETOUR stat=SpellLevelNeeded native trampoline faulted; returning 255 fallback");
+		}
+		nativeVal = 255;
+	}
+
+	if (!isMulticlassUsableClassesOverrideEnabled || g_serverUsableClassesMask == 0) {
+		return nativeVal;
+	}
+
+	PSPELL pSpell = nullptr;
+	__try { pSpell = GetSpellByID(spellId); }
+	__except (EXCEPTION_EXECUTE_HANDLER) { pSpell = nullptr; }
+	if (!pSpell) {
+		return nativeVal;
+	}
+
+	int best = 255;
+	for (uint8_t class_id = 1; class_id <= 16; ++class_id) {
+		if ((g_serverUsableClassesMask & (1u << (class_id - 1))) == 0) {
+			continue;
+		}
+
+		const int req = static_cast<int>(pSpell->Level[class_id - 1]);
+		// In RoF2 spell data, 0 and 255 are commonly used for "not usable by this class".
+		if (req > 0 && req < best) {
+			best = req;
+		}
+	}
+
+	if (isDebugLoggingEnabled && best != 255 && best != nativeVal) {
+		LogDebug(
+			"CLIENT_DETOUR stat=SpellLevelNeeded spell=%d native=%d used=%d mask=0x%04X",
+			spellId,
+			nativeVal,
+			best,
+			(unsigned)(g_serverUsableClassesMask & 0xFFFF)
+		);
+	}
+
+	return best != 255 ? best : nativeVal;
+}
+
+// Override PcZoneClient::GetPcSkillLimit so the Skills window can show skills that the server has granted
+// via multiclassing, even if the base class would normally have a 0 cap (and the client would hide them).
+DETOUR_TRAMPOLINE_EMPTY(int __fastcall PcZoneClient_GetPcSkillLimit_Tramp(void*, void*, int));
+int __fastcall PcZoneClient_GetPcSkillLimit_Detour(void* This, void* edx, int skillId)
+{
+	g_last_hook_tag = Hook_GetPcSkillLimit;
+
+	int nativeCap = 0;
+	__try {
+		nativeCap = PcZoneClient_GetPcSkillLimit_Tramp(This, edx, skillId);
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		if (isDebugLoggingEnabled) {
+			LogDebug("CLIENT_DETOUR stat=PcSkillLimit native trampoline faulted; falling back");
+		}
+		nativeCap = 0;
+	}
+
+	if (!isMulticlassUsableClassesOverrideEnabled || g_serverUsableClassesMask == 0) {
+		return nativeCap;
+	}
+
+	if (nativeCap > 0) {
+		return nativeCap;
+	}
+
+	// If the server has already given us a non-zero skill value, expose it with a minimal cap.
+	// This makes newly-granted skills visible/usable without needing to reverse engineer full client cap tables.
+	PCHARINFO2 ci2 = nullptr;
+	__try { ci2 = GetCharInfo2(); }
+	__except (EXCEPTION_EXECUTE_HANDLER) { ci2 = nullptr; }
+
+	if (ci2 && skillId >= 0 && skillId < 0x64) {
+		const int skillVal = static_cast<int>(ci2->Skill[skillId]);
+		if (skillVal > 0) {
+			if (isDebugLoggingEnabled) {
+				LogDebug("CLIENT_DETOUR stat=PcSkillLimit skill=%d native=0 used=%d mask=0x%04X", skillId, skillVal, (unsigned)(g_serverUsableClassesMask & 0xFFFF));
+			}
+			return skillVal;
+		}
+	}
+
+	return nativeCap;
+}
+
+static bool MulticlassHasSpellcastingClass(uint32_t classesMask)
+{
+	// Bit positions are class_id-1 (Warrior=1 => bit0). Keep in sync with server-side classes bitmask.
+	constexpr uint32_t kSpellcasters =
+		(1u << (2 - 1))  | // Cleric
+		(1u << (3 - 1))  | // Paladin
+		(1u << (4 - 1))  | // Ranger
+		(1u << (5 - 1))  | // Shadowknight
+		(1u << (6 - 1))  | // Druid
+		(1u << (8 - 1))  | // Bard
+		(1u << (10 - 1)) | // Shaman
+		(1u << (11 - 1)) | // Necromancer
+		(1u << (12 - 1)) | // Wizard
+		(1u << (13 - 1)) | // Magician
+		(1u << (14 - 1)) | // Enchanter
+		(1u << (15 - 1));  // Beastlord
+
+	return (classesMask & kSpellcasters) != 0;
+}
+
+DETOUR_TRAMPOLINE_EMPTY(int __fastcall EQCharacter_IsSpellcaster_Tramp(void*, void*));
+int __fastcall EQCharacter_IsSpellcaster_Detour(void* This, void* edx)
+{
+	g_last_hook_tag = Hook_IsSpellcaster;
+	int nativeVal = 0;
+	__try {
+		nativeVal = EQCharacter_IsSpellcaster_Tramp(This, edx);
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		if (isDebugLoggingEnabled) {
+			LogDebug("CLIENT_DETOUR stat=IsSpellcaster native trampoline faulted; falling back");
+		}
+		nativeVal = 0;
+	}
+	if (!isMulticlassSpellUiOverrideEnabled || g_serverUsableClassesMask == 0) {
+		return nativeVal;
+	}
+
+	return MulticlassHasSpellcastingClass(g_serverUsableClassesMask) ? 1 : nativeVal;
+}
+
+DETOUR_TRAMPOLINE_EMPTY(int __fastcall EQCharacter_IsSpellcaster2_Tramp(void*, void*, int, int, int, int));
+int __fastcall EQCharacter_IsSpellcaster2_Detour(void* This, void* edx, int a1, int a2, int a3, int a4)
+{
+	g_last_hook_tag = Hook_IsSpellcaster2;
+	int nativeVal = 0;
+	__try {
+		nativeVal = EQCharacter_IsSpellcaster2_Tramp(This, edx, a1, a2, a3, a4);
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		if (isDebugLoggingEnabled) {
+			LogDebug("CLIENT_DETOUR stat=IsSpellcaster2 native trampoline faulted; falling back");
+		}
+		nativeVal = 0;
+	}
+	if (!isMulticlassSpellUiOverrideEnabled || g_serverUsableClassesMask == 0) {
+		return nativeVal;
+	}
+
+	return MulticlassHasSpellcastingClass(g_serverUsableClassesMask) ? 1 : nativeVal;
+}
+
+DETOUR_TRAMPOLINE_EMPTY(int __fastcall EQCharacter_IsSpellcaster3_Tramp(void*, void*));
+int __fastcall EQCharacter_IsSpellcaster3_Detour(void* This, void* edx)
+{
+	g_last_hook_tag = Hook_IsSpellcaster3;
+	int nativeVal = 0;
+	__try {
+		nativeVal = EQCharacter_IsSpellcaster3_Tramp(This, edx);
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		if (isDebugLoggingEnabled) {
+			LogDebug("CLIENT_DETOUR stat=IsSpellcaster3 native trampoline faulted; falling back");
+		}
+		nativeVal = 0;
+	}
+	if (!isMulticlassSpellUiOverrideEnabled || g_serverUsableClassesMask == 0) {
+		return nativeVal;
+	}
+
+	return MulticlassHasSpellcastingClass(g_serverUsableClassesMask) ? 1 : nativeVal;
+}
+
+DETOUR_TRAMPOLINE_EMPTY(int __fastcall CSpellBookWnd_CanStartMemming_Tramp(void*, void*, int));
+int __fastcall CSpellBookWnd_CanStartMemming_Detour(void* This, void* edx, int spellId)
+{
+	g_last_hook_tag = Hook_CanStartMemming;
+	int nativeVal = 0;
+	__try {
+		nativeVal = CSpellBookWnd_CanStartMemming_Tramp(This, edx, spellId);
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		if (isDebugLoggingEnabled) {
+			LogDebug("CLIENT_DETOUR stat=CanStartMemming native trampoline faulted; falling back");
+		}
+		nativeVal = 0;
+	}
+	if (!isMulticlassSpellUiOverrideEnabled || g_serverUsableClassesMask == 0) {
+		return nativeVal;
+	}
+
+	return MulticlassHasSpellcastingClass(g_serverUsableClassesMask) ? 1 : nativeVal;
+}
+
+// NOTE: TotalEffect detour removed - attempting to detour member functions
 // with the wrong calling convention caused instability on character select.
 // We keep the EdgeStat cache and Max_* detours active; further member-
 // function detours should be added only after confirming exact calling
@@ -1990,6 +2319,27 @@ static void InstallServerAuthoritativeStatsDetours_Now()
 		LogDetourTargetBytes("EQ_Character__Cur_HP", (DWORD)EQ_Character__Cur_HP);
 		LogDetourTargetBytes("EQ_Character__Max_Mana", (DWORD)EQ_Character__Max_Mana);
 		LogDetourTargetBytes("EQ_Character__Max_Endurance", (DWORD)EQ_Character__Max_Endurance);
+		if (EQ_Character__GetUsableClasses) {
+			LogDetourTargetBytes("EQ_Character__GetUsableClasses", (DWORD)EQ_Character__GetUsableClasses);
+		}
+		if (EQ_Character__IsSpellcaster) {
+			LogDetourTargetBytes("EQ_Character__IsSpellcaster", (DWORD)EQ_Character__IsSpellcaster);
+		}
+		if (EQ_Character__IsSpellcaster_2) {
+			LogDetourTargetBytes("EQ_Character__IsSpellcaster_2", (DWORD)EQ_Character__IsSpellcaster_2);
+		}
+		if (EQ_Character__IsSpellcaster_3) {
+			LogDetourTargetBytes("EQ_Character__IsSpellcaster_3", (DWORD)EQ_Character__IsSpellcaster_3);
+		}
+		if (EQ_Spell__GetSpellLevelNeeded) {
+			LogDetourTargetBytes("EQ_Spell__GetSpellLevelNeeded", (DWORD)EQ_Spell__GetSpellLevelNeeded);
+		}
+		if (CSpellBookWnd__CanStartMemming) {
+			LogDetourTargetBytes("CSpellBookWnd__CanStartMemming", (DWORD)CSpellBookWnd__CanStartMemming);
+		}
+		if (PcZoneClient__GetPcSkillLimit) {
+			LogDetourTargetBytes("PcZoneClient__GetPcSkillLimit", (DWORD)PcZoneClient__GetPcSkillLimit);
+		}
 		LogDetourTargetBytes("__GetGaugeValueFromEQ", __GetGaugeValueFromEQ);
 		LogDetourTargetBytes("__GetLabelFromEQ", __GetLabelFromEQ);
 
@@ -1998,6 +2348,29 @@ static void InstallServerAuthoritativeStatsDetours_Now()
 		EzDetour((DWORD)EQ_Character__Cur_HP, EQCharacter_CurHP_Detour, EQCharacter_CurHP_Tramp);
 		EzDetour((DWORD)EQ_Character__Max_Mana, EQCharacter_MaxMana_Detour, EQCharacter_MaxMana_Tramp);
 		EzDetour((DWORD)EQ_Character__Max_Endurance, EQCharacter_MaxEnd_Detour, EQCharacter_MaxEnd_Tramp);
+		if (EQ_Character__GetUsableClasses && isMulticlassUsableClassesOverrideEnabled) {
+			EzDetour((DWORD)EQ_Character__GetUsableClasses, EQCharacter_GetUsableClasses_Detour, EQCharacter_GetUsableClasses_Tramp);
+		}
+		if (isMulticlassSpellUiOverrideEnabled) {
+			if (EQ_Character__IsSpellcaster) {
+				EzDetour((DWORD)EQ_Character__IsSpellcaster, EQCharacter_IsSpellcaster_Detour, EQCharacter_IsSpellcaster_Tramp);
+			}
+			if (EQ_Character__IsSpellcaster_2) {
+				EzDetour((DWORD)EQ_Character__IsSpellcaster_2, EQCharacter_IsSpellcaster2_Detour, EQCharacter_IsSpellcaster2_Tramp);
+			}
+			if (EQ_Character__IsSpellcaster_3) {
+				EzDetour((DWORD)EQ_Character__IsSpellcaster_3, EQCharacter_IsSpellcaster3_Detour, EQCharacter_IsSpellcaster3_Tramp);
+			}
+			if (CSpellBookWnd__CanStartMemming) {
+				EzDetour((DWORD)CSpellBookWnd__CanStartMemming, CSpellBookWnd_CanStartMemming_Detour, CSpellBookWnd_CanStartMemming_Tramp);
+			}
+		}
+		if (EQ_Spell__GetSpellLevelNeeded && isMulticlassUsableClassesOverrideEnabled) {
+			EzDetour((DWORD)EQ_Spell__GetSpellLevelNeeded, EQSpell_GetSpellLevelNeeded_Detour, EQSpell_GetSpellLevelNeeded_Tramp);
+		}
+		if (PcZoneClient__GetPcSkillLimit && isMulticlassUsableClassesOverrideEnabled) {
+			EzDetour((DWORD)PcZoneClient__GetPcSkillLimit, PcZoneClient_GetPcSkillLimit_Detour, PcZoneClient_GetPcSkillLimit_Tramp);
+		}
 		InstallUiDetours();
 	}
 	__except (EXCEPTION_EXECUTE_HANDLER) {

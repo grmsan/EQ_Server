@@ -926,7 +926,14 @@ void Client::SendAlternateAdvancementRank(int aa_id, int level) {
 		return;
 	}
 
-	if(!(ability->classes & (1 << GetClass()))) {
+	uint32 class_mask = 0;
+	for (uint8 class_id = 1; class_id <= Class::PLAYER_CLASS_COUNT; ++class_id) {
+		if (HasClass(class_id)) {
+			class_mask |= GetPlayerClassBit(class_id);
+		}
+	}
+
+	if (!(ability->classes & class_mask)) {
 		return;
 	}
 
@@ -1689,7 +1696,18 @@ bool Mob::CanUseAlternateAdvancementRank(AA::Rank *rank)
 		return false;
 	}
 
-	if (!(a->classes & (1 << GetClass()))) {
+	uint32 class_mask = GetPlayerClassBit(GetClass());
+	if (IsClient()) {
+		class_mask = 0;
+		auto *c = CastToClient();
+		for (uint8 class_id = 1; class_id <= Class::PLAYER_CLASS_COUNT; ++class_id) {
+			if (c->HasClass(class_id)) {
+				class_mask |= GetPlayerClassBit(class_id);
+			}
+		}
+	}
+
+	if (!(a->classes & class_mask)) {
 		return false;
 	}
 

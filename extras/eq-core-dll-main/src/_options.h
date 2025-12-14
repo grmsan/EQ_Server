@@ -36,6 +36,14 @@ bool isMaxHPFixEnabled = false;
 // via custom packets (e.g., EdgeStatLabel opcode 0x1338 or OP_ServerStatsUpdate 0x7330).
 bool isServerAuthoritativeStatsEnabled = true;
 
+// isMulticlassUsableClassesOverrideEnabled detours EQ_Character__GetUsableClasses so the client treats your server-provided
+// multiclass bitmask as your "usable classes" for client-side filters (AA window, usability checks, etc).
+bool isMulticlassUsableClassesOverrideEnabled = true;
+
+// isMulticlassSpellUiOverrideEnabled forces the client to treat you as a spellcaster (spellbook/mana UI gating)
+// when your server-provided multiclass bitmask contains any spellcasting class.
+bool isMulticlassSpellUiOverrideEnabled = true;
+
 // isPatchmeDisabled if set to true will let you double click eqgame.exe and not get the "Please run EverQuest" message, will start properly
 bool isPatchmeDisabled = true;
 

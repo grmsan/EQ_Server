@@ -1476,9 +1476,9 @@ public:
 
 	// Data Bucket Methods
 	void DeleteBucket(std::string bucket_name);
-	std::string GetBucket(std::string bucket_name);
-	std::string GetBucketExpires(std::string bucket_name);
-	std::string GetBucketRemaining(std::string bucket_name);
+	std::string GetBucket(std::string bucket_name) const;
+	std::string GetBucketExpires(std::string bucket_name) const;
+	std::string GetBucketRemaining(std::string bucket_name) const;
 	void SetBucket(std::string bucket_name, std::string bucket_value, std::string expiration = "");
 
 	uint32 GetMobTypeIdentifier();
@@ -1509,7 +1509,7 @@ public:
 
 	void CalcHeroicBonuses(StatBonuses* newbon);
 
-	DataBucketKey GetScopedBucketKeys();
+	DataBucketKey GetScopedBucketKeys() const;
 	bool LoadDataBucketsCache();
 
 	bool IsCloseToBanker();

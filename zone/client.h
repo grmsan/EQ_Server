@@ -287,12 +287,12 @@ public:
 	// ---- Multi-class foundations (databucket-backed) ----
 	// These APIs provide a server-side class bitmask used by quest/plugins.
 	// Core gameplay systems still use `GetClass()` until explicitly updated.
-	uint16 GetClassesBitmask();
+	uint16 GetClassesBitmask() const;
 	bool SetClassesBitmask(uint16 classes_bitmask);
 	bool AddExtraClass(uint8 class_id);
 	bool RemoveExtraClass(uint8 class_id);
 	uint8 GetClassesCount();
-	bool HasClass(uint8 class_id);
+	bool HasClass(uint8 class_id) const;
 
 	void SendChatLineBreak(uint16 color = Chat::White);
 
@@ -961,8 +961,9 @@ public:
 	void ShowSkillsWindow();
 
 	uint16 MaxSkill(EQ::skills::SkillType skill_id, uint8 class_id, uint8 level) const;
-	inline uint16 MaxSkill(EQ::skills::SkillType skill_id) const { return MaxSkill(skill_id, GetClass(), GetLevel()); }
+	uint16 MaxSkill(EQ::skills::SkillType skill_id) const;
 	uint8 GetSkillTrainLevel(EQ::skills::SkillType skill_id, uint8 class_id);
+	uint8 GetSkillTrainLevel(EQ::skills::SkillType skill_id);
 	void MaxSkills();
 
 	void SendTradeskillSearchResults(const std::string &query, unsigned long objtype, unsigned long someid);
@@ -2197,6 +2198,8 @@ private:
 	Timer hpupdate_timer;
 	Timer camp_timer;
 	Timer bot_camp_timer;
+	bool fast_camp_active = false;
+	bool fast_camp_logout_sent = false;
 	Timer process_timer;
 	Timer consume_food_timer;
 	Timer zoneinpacket_timer;

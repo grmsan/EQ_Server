@@ -4388,6 +4388,8 @@ void Client::Handle_OP_Camp(const EQApplicationPacket *app)
 	{
 		if (RuleB(Character, EnableHackedFastCampForGM))
 		{
+			fast_camp_active = true;
+			fast_camp_logout_sent = false;
 			camp_timer.Start(100, true);
 		}
 		else {
@@ -4397,7 +4399,16 @@ void Client::Handle_OP_Camp(const EQApplicationPacket *app)
 		return;
 	}
 
-	camp_timer.Start(29000, true);
+	if (RuleB(Character, EnableHackedFastCamp)) {
+		const int ms = std::max(0, RuleI(Character, HackedFastCampTimerMS));
+		fast_camp_active = true;
+		fast_camp_logout_sent = false;
+		camp_timer.Start(ms, true);
+	} else {
+		fast_camp_active = false;
+		fast_camp_logout_sent = false;
+		camp_timer.Start(29000, true);
+	}
 
 	if (RuleB(Bots, Enabled)) {
 		bot_camp_timer.Start((RuleI(Bots, CampTimer) * 1000), true);

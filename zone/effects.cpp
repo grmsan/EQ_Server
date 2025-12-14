@@ -757,19 +757,34 @@ bool Client::TrainDiscipline(uint32 itemid) {
 		return false;
 	}
 
-	const auto player_class = GetClass();
-	if (player_class == Class::Wizard || player_class == Class::Enchanter || player_class == Class::Magician || player_class == Class::Necromancer) {
-		Message(Chat::Red, "Your class cannot learn from this tome.");
-		//summon them the item back...
+	const auto owned_class_bits = GetClassesBitmask();
+	bool has_discipline_learner_class = false;
+	for (uint8 class_id = 1; class_id <= Class::PLAYER_CLASS_COUNT; ++class_id) {
+		if (!HasClass(class_id)) {
+			continue;
+		}
+		if (
+			class_id == Class::Wizard ||
+			class_id == Class::Enchanter ||
+			class_id == Class::Magician ||
+			class_id == Class::Necromancer
+		) {
+			continue;
+		}
+		has_discipline_learner_class = true;
+		break;
+	}
+
+	if (!has_discipline_learner_class) {
+		Message(Chat::Red, "Your classes cannot learn from this tome.");
 		SummonItem(itemid);
 		return false;
 	}
 
 	//make sure we can train this...
 	//can we use the item?
-	const auto class_bit = static_cast<uint32>(1 << (player_class - 1));
-	if (!(item->Classes & class_bit)) {
-		Message(Chat::Red, "Your class cannot learn from this tome.");
+	if (!(item->Classes & owned_class_bits)) {
+		Message(Chat::Red, "Your classes cannot learn from this tome.");
 		//summon them the item back...
 		SummonItem(itemid);
 		return false;
@@ -783,9 +798,40 @@ bool Client::TrainDiscipline(uint32 itemid) {
 
 	//can we use the spell?
 	const auto& spell = spells[spell_id];
-	const auto level_to_use = spell.classes[player_class - 1];
-	if (level_to_use == 255) {
-		Message(Chat::Red, "Your class cannot learn from this tome.");
+	uint8 best_class_id = 0;
+	uint8 level_to_use = 255;
+	for (uint8 class_id = 1; class_id <= Class::PLAYER_CLASS_COUNT; ++class_id) {
+		if (!HasClass(class_id)) {
+			continue;
+		}
+
+		if (
+			class_id == Class::Wizard ||
+			class_id == Class::Enchanter ||
+			class_id == Class::Magician ||
+			class_id == Class::Necromancer
+		) {
+			continue;
+		}
+
+		const auto class_bit = static_cast<uint16>(1u << (class_id - 1));
+		if ((item->Classes & class_bit) == 0) {
+			continue;
+		}
+
+		const uint8 req = spell.classes[class_id - 1];
+		if (req == 255) {
+			continue;
+		}
+
+		if (req < level_to_use) {
+			level_to_use = req;
+			best_class_id = class_id;
+		}
+	}
+
+	if (best_class_id == 0 || level_to_use == 255) {
+		Message(Chat::Red, "Your classes cannot learn from this tome.");
 		//summon them the item back...
 		SummonItem(itemid);
 		return false;
@@ -843,10 +889,10 @@ bool Client::MemorizeSpellFromItem(uint32 item_id) {
 		return false;
 	}
 
-	const auto class_bit = static_cast<uint32>(1 << (GetClass() - 1));
+	const auto owned_class_bits = GetClassesBitmask();
 
-	if (!(item->Classes & class_bit)) {
-		Message(Chat::Red, "Your class cannot learn from this scroll.");
+	if (!(item->Classes & owned_class_bits)) {
+		Message(Chat::Red, "Your classes cannot learn from this scroll.");
 		SummonItem(item_id);
 		return false;
 	}
@@ -858,9 +904,31 @@ bool Client::MemorizeSpellFromItem(uint32 item_id) {
 	}
 
 	const auto& spell = spells[spell_id];
-	const auto level_to_use = spell.classes[GetClass() - 1];
-	if (level_to_use == 255) {
-		Message(Chat::Red, "Your class cannot learn from this scroll.");
+	uint8 best_class_id = 0;
+	uint8 level_to_use = 255;
+	for (uint8 class_id = 1; class_id <= Class::PLAYER_CLASS_COUNT; ++class_id) {
+		if (!HasClass(class_id)) {
+			continue;
+		}
+
+		const auto class_bit = static_cast<uint16>(1u << (class_id - 1));
+		if ((item->Classes & class_bit) == 0) {
+			continue;
+		}
+
+		const uint8 req = spell.classes[class_id - 1];
+		if (req == 255) {
+			continue;
+		}
+
+		if (req < level_to_use) {
+			level_to_use = req;
+			best_class_id = class_id;
+		}
+	}
+
+	if (best_class_id == 0 || level_to_use == 255) {
+		Message(Chat::Red, "Your classes cannot learn from this scroll.");
 		SummonItem(item_id);
 		return false;
 	}

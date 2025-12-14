@@ -493,6 +493,7 @@
 #define CSliderWnd__SetNumTicks_x                                  0x896930
 
 // CSpellBookWnd 
+#define CSpellBookWnd__CanStartMemming_x                           0x75BD40
 #define CSpellBookWnd__MemorizeSet_x                               0x75CAC0
 
 // CStmlWnd
@@ -598,8 +599,12 @@
 #define EQ_Character__Cur_HP_x                                     0x449E00
 #define EQ_Character__GetAACastingTimeModifier_x                   0x4336D0
 #define EQ_Character__GetCharInfo2_x                               0x7DB210
+#define EQ_Character__GetUsableClasses_x                           0x7B4CE0
 #define EQ_Character__GetFocusCastingTimeModifier_x                0x42C9A0
 #define EQ_Character__GetFocusRangeModifier_x                      0x42CB80
+#define EQ_Character__IsSpellcaster_x                              0x443F50
+#define EQ_Character__IsSpellcaster_2_x                            0x4288E0
+#define EQ_Character__IsSpellcaster_3_x                            0x59FB90
 #define EQ_Character__Max_Endurance_x                              0x582020
 #define EQ_Character__Max_HP_x                                     0x443FA0
 #define EQ_Character__Max_Mana_x                                   0x581E60
@@ -608,6 +613,9 @@
 #define EQ_Character__GetConLevel_x                                0x577CB0
 #define EQ_Character__IsExpansionFlag_x                            0x4106C0
 #define EQ_Character__TotalEffect_x                                0x438990
+
+// EQ_Spell
+#define EQ_Spell__GetSpellLevelNeeded_x                            0x4AF700
 
 // EQ_Item 
 #define EQ_Item__CanDrop_x                                         0x554E50

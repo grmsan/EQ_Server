@@ -3200,7 +3200,20 @@ bool Client::CanHaveSkill(EQ::skills::SkillType skill_id) const
 		skill_id = EQ::skills::Skill2HPiercing;
 	}
 
-	return SkillCaps::Instance()->GetSkillCap(GetClass(), skill_id, RuleI(Character, MaxLevel)).cap > 0;
+	if (!RuleB(Custom, MulticlassingEnabled)) {
+		return SkillCaps::Instance()->GetSkillCap(GetClass(), skill_id, RuleI(Character, MaxLevel)).cap > 0;
+	}
+
+	for (uint8 class_id = 1; class_id <= Class::PLAYER_CLASS_COUNT; ++class_id) {
+		if (!HasClass(class_id)) {
+			continue;
+		}
+		if (SkillCaps::Instance()->GetSkillCap(class_id, skill_id, RuleI(Character, MaxLevel)).cap > 0) {
+			return true;
+		}
+	}
+
+	return false;
 }
 
 uint16 Client::MaxSkill(EQ::skills::SkillType skill_id, uint8 class_id, uint8 level) const
@@ -3216,6 +3229,23 @@ uint16 Client::MaxSkill(EQ::skills::SkillType skill_id, uint8 class_id, uint8 le
 	return SkillCaps::Instance()->GetSkillCap(class_id, skill_id, level).cap;
 }
 
+uint16 Client::MaxSkill(EQ::skills::SkillType skill_id) const
+{
+	if (!RuleB(Custom, MulticlassingEnabled)) {
+		return MaxSkill(skill_id, GetClass(), GetLevel());
+	}
+
+	uint16 best = 0;
+	for (uint8 class_id = 1; class_id <= Class::PLAYER_CLASS_COUNT; ++class_id) {
+		if (!HasClass(class_id)) {
+			continue;
+		}
+		best = std::max<uint16>(best, MaxSkill(skill_id, class_id, GetLevel()));
+	}
+
+	return best;
+}
+
 uint8 Client::GetSkillTrainLevel(EQ::skills::SkillType skill_id, uint8 class_id)
 {
 	if (
@@ -3227,6 +3257,24 @@ uint8 Client::GetSkillTrainLevel(EQ::skills::SkillType skill_id, uint8 class_id)
 	}
 
 	return SkillCaps::Instance()->GetSkillTrainLevel(class_id, skill_id, RuleI(Character, MaxLevel));
+}
+
+uint8 Client::GetSkillTrainLevel(EQ::skills::SkillType skill_id)
+{
+	if (!RuleB(Custom, MulticlassingEnabled)) {
+		return GetSkillTrainLevel(skill_id, GetClass());
+	}
+
+	uint8 best = 0;
+	for (uint8 class_id = 1; class_id <= Class::PLAYER_CLASS_COUNT; ++class_id) {
+		if (!HasClass(class_id)) {
+			continue;
+		}
+
+		best = std::max<uint8>(best, GetSkillTrainLevel(skill_id, class_id));
+	}
+
+	return best;
 }
 
 uint16 Client::GetMaxSkillAfterSpecializationRules(EQ::skills::SkillType skillid, uint16 maxSkill)
@@ -13244,7 +13292,7 @@ std::string Client::GetAccountBucketRemaining(std::string bucket_name)
 	return DataBucket::GetDataRemaining(k);
 }
 
-uint16 Client::GetClassesBitmask()
+uint16 Client::GetClassesBitmask() const
 {
 	const uint16 base_bit = GetPlayerClassBit(GetClass());
 
@@ -13259,8 +13307,6 @@ uint16 Client::GetClassesBitmask()
 
 	const std::string raw = GetBucket(bucket_key);
 	if (raw.empty()) {
-		// Seed on first access so scripts can rely on this existing when enabled.
-		SetBucket(bucket_key, std::to_string(base_bit));
 		return base_bit;
 	}
 
@@ -13285,6 +13331,8 @@ bool Client::SetClassesBitmask(uint16 classes_bitmask)
 	uint16 bits = classes_bitmask | base_bit;
 
 	SetBucket(bucket_key, std::to_string(static_cast<uint32>(bits)));
+	// Push an immediate UI refresh for custom clients using EdgeStatLabel.
+	SendEdgeStats();
 	return true;
 }
 
@@ -13303,7 +13351,7 @@ uint8 Client::GetClassesCount()
 	return CountClassBits(GetClassesBitmask());
 }
 
-bool Client::HasClass(uint8 class_id)
+bool Client::HasClass(uint8 class_id) const
 {
 	if (!EQ::ValueWithin(class_id, 1, 16)) {
 		return false;
@@ -13334,13 +13382,47 @@ bool Client::AddExtraClass(uint8 class_id)
 		return false;
 	}
 
+	const int64 before_max_mana = GetMaxMana();
+
 	const int max_classes = RuleI(Custom, MulticlassMaxClasses);
 	if (max_classes > 0 && CountClassBits(bits) >= max_classes) {
 		return false;
 	}
 
 	bits |= add_bit;
-	return SetClassesBitmask(bits);
+	if (!SetClassesBitmask(bits)) {
+		return false;
+	}
+
+	// Ensure skills/AA/UI are refreshed after changing classes.
+	for (int skill = 0; skill <= EQ::skills::HIGHEST_SKILL; ++skill) {
+		auto skill_id = static_cast<EQ::skills::SkillType>(skill);
+		// Grant a minimal starting value for newly-available skills so they appear and can be used/trained.
+		if (GetRawSkill(skill_id) == 0 && MaxSkill(skill_id, class_id, GetLevel()) > 0) {
+			SetSkill(skill_id, 1);
+		}
+	}
+
+	CalcBonuses();
+	SendHPUpdate();
+	SendManaUpdate();
+	SendEnduranceUpdate();
+	SendAlternateAdvancementTable();
+	SendAlternateAdvancementPoints();
+	SendAlternateAdvancementStats();
+	// Ensure our custom clients see a consistent post-change snapshot (SetClassesBitmask() may have sent pre-recalc values).
+	SendEdgeStats();
+	UpdateWho();
+
+	// If this class change introduces mana (e.g., adding Ranger/Cleric/Wizard), fill to max once to avoid 0/0 UI confusion.
+	const int64 after_max_mana = GetMaxMana();
+	if (before_max_mana <= 0 && after_max_mana > 0 && GetMana() <= 0) {
+		SetMana(after_max_mana);
+		SendManaUpdate();
+		SendEdgeStats();
+	}
+
+	return true;
 }
 
 bool Client::RemoveExtraClass(uint8 class_id)
@@ -13366,7 +13448,20 @@ bool Client::RemoveExtraClass(uint8 class_id)
 	}
 
 	bits &= ~remove_bit;
-	return SetClassesBitmask(bits);
+	if (!SetClassesBitmask(bits)) {
+		return false;
+	}
+
+	CalcBonuses();
+	SendHPUpdate();
+	SendManaUpdate();
+	SendEnduranceUpdate();
+	SendAlternateAdvancementTable();
+	SendAlternateAdvancementPoints();
+	SendAlternateAdvancementStats();
+	SendEdgeStats();
+	UpdateWho();
+	return true;
 }
 
 std::string Client::GetBandolierName(uint8 bandolier_slot)
@@ -13484,6 +13579,8 @@ void Client::SendEdgeStats()
 	constexpr uint32 kINT     = 28;
 	constexpr uint32 kWIS     = 29;
 	constexpr uint32 kCHA     = 30;
+	// Custom keys (safe range well above base stat keys).
+	constexpr uint32 kClassesBitmask = 200;
 
 	struct Pair {
 		uint32 key;
@@ -13503,7 +13600,8 @@ void Client::SendEdgeStats()
 		{ kAGI,     static_cast<uint64>(GetAGI()) },
 		{ kINT,     static_cast<uint64>(GetINT()) },
 		{ kWIS,     static_cast<uint64>(GetWIS()) },
-		{ kCHA,     static_cast<uint64>(GetCHA()) }
+		{ kCHA,     static_cast<uint64>(GetCHA()) },
+		{ kClassesBitmask, static_cast<uint64>(GetClassesBitmask()) }
 	};
 
 	constexpr uint32 count = static_cast<uint32>(sizeof(pairs) / sizeof(pairs[0]));

@@ -199,6 +199,21 @@ bool Client::Process() {
 		}
 
 		if (camp_timer.Check()) {
+			// Fast camp: try to transition to character select without showing a disconnect screen by
+			// sending OP_LogoutReply and letting the client close the connection.
+			if (fast_camp_active && !fast_camp_logout_sent) {
+				auto outapp = new EQApplicationPacket(OP_LogoutReply);
+				FastQueuePacket(&outapp);
+
+				fast_camp_logout_sent = true;
+				instalog = true;
+
+				// Safety: if the client hasn't disconnected shortly after receiving LogoutReply,
+				// we'll fall through on the next timer tick and force cleanup.
+				camp_timer.Start(2000, true);
+				return true;
+			}
+
 			Raid *myraid = entity_list.GetRaidByClient(this);
 			if (myraid) {
 				myraid->MemberZoned(this);
@@ -215,9 +230,11 @@ bool Client::Process() {
 				GetMerc()->Save();
 				GetMerc()->Depop();
 			}
-			instalog = true;
 
+			instalog = true;
 			camp_timer.Disable();
+			fast_camp_active = false;
+			fast_camp_logout_sent = false;
 		}
 
 		if (IsStunned() && stunned_timer.Check())
@@ -1164,6 +1181,22 @@ void Client::OPMemorizeSpell(const EQApplicationPacket* app)
 
 	const auto* m = (MemorizeSpell_Struct*) app->pBuffer;
 
+	// If the server rejects a memorize request without responding, RoF2 can leave the client-side
+	// "memorizing" progress bar stuck. When denying memSpellMemorize, send the current gem state
+	// back to the client to force the UI to reset.
+	const auto cancel_memorize_ui = [&](uint32 slot) {
+		if (slot >= EQ::spells::SPELL_GEM_COUNT) {
+			return;
+		}
+
+		uint32 cur = m_pp.mem_spells[slot];
+		if (!IsValidSpell(cur)) {
+			cur = UINT32_MAX;
+		}
+
+		MemorizeSpell(slot, cur, memSpellMemorize);
+	};
+
 	if (!IsValidSpell(m->spell_id)) {
 		Message(
 			Chat::Red,
@@ -1172,6 +1205,9 @@ void Client::OPMemorizeSpell(const EQApplicationPacket* app)
 				m->spell_id
 			).c_str()
 		);
+		if (m->scribing == memSpellMemorize) {
+			cancel_memorize_ui(m->slot);
+		}
 		return;
 	}
 
@@ -1179,15 +1215,50 @@ void Client::OPMemorizeSpell(const EQApplicationPacket* app)
 		m->scribing != memSpellForget &&
 		(
 			!IsPlayerClass(GetClass()) ||
-			GetLevel() < spells[m->spell_id].classes[GetClass() - 1]
+			[&]() -> bool {
+				uint8 best_req_level = 255;
+				bool any_usable = false;
+				for (uint8 class_id = 1; class_id <= Class::PLAYER_CLASS_COUNT; ++class_id) {
+					if (!HasClass(class_id)) {
+						continue;
+					}
+
+					const uint8 req = spells[m->spell_id].classes[class_id - 1];
+					if (req == 255) {
+						continue;
+					}
+
+					any_usable = true;
+					if (req < best_req_level) {
+						best_req_level = req;
+					}
+				}
+
+				if (!any_usable) {
+					Message(Chat::Red, "Your classes cannot use this spell.");
+					if (m->scribing == memSpellMemorize) {
+						cancel_memorize_ui(m->slot);
+					}
+					return true;
+				}
+
+				if (GetLevel() < best_req_level) {
+					MessageString(
+						Chat::Red,
+						SPELL_LEVEL_TO_LOW,
+						std::to_string(best_req_level).c_str(),
+						spells[m->spell_id].name
+					);
+					if (m->scribing == memSpellMemorize) {
+						cancel_memorize_ui(m->slot);
+					}
+					return true;
+				}
+
+				return false;
+			}()
 		)
 	) {
-		MessageString(
-			Chat::Red,
-			SPELL_LEVEL_TO_LOW,
-			std::to_string(spells[m->spell_id].classes[GetClass() - 1]).c_str(),
-			spells[m->spell_id].name
-		);
 		return;
 	}
 
@@ -1201,7 +1272,17 @@ void Client::OPMemorizeSpell(const EQApplicationPacket* app)
 				if (
 					item &&
 					RuleB(Character, RestrictSpellScribing) &&
-					!item->IsEquipable(GetRace(), GetClass())
+					[&]() -> bool {
+						for (uint8 class_id = 1; class_id <= Class::PLAYER_CLASS_COUNT; ++class_id) {
+							if (!HasClass(class_id)) {
+								continue;
+							}
+							if (item->IsEquipable(GetRace(), class_id)) {
+								return false;
+							}
+						}
+						return true;
+					}()
 				) {
 					MessageString(Chat::Red, CANNOT_USE_ITEM);
 					break;
@@ -1224,6 +1305,8 @@ void Client::OPMemorizeSpell(const EQApplicationPacket* app)
 			} else {
 				std::string message = fmt::format("OP_MemorizeSpell [{}] but we don't have this spell scribed", m->spell_id);
 				RecordPlayerEventLog(PlayerEvent::POSSIBLE_HACK, PlayerEvent::PossibleHackEvent{.message = message});
+				Message(Chat::Red, "You don't have that spell scribed.");
+				cancel_memorize_ui(m->slot);
 			}
 			break;
 		}
@@ -1771,7 +1854,7 @@ void Client::OPGMTrainSkill(const EQApplicationPacket *app)
 
 		if (skilllevel == 0) {
 			//this is a new skill..
-			uint16 t_level = GetSkillTrainLevel(skill, GetClass());
+			uint16 t_level = GetSkillTrainLevel(skill);
 
 			if (t_level == 0) {
 				LogSkills("Tried to train a new skill [{}] which is invalid for this race/class.", skill);

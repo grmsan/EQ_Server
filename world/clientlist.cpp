@@ -54,10 +54,6 @@ static uint16 GetMulticlassBitsOrBase(uint32 character_id, uint8 base_class_id)
 {
 	const uint16 base_bit = GetPlayerClassBit(base_class_id);
 
-	if (!RuleB(Custom, MulticlassingEnabled)) {
-		return base_bit;
-	}
-
 	const auto bucket_key = RuleS(Custom, MulticlassBucketKey);
 	if (bucket_key.empty() || character_id == 0) {
 		return base_bit;

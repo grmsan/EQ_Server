@@ -1051,6 +1051,7 @@ EQLIB_VAR DWORD CSliderWnd__GetValue;
 EQLIB_VAR DWORD CSliderWnd__SetValue;
 EQLIB_VAR DWORD CSliderWnd__SetNumTicks;
 
+EQLIB_VAR DWORD CSpellBookWnd__CanStartMemming;
 EQLIB_VAR DWORD CSpellBookWnd__MemorizeSet;
 
 EQLIB_VAR DWORD CStmlWnd__AppendSTML;
@@ -1142,8 +1143,12 @@ EQLIB_VAR DWORD EQ_Character__CastSpell;
 EQLIB_VAR DWORD EQ_Character__Cur_HP;
 EQLIB_VAR DWORD EQ_Character__GetAACastingTimeModifier;
 EQLIB_VAR DWORD EQ_Character__GetCharInfo2;
+EQLIB_VAR DWORD EQ_Character__GetUsableClasses;
 EQLIB_VAR DWORD EQ_Character__GetFocusCastingTimeModifier;
 EQLIB_VAR DWORD EQ_Character__GetFocusRangeModifier;
+EQLIB_VAR DWORD EQ_Character__IsSpellcaster;
+EQLIB_VAR DWORD EQ_Character__IsSpellcaster_2;
+EQLIB_VAR DWORD EQ_Character__IsSpellcaster_3;
 EQLIB_VAR DWORD EQ_Character__Max_Endurance;
 EQLIB_VAR DWORD EQ_Character__Max_HP;
 EQLIB_VAR DWORD EQ_Character__Max_Mana;
@@ -1152,6 +1157,8 @@ EQLIB_VAR DWORD EQ_Character__UseSkill;
 EQLIB_VAR DWORD EQ_Character__GetConLevel;
 EQLIB_VAR DWORD EQ_Character__IsExpansionFlag;
 EQLIB_VAR DWORD EQ_Character__TotalEffect;
+
+EQLIB_VAR DWORD EQ_Spell__GetSpellLevelNeeded;
 
 EQLIB_VAR DWORD EQ_Item__CanDrop;
 EQLIB_VAR DWORD EQ_Item__CreateItemTagString;
@@ -1205,5 +1212,3 @@ EQLIB_VAR DWORD PcZoneClient__GetPcSkillLimit;
 
 }
 using namespace MQ2Globals;
-
-

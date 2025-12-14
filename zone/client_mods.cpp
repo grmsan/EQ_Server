@@ -19,6 +19,7 @@
 #include "../common/global_define.h"
 #include "../common/eqemu_logsys.h"
 
+#include "../common/classes.h"
 #include "../common/rulesys.h"
 #include "../common/spdat.h"
 
@@ -619,7 +620,30 @@ int32 Client::GetRawItemAC()
 
 int64 Client::CalcMaxMana()
 {
-	if (IsIntelligenceCasterClass() || IsWisdomCasterClass()) {
+	uint8 mana_class = GetClass();
+	// Prefer a spellcasting class from the multiclass bitmask when present (enables mana for hybrids/casters).
+	for (const uint8 class_id : {
+		Class::Wizard,
+		Class::Magician,
+		Class::Necromancer,
+		Class::Enchanter,
+		Class::Cleric,
+		Class::Druid,
+		Class::Shaman,
+		Class::Ranger,
+		Class::Paladin,
+		Class::ShadowKnight,
+		Class::Bard,
+		Class::Beastlord
+	}) {
+		if (HasClass(class_id)) {
+			mana_class = class_id;
+			break;
+		}
+	}
+
+	// Any class that uses mana (casters + hybrids) should have mana.
+	if (IsCasterClass(mana_class) || IsHybridClass(mana_class)) {
 		max_mana = (
 			CalcBaseMana() +
 			itembonuses.Mana +
@@ -653,6 +677,27 @@ int64 Client::CalcMaxMana()
 
 int64 Client::CalcBaseMana()
 {
+	uint8 mana_class = GetClass();
+	for (const uint8 class_id : {
+		Class::Wizard,
+		Class::Magician,
+		Class::Necromancer,
+		Class::Enchanter,
+		Class::Cleric,
+		Class::Druid,
+		Class::Shaman,
+		Class::Ranger,
+		Class::Paladin,
+		Class::ShadowKnight,
+		Class::Bard,
+		Class::Beastlord
+	}) {
+		if (HasClass(class_id)) {
+			mana_class = class_id;
+			break;
+		}
+	}
+
 	int   ConvertedWisInt = 0;
 	int   MindLesserFactor, MindFactor;
 	int   WisInt          = 0;
@@ -660,7 +705,11 @@ int64 Client::CalcBaseMana()
 	int   wisint_mana     = 0;
 	int64 max_m           = 0;
 
-	if (IsIntelligenceCasterClass()) {
+	// Hybrids still use INT/WIS for mana depending on class.
+	const bool uses_int = IsINTCasterClass(mana_class) || IsHeroicINTCasterClass(mana_class);
+	const bool uses_wis = IsWISCasterClass(mana_class) || IsHeroicWISCasterClass(mana_class);
+
+	if (uses_int) {
 		WisInt = GetINT();
 
 		if (ClientVersion() >= EQ::versions::ClientVersion::SoF && RuleB(Character, SoDClientUseSoDHPManaEnd)) {
@@ -674,7 +723,7 @@ int64 Client::CalcBaseMana()
 				ConvertedWisInt = (3 * over200 - 300) / 2 + over200;
 			}
 
-			auto base_data = zone->GetBaseData(GetLevel(), GetClass());
+			auto base_data = zone->GetBaseData(GetLevel(), mana_class);
 			if (base_data.level == GetLevel()) {
 				max_m = base_data.mana + (ConvertedWisInt * base_data.mana_fac) + itembonuses.heroic_max_mana;
 			}
@@ -693,7 +742,7 @@ int64 Client::CalcBaseMana()
 				max_m = (((5 * (MindFactor + 200)) / 2) * 3 * GetLevel() / 100);
 			}
 		}
-	} else if (IsWisdomCasterClass()) {
+	} else if (uses_wis) {
 		WisInt = GetWIS();
 
 		if (ClientVersion() >= EQ::versions::ClientVersion::SoF && RuleB(Character, SoDClientUseSoDHPManaEnd)) {
@@ -707,7 +756,7 @@ int64 Client::CalcBaseMana()
 				ConvertedWisInt = (3 * over200 - 300) / 2 + over200;
 			}
 
-			auto base_data = zone->GetBaseData(GetLevel(), GetClass());
+			auto base_data = zone->GetBaseData(GetLevel(), mana_class);
 			if (base_data.level == GetLevel()) {
 				max_m = base_data.mana + (ConvertedWisInt * base_data.mana_fac) + itembonuses.heroic_max_mana;
 			}

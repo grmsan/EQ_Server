@@ -2396,10 +2396,31 @@ void Mob::SendStatsWindow(Client* c, bool use_window)
 	std::string final_string;
 
 	// Class, Level, and Race
+	std::string class_display = GetPlayerClassAbbreviation(GetClass());
+	if (IsClient() && RuleB(Custom, MulticlassingEnabled)) {
+		auto *tc = CastToClient();
+		const uint16 bits = tc->GetClassesBitmask();
+		if (tc->GetClassesCount() > 1) {
+			std::string multi;
+			for (uint8 class_id = 1; class_id <= Class::PLAYER_CLASS_COUNT; ++class_id) {
+				if ((bits & GetPlayerClassBit(class_id)) == 0) {
+					continue;
+				}
+				if (!multi.empty()) {
+					multi += "/";
+				}
+				multi += GetPlayerClassAbbreviation(class_id);
+			}
+			if (!multi.empty()) {
+				class_display = std::move(multi);
+			}
+		}
+	}
+
 	final_string += DialogueWindow::Table(
 		DialogueWindow::TableRow(
 			DialogueWindow::TableCell(fmt::format("Race: {}", GetPlayerRaceAbbreviation(GetBaseRace()))) +
-			DialogueWindow::TableCell(fmt::format("Class: {}", GetPlayerClassAbbreviation(GetClass()))) +
+			DialogueWindow::TableCell(fmt::format("Class: {}", class_display)) +
 			DialogueWindow::TableCell(fmt::format("Level: {}", std::to_string(GetLevel())))
 		)
 	);
@@ -8371,7 +8392,7 @@ void Mob::DeleteBucket(std::string bucket_name)
 	DataBucket::DeleteData(k);
 }
 
-std::string Mob::GetBucket(std::string bucket_name)
+std::string Mob::GetBucket(std::string bucket_name) const
 {
 	DataBucketKey k = GetScopedBucketKeys();
 	k.key = bucket_name;
@@ -8383,7 +8404,7 @@ std::string Mob::GetBucket(std::string bucket_name)
 	return {};
 }
 
-std::string Mob::GetBucketExpires(std::string bucket_name)
+std::string Mob::GetBucketExpires(std::string bucket_name) const
 {
 	DataBucketKey k = GetScopedBucketKeys();
 	k.key = bucket_name;
@@ -8396,7 +8417,7 @@ std::string Mob::GetBucketExpires(std::string bucket_name)
 	return {};
 }
 
-std::string Mob::GetBucketRemaining(std::string bucket_name)
+std::string Mob::GetBucketRemaining(std::string bucket_name) const
 {
 	DataBucketKey k = GetScopedBucketKeys();
 	k.key = bucket_name;
@@ -8655,7 +8676,7 @@ std::string Mob::GetClassPlural()
 	}
 }
 
-DataBucketKey Mob::GetScopedBucketKeys()
+DataBucketKey Mob::GetScopedBucketKeys() const
 {
 	DataBucketKey k = {};
 	if (IsClient()) {

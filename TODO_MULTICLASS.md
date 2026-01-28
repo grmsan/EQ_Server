@@ -2,9 +2,16 @@
 
 This file tracks multiclass-related work items and a repeatable in-game test checklist.
 
+**Master Technical Document:** [game_design/multiclass/IMPLEMENTATION_PLAN.md](game_design/multiclass/IMPLEMENTATION_PLAN.md)
+
+For the THJServer parity/port effort, use `TODO_THJSERVER_MULTICLASS_PORT.md`.
+
+---
+
 ## Current Status / Known Bugs (keep updated)
 
-**As of 2025-12-14**
+**As of 2026-01-28**
+
 - Multiclass bitmask is databucket-backed (`Custom:MulticlassBucketKey`) and can be modified via `#addclass/#removeclass`.
 - `#mystats` chat output shows multiclass (classes_bitmask/count/classes) but the stats **window** still needs verification after changes.
 - Skills seeding on `#addclass` was implemented (intended to make Tracking/Mend/etc appear) and `SkillCaps::GetSkillTrainLevel()` was fixed (previously could always return 0). Needs re-test.
@@ -12,11 +19,15 @@ This file tracks multiclass-related work items and a repeatable in-game test che
 - Spell usability/UI is still unstable:
   - Reports: can scribe spells for added class but memorize bar can hang (progress never completes).
   - Reports: spell merchant "Show usable items" either (a) only filters to original class or (b) shows everything but all class required levels show as `255`.
+- Spell vendor filter/display issues:
+  - Wizard-only scrolls (example: `Spell: Column of Frost`, item id `15380`) still appear for non-wizard multiclass when "Show usable items" is checked.
+  - Aggregated spell display shows the base class label with a level (e.g., `RNG(2)`) instead of the actual owning class (`MAG(2)`), plus `255` entries for unrelated classes.
+  - Merchant filter source-of-truth still unclear (item class mask vs spell-level checks).
 - `/who` multiclass display is inconsistent (often shows only the original class). Must confirm `world.exe` is rebuilt/restarted and that `UpdateWho()` is triggered on class changes.
 - Fast camp testing rules existed but camp still took ~30s; server now disconnects on camp timer expiry (re-test with the rules enabled).
 
 **Recent changes that require re-test**
-- DLL: `EQ_Spell::GetSpellLevelNeeded` detour now tries to auto-detect class-id vs class-index arguments and uses the multiclass bitmask to choose the best required level.
+- DLL: `EQ_Spell::GetSpellLevelNeeded` detour (RoF2) now treats the argument as `class_id` (thiscall-style) and returns the best required level across owned classes based on the multiclass mask.
 - DLL: `EQ_Character::GetUsableClasses` detour now falls back to base-class-only (instead of “all classes”) until the server multiclass mask arrives.
 - DLL: `PcZoneClient::GetPcSkillLimit` detour now exposes skills that the server has already granted (so they appear in the skills window even if base class cap would be 0).
 - World: `/who` multiclass suffix now reads the databucket even if `Custom:MulticlassingEnabled` is out-of-sync between world/zone (still requires rebuild/restart).

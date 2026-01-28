@@ -1,69 +1,157 @@
-# Multiclass (3-at-once) – Technical Exploration
+# Multiclass (Gestalt) System
 
-Goal: allow a single character to be simultaneously three classes (shared level) with access to all gear/spells/AAs/skills of any of the three, and have the client display all three classes. This is an exploration doc to map work needed on server + eq-core DLL.
+**Status:** Active Implementation
+**Max Classes:** 3 (configurable via `Custom:MulticlassMaxClasses`)
+**Reference Implementation:** THJServer (`/extras/THJServer/`)
 
-## Core Constraints & Targets
-- Character keeps one level, one inventory, one AA pool, one spellbook, one skill table.
-- Each of the 3 chosen classes contributes:
-  - Equipment use flags (deity/race remain).
-  - Spell gems/book access and casting rules.
-  - AA availability and activation.
-  - Skill caps and innate class bonuses (pets, disciplines).
-  - UI display of all three class names in client.
-- Server authoritative; DLL only for client presentation or UI unlocks.
+---
 
-## Server-Side Work (high level)
-- Data model
-  - Extend character record to store `class_primary`, `class_secondary`, `class_tertiary` (or array of 3 class IDs).
-  - Extend rule set to gate the feature (enable/disable multiclass).
-- Capability resolution
-  - Skills: merge per-class caps; likely max(cap) or sum? Decide per-skill strategy; store merged caps per level.
-  - Spells: union of class spell lists; maintain memorization limits; add validation in `CastSpell`, `Client::MemorizeSpell`.
-  - AAs: union of class AA tables; gate purchase by level and choose how AA bonuses stack (watch duplicates).
-  - Innates/disciplines: allow activation of disciplines from any of the three classes; ensure reuse timers shared.
-  - Pets: allow pet families for pet classes; avoid double-adding passive pet bonuses.
-  - Item class checks: relax `Classes` mask to permit any of the 3 classes.
-- Networking
-  - Pack all 3 class IDs in player profile (the client only knows one; DLL will read the extra payload).
-  - Option: embed in an unused section of `OP_PlayerProfile` or a custom opcode to be consumed by the DLL (patterned after classless DLL’s custom opcodes).
+## Overview
 
-## Client/DLL Work
-- Hook incoming profile: capture the extra class IDs carried in the server packet/custom opcode.
-- UI display:
-  - Override class labels to show “Class1 / Class2 / Class3”.
-  - Optionally show combined skill caps or per-class caps in alternate UI panels.
-- Equipment gating:
-  - If client refuses equipping based on single-class mask, bypass via DLL (similar to classless DLL hook).
-- Spell/AAs:
-  - UI should allow viewing and memorizing spells from all three classes; may need DLL to relax client-side filters.
-- Logging: add debug breadcrumb when multiclass payload is received and parsed.
+The multiclass system allows a single character to simultaneously hold multiple classes (up to 3 by default). All owned classes share:
+- One level, one inventory, one AA pool
+- One spellbook (union of all class spells)
+- One skill table (max caps from any owned class)
 
-## Proposed Payload Strategy (server → client)
-- Reuse classless pattern: add a custom opcode (e.g., `OP_MultiClassInfo`) with a small struct:
-  ```
-  struct MultiClassInfo { uint8 count; uint8 class_ids[3]; }
-  ```
-  - Send on zone-in and on class change.
-  - DLL caches and updates UI labels.
-- For the base profile (`OP_PlayerProfile`), optionally stash the extra classes in unused bytes at a known offset; DLL can read them if present for redundancy.
+**Key Principle:** Server authoritative, client displays via DLL hooks.
 
-## Testing Plan (incremental)
-1) Server only: add 3-class fields; unit test merge rules for skills/spells/AA eligibility.
-2) Server packets: add `OP_MultiClassInfo`; log send/receive counts.
-3) DLL: hook packet, log cached classes, override class label text; verify in-game display.
-4) Equip tests: items restricted to any of the 3 classes equip successfully.
-5) Spell/AAs: ensure UI shows and allows casting/activation of abilities from all three classes.
-6) Regression: normal single-class players unaffected when rule disabled.
+---
 
-## Open Design Questions
-- Skill cap merge policy (max vs weighted vs per-tree choice).
-- Duplicate AA effects stacking rules.
-- Discipline reuse timers shared or per-class?
-- Pet conflicts (multiple pet classes at once).
-- Balance rule: optional “main class” focus vs full parity.
+## Quick Links
 
-## Next Steps
-- Decide merge policies (skills/AA/pets) and document per-system.
-- Add server fields + rule flag; create packet scaffolding for `OP_MultiClassInfo`.
-- Implement DLL packet hook (reuse classless `HandleWorldMessage` detour pattern) to cache/display the three classes.
-- Build QA matrix to cover gear, spells, AAs, skills, pets, and UI. 
+| Document | Description |
+|----------|-------------|
+| [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) | **Master technical design document** |
+| [/TODO_MULTICLASS.md](/TODO_MULTICLASS.md) | Bug tracking and test checklist |
+| [/TODO_THJSERVER_MULTICLASS_PORT.md](/TODO_THJSERVER_MULTICLASS_PORT.md) | File-by-file THJ parity status |
+| [/MULTICLASS_SYSTEM_OVERVIEW.md](/MULTICLASS_SYSTEM_OVERVIEW.md) | High-level architecture overview |
+| [/extras/THJServer/docs/multiclass.md](/extras/THJServer/docs/multiclass.md) | THJ reference documentation |
+
+---
+
+## How It Works
+
+### Class Storage
+- **Primary class:** `character_data.class` (unchanged, base class ID)
+- **All classes:** `data_buckets.GestaltClasses` (16-bit bitmask)
+
+### Bitmask Format
+```
+Bit 0  = Warrior (1)      Bit 8  = Rogue (256)
+Bit 1  = Cleric (2)       Bit 9  = Shaman (512)
+Bit 2  = Paladin (4)      Bit 10 = Necromancer (1024)
+Bit 3  = Ranger (8)       Bit 11 = Wizard (2048)
+Bit 4  = ShadowKnight (16) Bit 12 = Magician (4096)
+Bit 5  = Druid (32)       Bit 13 = Enchanter (8192)
+Bit 6  = Monk (64)        Bit 14 = Beastlord (16384)
+Bit 7  = Bard (128)       Bit 15 = Berserker (32768)
+
+Example: Warrior + Ranger + Mage = 1 + 8 + 4096 = 4105
+```
+
+### Server-Client Communication
+1. Server stores bitmask in `GestaltClasses` data bucket
+2. Server sends `EdgeStatLabel` packet (opcode 0x1338) with key 200 = classes_bitmask
+3. DLL (`dinput8.dll`) parses packet, caches mask
+4. DLL overrides client functions to use server mask for UI filtering
+
+---
+
+## GM Commands
+
+```
+#addclass <id>      Add a class to target (or self)
+#addclass list      Show all classes with ownership status
+#removeclass <id>   Remove a class from target
+#multiclassdiag     Full multiclass diagnostic dump
+#mystats            Shows classes_bitmask in output
+```
+
+---
+
+## Server Rules
+
+```cpp
+Custom:MulticlassingEnabled   true    // Master toggle
+Custom:MulticlassMaxClasses   3       // Max classes allowed
+Custom:MulticlassBucketKey    "GestaltClasses"  // Data bucket key
+Custom:ServerAuthStats        true    // Enable EdgeStatLabel
+Custom:UseDynamicAATimers     true    // Deconflict AA timers
+Custom:BypassMulticlassStackConflict  false  // Cross-class buff stacking
+```
+
+---
+
+## Client DLL Setup
+
+1. Build DLL: `extras/eq-core-dll-main/eq-core-dll-visualstudio2022.sln`
+2. Copy `dinput8.dll` to RoF2 client directory
+3. Restart client after any DLL update
+4. Check `dinput8_debug.log` for diagnostics
+
+Key DLL options (`_options.h`):
+- `isMulticlassUsableClassesOverrideEnabled = true`
+- `isMulticlassSpellUiOverrideEnabled = true`
+- `isMulticlassClassNameOverrideEnabled = true`
+
+---
+
+## Current Status
+
+See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for detailed phase status.
+
+**Working:**
+- Class bitmask persistence and API
+- GM commands (#addclass, #removeclass, #multiclassdiag)
+- EdgeStatLabel integration
+- Basic DLL detours
+
+**In Progress:**
+- Spell system integration
+- AA window completeness
+- Skills window visibility
+
+**Known Issues:**
+- Spell merchant filter not fully multiclass-aware
+- Some AAs missing from window
+- Skills for added classes sometimes hidden
+
+---
+
+## Design Decisions
+
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| Storage | Data bucket bitmask | Flexible, no schema changes needed |
+| Communication | EdgeStatLabel opcode | Reuses existing DLL infrastructure |
+| Skill caps | Max from any owned class | "All classes equal" principle |
+| Spell access | Union of all class spells | Full access to owned class abilities |
+| Soft-lock | Retain learned, gate at use-time | Player-friendly, reversible |
+
+---
+
+## Testing Checklist
+
+Quick smoke test after changes:
+1. Fresh client restart with updated DLL
+2. Server restart after rebuild
+3. `#multiclassdiag` - verify state
+4. `#addclass <id>` - verify bitmask update
+5. Check `dinput8_debug.log` for EdgeStatLabel
+6. Test specific feature (spell/AA/skill)
+7. `#removeclass <id>` - verify soft-lock
+
+---
+
+## Legacy Notes (Original Exploration)
+
+The original exploration document proposed:
+- Custom opcode `OP_MultiClassInfo` - **Replaced by EdgeStatLabel key 200**
+- Array of 3 class IDs - **Replaced by 16-bit bitmask**
+- Profile byte stashing - **Not needed with EdgeStatLabel approach**
+
+The current implementation follows THJServer patterns which proved more robust.
+
+---
+
+*See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for complete technical documentation.*

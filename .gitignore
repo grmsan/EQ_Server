@@ -73,8 +73,11 @@ skill-caps.diff
 *.tlog
 shared/items
 debug_item_packet.txt
-extras/eq-core-dll-main/msbuild_output.log
-extras/eq-core-dll-main/msbuild_output.log
 /extras/classless-dll-main
 /extras/eqemu-docs-v2-main
 extras/eq-core-dll-main/msbuild_output.log
+/extras/THJServer
+
+# Local tool outputs
+/tools/__pycache__/
+/tools/output/

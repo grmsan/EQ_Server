@@ -21,20 +21,128 @@ GNU General Public License for more details.
 
 #include "MQ2Main.h"
 
-class CChatHook 
-{ 
-public: 
-    VOID Trampoline(PCHAR szMsg, DWORD dwColor, bool EqLog, bool dopercentsubst); 
-    VOID Detour(PCHAR szMsg, DWORD dwColor, bool EqLog, bool dopercentsubst) 
-    { 
-        //DebugSpew("CChatHook::Detour(%s)",szMsg); 
-        gbInChat = TRUE; 
+static bool RewriteWhoLine(const char *in, char *out, size_t out_size)
+{
+    if (!in || !out || out_size < 16) {
+        return false;
+    }
 
+    // Expect a normal /who prefix: "[<level> <class>] ..."
+    if (in[0] != '[' || !isdigit((unsigned char)in[1])) {
+        return false;
+    }
+
+    // Parse level from the first bracket.
+    const char *p = in + 1;
+    unsigned long level = 0;
+    while (*p && isdigit((unsigned char)*p)) {
+        level = (level * 10) + (unsigned long)(*p - '0');
+        ++p;
+    }
+    if (*p != ' ') {
+        return false;
+    }
+
+    const char *close1 = strchr(in, ']');
+    if (!close1 || close1 <= in) {
+        return false;
+    }
+
+    // Look for a multiclass suffix the server can append to the name: " [RNG/MNK/MAG]".
+    const char *suffix_space = nullptr;
+    const char *suffix_open = nullptr;
+    const char *suffix_close = nullptr;
+    for (const char *s = close1 + 1; (s = strstr(s, " [")) != nullptr; ++s) {
+        const char *open = s + 1; // points at '['
+        const char *close = strchr(open, ']');
+        if (!close) {
+            break;
+        }
+
+        bool has_slash = false;
+        bool valid = true;
+        for (const char *c = open + 1; c < close; ++c) {
+            if (*c == '/') {
+                has_slash = true;
+                continue;
+            }
+            if (*c >= 'A' && *c <= 'Z') {
+                continue;
+            }
+            valid = false;
+            break;
+        }
+
+        if (valid && has_slash) {
+            suffix_space = s;
+            suffix_open = open;
+            suffix_close = close;
+            break;
+        }
+
+        s = close;
+    }
+
+    if (!suffix_space || !suffix_open || !suffix_close) {
+        return false;
+    }
+
+    char classes[64] = {0};
+    const size_t classes_len = (size_t)(suffix_close - (suffix_open + 1));
+    if (classes_len == 0 || classes_len >= sizeof(classes)) {
+        return false;
+    }
+    memcpy(classes, suffix_open + 1, classes_len);
+    classes[classes_len] = 0;
+
+    int n = _snprintf_s(out, out_size, _TRUNCATE, "[%lu %s]", level, classes);
+    if (n <= 0) {
+        return false;
+    }
+    size_t off = (size_t)n;
+
+    // Keep the original portion from after the first bracket up to (but not including) the multiclass suffix.
+    // This preserves the character name and the rest of the /who line.
+    const char *mid_start = close1 + 1;
+    const char *mid_end = suffix_space;
+    if (mid_end < mid_start) {
+        return false;
+    }
+    const size_t mid_len = (size_t)(mid_end - mid_start);
+    if (off + mid_len >= out_size) {
+        return false;
+    }
+    memcpy(out + off, mid_start, mid_len);
+    off += mid_len;
+
+    // Append the remainder after the suffix closing bracket.
+    const char *rest = suffix_close + 1;
+    const size_t rest_len = strlen(rest);
+    if (off + rest_len >= out_size) {
+        return false;
+    }
+    memcpy(out + off, rest, rest_len + 1);
+    return true;
+}
+
+class CChatHook
+{
+public:
+    VOID Trampoline(PCHAR szMsg, DWORD dwColor, bool EqLog, bool dopercentsubst);
+    VOID Detour(PCHAR szMsg, DWORD dwColor, bool EqLog, bool dopercentsubst)
+    { 
+        //DebugSpew("CChatHook::Detour(%s)",szMsg);
+        gbInChat = TRUE;
+
+        char rewritten[MAX_STRING] = {0};
+        if (RewriteWhoLine(szMsg, rewritten, sizeof(rewritten))) {
+            szMsg = rewritten;
+        }
 
         //CheckChatForEvent(szMsg);
 
-        BOOL Filtered=FALSE; 
-        PFILTER Filter = gpFilters; 
+        BOOL Filtered=FALSE;
+        PFILTER Filter = gpFilters;
         while (Filter && !Filtered) { 
             if (!Filter->pEnabled || (*Filter->pEnabled)) { 
                 if (*Filter->FilterText == '*') {

@@ -536,6 +536,32 @@ void Client::CompleteConnect()
 	UpdateWho();
 	client_state = CLIENT_CONNECTED;
 	SendAllPackets();
+
+	// THJServer parity/migration: if this character only has the legacy multiclass bucket populated,
+	// write GestaltClasses once so future reads are consistent.
+	if (RuleB(Custom, MulticlassingEnabled) && GetBucket("GestaltClasses").empty()) {
+		std::string raw;
+		const auto configured_key = RuleS(Custom, MulticlassBucketKey);
+		if (!configured_key.empty() && configured_key != "GestaltClasses") {
+			raw = GetBucket(configured_key);
+		}
+		if (raw.empty()) {
+			raw = GetBucket("multiclass.classes_bitmask");
+		}
+		if (!raw.empty()) {
+			SetBucket("GestaltClasses", raw);
+		}
+	}
+
+	// RoF2 + custom DLL: ensure the client gets an initial server-authoritative snapshot (including multiclass bitmask)
+	// early in the session so UI filters ("show usable items", tooltips, etc) have data before windows are opened.
+	if (ClientVersion() == EQ::versions::ClientVersion::RoF2 && (RuleB(Custom, ServerAuthStats) || RuleB(Custom, MulticlassingEnabled))) {
+		SendEdgeStats();
+		// The DLL installs packet/hooks once the client is fully in-game; we may miss the first snapshot.
+		// Retry a few times shortly after connect to avoid requiring manual `#multiclassdiag refresh` each login.
+		edge_stats_retry_attempts = 0;
+		edge_stats_retry_timer.Start();
+	}
 	hpupdate_timer.Start();
 	autosave_timer.Start();
 	SetDuelTarget(0);
@@ -1259,6 +1285,13 @@ void Client::Handle_Connect_OP_ZoneComplete(const EQApplicationPacket *app)
 	auto outapp = new EQApplicationPacket(OP_0x0347, 0);
 	QueuePacket(outapp);
 	safe_delete(outapp);
+
+	// RoF2 + custom DLL: resend EdgeStatLabel after zone load completes.
+	// The DLL installs detours after the client enters GAMESTATE_INGAME, so a snapshot sent earlier
+	// during connect can be missed; this avoids needing manual `#multiclassdiag refresh` every login/zone.
+	if (ClientVersion() == EQ::versions::ClientVersion::RoF2 && (RuleB(Custom, ServerAuthStats) || RuleB(Custom, MulticlassingEnabled))) {
+		SendEdgeStats();
+	}
 	return;
 }
 

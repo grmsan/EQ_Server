@@ -16,11 +16,13 @@
 	Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 */
 #include "../common/data_verification.h"
+#include "../common/classes.h"
 #include "../common/global_define.h"
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
 #include <iostream>
+#include <vector>
 
 #ifdef _WINDOWS
 #else
@@ -4884,7 +4886,62 @@ void EntityList::ZoneWho(Client *c, Who_All_Struct *Who)
 	uint32 Entries = 0;
 	uint8 WhomLength = strlen(Who->whom);
 
-	std::list<Client *> client_sub_list;
+	auto count_bits16 = [](uint16 bits) -> uint8 {
+		uint8 count = 0;
+		while (bits) {
+			count += (bits & 1) ? 1 : 0;
+			bits >>= 1;
+		}
+		return count;
+	};
+
+	auto build_multiclass_abbrev_list = [&](uint16 bits) -> std::string {
+		std::string out;
+		for (uint8 class_id = 1; class_id <= 16; ++class_id) {
+			if ((bits & GetPlayerClassBit(class_id)) == 0) {
+				continue;
+			}
+			if (!out.empty()) {
+				out += "/";
+			}
+			out += GetPlayerClassAbbreviation(class_id);
+		}
+		return out;
+	};
+
+	auto build_display_name = [&](const Client *client) -> std::string {
+		std::string name = client->GetName();
+		const uint16 bits = client->GetClassesBitmask();
+		if (RuleB(Custom, MulticlassingEnabled) && count_bits16(bits) > 1) {
+			auto classes = build_multiclass_abbrev_list(bits);
+			if (!classes.empty()) {
+				name = fmt::format("{} [{}]", name, classes);
+				if (name.size() >= 64) {
+					name.resize(63);
+				}
+			}
+		}
+		return name;
+	};
+
+	auto matches_class = [&](const Client *client) -> bool {
+		if (Who->wclass == 0xFFFFFFFF) {
+			return true;
+		}
+		if (Who->wclass < 1 || Who->wclass > 16) {
+			return false;
+		}
+		return client->HasClass(static_cast<uint8>(Who->wclass));
+	};
+
+	struct ZoneWhoEntry {
+		Client *client = nullptr;
+		std::string display_name;
+	};
+
+	std::vector<ZoneWhoEntry> entries;
+	entries.reserve(client_list.size());
+
 	auto it = client_list.begin();
 	while (it != client_list.end()) {
 		Client *ClientEntry = it->second;
@@ -4895,7 +4952,7 @@ void EntityList::ZoneWho(Client *c, Who_All_Struct *Who)
 				continue;
 			if ((Who->wrace != 0xFFFFFFFF) && (ClientEntry->GetRace() != Who->wrace))
 				continue;
-			if ((Who->wclass != 0xFFFFFFFF) && (ClientEntry->GetClass() != Who->wclass))
+			if (!matches_class(ClientEntry))
 				continue;
 			if ((Who->lvllow != 0xFFFFFFFF) && (ClientEntry->GetLevel() < Who->lvllow))
 				continue;
@@ -4914,10 +4971,12 @@ void EntityList::ZoneWho(Client *c, Who_All_Struct *Who)
 				continue;
 
 			Entries++;
-			client_sub_list.push_back(ClientEntry);
+			ZoneWhoEntry e;
+			e.client = ClientEntry;
+			e.display_name = build_display_name(ClientEntry);
+			entries.push_back(std::move(e));
 
-			PacketLength = PacketLength + strlen(ClientEntry->GetName());
-
+			PacketLength += static_cast<uint32>(entries.back().display_name.size());
 			if (strlen(guild_mgr.GetGuildName(ClientEntry->GuildID())) > 0)
 				PacketLength = PacketLength + strlen(guild_mgr.GetGuildName(ClientEntry->GuildID())) + 2;
 		}
@@ -4951,22 +5010,20 @@ void EntityList::ZoneWho(Client *c, Who_All_Struct *Who)
 	WARS->playercount = Entries;
 	Buffer += sizeof(WhoAllReturnStruct);
 
-	auto sit = client_sub_list.begin();
-	while (sit != client_sub_list.end()) {
-		Client *ClientEntry = *sit;
-		++sit;
+	for (const auto &e : entries) {
+		Client *ClientEntry = e.client;
 
-		if (ClientEntry) {
-			if (ClientEntry->GMHideMe(c))
-				continue;
-			if ((Who->wrace != 0xFFFFFFFF) && (ClientEntry->GetRace() != Who->wrace))
-				continue;
-			if ((Who->wclass != 0xFFFFFFFF) && (ClientEntry->GetClass() != Who->wclass))
-				continue;
-			if ((Who->lvllow != 0xFFFFFFFF) && (ClientEntry->GetLevel() < Who->lvllow))
-				continue;
-			if ((Who->lvlhigh != 0xFFFFFFFF) && (ClientEntry->GetLevel() > Who->lvlhigh))
-				continue;
+			if (ClientEntry) {
+				if (ClientEntry->GMHideMe(c))
+					continue;
+				if ((Who->wrace != 0xFFFFFFFF) && (ClientEntry->GetRace() != Who->wrace))
+					continue;
+				if (!matches_class(ClientEntry))
+					continue;
+				if ((Who->lvllow != 0xFFFFFFFF) && (ClientEntry->GetLevel() < Who->lvllow))
+					continue;
+				if ((Who->lvlhigh != 0xFFFFFFFF) && (ClientEntry->GetLevel() > Who->lvlhigh))
+					continue;
 			if (Who->guildid != 0xFFFFFFFF) {
 				if ((Who->guildid == 0xFFFFFFFC) && !ClientEntry->IsTrader())
 					continue;
@@ -4995,6 +5052,7 @@ void EntityList::ZoneWho(Client *c, Who_All_Struct *Who)
 			uint32 ZoneMSGID = 0xFFFFFFFF;
 
 			if (ClientEntry->GetAnon()==0) {
+				// Keep class as a single class id for stock client compatibility.
 				PlayerClass = ClientEntry->GetClass();
 				PlayerLevel = ClientEntry->GetLevel();
 				PlayerRace = ClientEntry->GetRace();
@@ -5003,7 +5061,7 @@ void EntityList::ZoneWho(Client *c, Who_All_Struct *Who)
 			WhoAllPlayerPart1* WAPP1 = (WhoAllPlayerPart1*)Buffer;
 			WAPP1->FormatMSGID = FormatMSGID;
 			WAPP1->PIDMSGID = 0xFFFFFFFF;
-			strcpy(WAPP1->Name, ClientEntry->GetName());
+			strcpy(WAPP1->Name, e.display_name.c_str());
 			Buffer += sizeof(WhoAllPlayerPart1) + strlen(WAPP1->Name);
 			WhoAllPlayerPart2* WAPP2 = (WhoAllPlayerPart2*)Buffer;
 

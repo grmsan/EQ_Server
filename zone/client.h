@@ -287,6 +287,8 @@ public:
 	// ---- Multi-class foundations (databucket-backed) ----
 	// These APIs provide a server-side class bitmask used by quest/plugins.
 	// Core gameplay systems still use `GetClass()` until explicitly updated.
+	uint32 GetClassesBits() const;
+	bool SetClassesBits(uint32 classes_bits);
 	uint16 GetClassesBitmask() const;
 	bool SetClassesBitmask(uint16 classes_bitmask);
 	bool AddExtraClass(uint8 class_id);
@@ -2160,6 +2162,7 @@ public:
 private:
 
 	PlayerProfile_Struct m_pp;
+	mutable uint32 m_classes_bits_cache = 0;
 	ExtendedProfile_Struct m_epp;
 	EQ::InventoryProfile m_inv;
 	Object* m_tradeskill_object;
@@ -2196,6 +2199,8 @@ private:
 
 	PTimerList p_timers; //persistent timers
 	Timer hpupdate_timer;
+	Timer edge_stats_retry_timer;
+	uint8 edge_stats_retry_attempts = 0;
 	Timer camp_timer;
 	Timer bot_camp_timer;
 	bool fast_camp_active = false;

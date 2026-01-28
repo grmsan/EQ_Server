@@ -18,6 +18,7 @@
 
 #include "../common/global_define.h"
 #include "../common/rulesys.h"
+#include "../common/classes.h"
 
 #include <ctype.h>
 #include <iomanip>
@@ -521,6 +522,29 @@ bool Database::SaveCharacterCreate(uint32 character_id, uint32 account_id, Playe
 	c.raid_auto_consent       = pp->raidAutoconsent;
 	c.guild_auto_consent      = pp->guildAutoconsent;
 	c.RestTimer               = pp->RestTimer;
+
+	// THJServer parity: store the class bitmask on character create so newly-created characters
+	// always have the GestaltClasses bucket present (even if single-class).
+	if (RuleB(Custom, MulticlassingEnabled)) {
+		const uint32 base_bit = GetPlayerClassBit(static_cast<uint8>(pp->class_));
+		const uint32 bits = base_bit;
+
+		// NOTE: Do not use DataBucket::SetData here. `common` is linked into multiple binaries that do not define
+		// ZONE/WORLD, and DataBucket implementation is gated behind those defines.
+		auto insert_query = StringFormat(
+			"REPLACE INTO data_buckets (`key`, `value`,`character_id`) VALUES ('GestaltClasses', '%u', %u)",
+			bits,
+			character_id
+		);
+		QueryDatabase(insert_query);
+
+		auto insert_query_legacy = StringFormat(
+			"REPLACE INTO data_buckets (`key`, `value`,`character_id`) VALUES ('multiclass.classes_bitmask', '%u', %u)",
+			bits,
+			character_id
+		);
+		QueryDatabase(insert_query_legacy);
+	}
 
 	CharacterDataRepository::ReplaceOne(*this, c);
 

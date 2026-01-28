@@ -150,9 +150,10 @@ Client::Client() : Mob(
 	0, // in_usemodel
 	false, // in_always_aggros_foes
 	0, // in_heroic_strikethrough
-	false // in_keeps_sold_items
-),
+				   false // in_keeps_sold_items
+ ),
 				   hpupdate_timer(2000),
+				   edge_stats_retry_timer(5000),
 				   camp_timer(29000),
 				   process_timer(100),
 				   consume_food_timer(CONSUMPTION_TIMER),
@@ -13292,51 +13293,96 @@ std::string Client::GetAccountBucketRemaining(std::string bucket_name)
 	return DataBucket::GetDataRemaining(k);
 }
 
-uint16 Client::GetClassesBitmask() const
+static constexpr const char *kGestaltClassesBucketKey = "GestaltClasses";
+static constexpr const char *kLegacyMulticlassBucketKey = "multiclass.classes_bitmask";
+
+uint32 Client::GetClassesBits() const
 {
-	const uint16 base_bit = GetPlayerClassBit(GetClass());
+	const uint32 base_bit = GetPlayerClassBit(GetClass());
 
 	if (!RuleB(Custom, MulticlassingEnabled)) {
 		return base_bit;
 	}
 
-	const auto bucket_key = RuleS(Custom, MulticlassBucketKey);
-	if (bucket_key.empty()) {
-		return base_bit;
+	if (m_classes_bits_cache) {
+		return (m_classes_bits_cache | base_bit);
 	}
 
-	const std::string raw = GetBucket(bucket_key);
+	uint32 bits = base_bit;
+
+	// THJServer parity: prefer the canonical GestaltClasses bucket.
+	std::string raw = GetBucket(kGestaltClassesBucketKey);
+
+	// Back-compat: allow reading from the configured key (and the historical default).
 	if (raw.empty()) {
-		return base_bit;
+		const auto bucket_key = RuleS(Custom, MulticlassBucketKey);
+		if (!bucket_key.empty() && bucket_key != kGestaltClassesBucketKey) {
+			raw = GetBucket(bucket_key);
+		}
+		// If the configured key is GestaltClasses (THJ default), still allow reading older deployments.
+		if (raw.empty()) {
+			raw = GetBucket(kLegacyMulticlassBucketKey);
+		}
 	}
 
-	uint16 bits = static_cast<uint16>(Strings::ToUnsignedInt(raw, base_bit) & 0xFFFF);
-	// Always include the base class bit to avoid orphaned/invalid states.
+	if (!raw.empty()) {
+		bits = static_cast<uint32>(Strings::ToUnsignedInt(raw, base_bit) & 0xFFFFFFFF);
+	}
+
 	bits |= base_bit;
+	m_classes_bits_cache = bits;
 	return bits;
 }
 
-bool Client::SetClassesBitmask(uint16 classes_bitmask)
+bool Client::SetClassesBits(uint32 classes_bits)
 {
 	if (!RuleB(Custom, MulticlassingEnabled)) {
 		return false;
 	}
 
+	const uint32 base_bit = GetPlayerClassBit(GetClass());
+	const uint32 bits = (classes_bits | base_bit);
+
+	m_classes_bits_cache = bits;
+
+	// THJServer parity: always write GestaltClasses.
+	SetBucket(kGestaltClassesBucketKey, std::to_string(bits));
+
+	// Back-compat: also write the configured key if different.
 	const auto bucket_key = RuleS(Custom, MulticlassBucketKey);
-	if (bucket_key.empty()) {
-		return false;
+	if (!bucket_key.empty() && bucket_key != kGestaltClassesBucketKey) {
+		SetBucket(bucket_key, std::to_string(bits));
+	}
+	// Back-compat: also write the historical default key to keep older tooling/scripts working during migration.
+	if (bucket_key != kLegacyMulticlassBucketKey) {
+		SetBucket(kLegacyMulticlassBucketKey, std::to_string(bits));
 	}
 
-	const uint16 base_bit = GetPlayerClassBit(GetClass());
-	uint16 bits = classes_bitmask | base_bit;
+	if (RuleB(Custom, MulticlassDebug)) {
+		LogDebug("MULTICLASS bits updated name=[{}] char_id=[{}] base_class=[{}] bits=0x{:08X}",
+			GetCleanName(),
+			CharacterID(),
+			static_cast<int>(GetClass()),
+			static_cast<uint32>(bits)
+		);
+	}
 
-	SetBucket(bucket_key, std::to_string(static_cast<uint32>(bits)));
 	// Push an immediate UI refresh for custom clients using EdgeStatLabel.
 	SendEdgeStats();
 	return true;
 }
 
-static uint8 CountClassBits(uint16 bits)
+uint16 Client::GetClassesBitmask() const
+{
+	return static_cast<uint16>(GetClassesBits() & 0xFFFF);
+}
+
+bool Client::SetClassesBitmask(uint16 classes_bitmask)
+{
+	return SetClassesBits(static_cast<uint32>(classes_bitmask));
+}
+
+static uint8 CountClassBits(uint32 bits)
 {
 	uint8 count = 0;
 	while (bits) {
@@ -13348,7 +13394,7 @@ static uint8 CountClassBits(uint16 bits)
 
 uint8 Client::GetClassesCount()
 {
-	return CountClassBits(GetClassesBitmask());
+	return CountClassBits(GetClassesBits());
 }
 
 bool Client::HasClass(uint8 class_id) const
@@ -13357,12 +13403,12 @@ bool Client::HasClass(uint8 class_id) const
 		return false;
 	}
 
-	const uint16 bit = GetPlayerClassBit(class_id);
 	if (!RuleB(Custom, MulticlassingEnabled)) {
 		return GetClass() == class_id;
 	}
 
-	return (GetClassesBitmask() & bit) != 0;
+	const uint32 bit = GetPlayerClassBit(class_id);
+	return (GetClassesBits() & bit) != 0;
 }
 
 bool Client::AddExtraClass(uint8 class_id)
@@ -13375,8 +13421,8 @@ bool Client::AddExtraClass(uint8 class_id)
 		return false;
 	}
 
-	const uint16 add_bit = GetPlayerClassBit(class_id);
-	uint16 bits = GetClassesBitmask();
+	const uint32 add_bit = GetPlayerClassBit(class_id);
+	uint32 bits = GetClassesBits();
 
 	if (bits & add_bit) {
 		return false;
@@ -13390,7 +13436,7 @@ bool Client::AddExtraClass(uint8 class_id)
 	}
 
 	bits |= add_bit;
-	if (!SetClassesBitmask(bits)) {
+	if (!SetClassesBits(bits)) {
 		return false;
 	}
 
@@ -13440,15 +13486,15 @@ bool Client::RemoveExtraClass(uint8 class_id)
 		return false;
 	}
 
-	const uint16 remove_bit = GetPlayerClassBit(class_id);
-	uint16 bits = GetClassesBitmask();
+	const uint32 remove_bit = GetPlayerClassBit(class_id);
+	uint32 bits = GetClassesBits();
 
 	if ((bits & remove_bit) == 0) {
 		return false;
 	}
 
 	bits &= ~remove_bit;
-	if (!SetClassesBitmask(bits)) {
+	if (!SetClassesBits(bits)) {
 		return false;
 	}
 
@@ -13601,7 +13647,7 @@ void Client::SendEdgeStats()
 		{ kINT,     static_cast<uint64>(GetINT()) },
 		{ kWIS,     static_cast<uint64>(GetWIS()) },
 		{ kCHA,     static_cast<uint64>(GetCHA()) },
-		{ kClassesBitmask, static_cast<uint64>(GetClassesBitmask()) }
+		{ kClassesBitmask, static_cast<uint64>(GetClassesBits()) }
 	};
 
 	constexpr uint32 count = static_cast<uint32>(sizeof(pairs) / sizeof(pairs[0]));

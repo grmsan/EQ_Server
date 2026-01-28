@@ -52,13 +52,15 @@ namespace EQ {
 
 #ifdef _WINDOWS
 		DWORD total_size = size + sizeof(shared_memory_struct);
-		HANDLE file = CreateFile(filename.c_str(),
+		HANDLE file = CreateFile(
+			filename.c_str(),
 			GENERIC_READ | GENERIC_WRITE,
 			FILE_SHARE_READ | FILE_SHARE_WRITE,
 			nullptr,
 			OPEN_ALWAYS,
 			0,
-			nullptr);
+			nullptr
+		);
 
 		if(file == INVALID_HANDLE_VALUE) {
 			EQ_EXCEPT("Shared Memory", "Could not open a file for this shared memory segment.");
@@ -121,13 +123,17 @@ namespace EQ {
 
 #ifdef _WINDOWS
 		DWORD total_size = size + sizeof(shared_memory_struct);
-		HANDLE file = CreateFile(filename.c_str(),
-			GENERIC_READ | GENERIC_WRITE,
+		// Readers should not require write access to the backing file. Some environments (OneDrive placeholders,
+		// restrictive ACLs, etc.) can fail GENERIC_WRITE even though a read-only mapping would work.
+		HANDLE file = CreateFile(
+			filename.c_str(),
+			GENERIC_READ,
 			FILE_SHARE_READ | FILE_SHARE_WRITE,
 			nullptr,
-			OPEN_ALWAYS,
+			OPEN_EXISTING,
 			0,
-			nullptr);
+			nullptr
+		);
 
 		if(file == INVALID_HANDLE_VALUE) {
 			EQ_EXCEPT("Shared Memory", "Could not open a file for this shared memory segment.");
@@ -135,17 +141,17 @@ namespace EQ {
 
 		imp_->mapped_object_ = CreateFileMapping(file,
 			nullptr,
-			PAGE_READWRITE,
+			PAGE_READONLY,
 			0,
 			total_size,
-			filename.c_str());
+			nullptr);
 
 		if(!imp_->mapped_object_) {
 			EQ_EXCEPT("Shared Memory", "Could not create a file mapping for this shared memory file.");
 		}
 
 		memory_ = reinterpret_cast<shared_memory_struct*>(MapViewOfFile(imp_->mapped_object_,
-			FILE_MAP_ALL_ACCESS,
+			FILE_MAP_READ,
 			0,
 			0,
 			total_size));

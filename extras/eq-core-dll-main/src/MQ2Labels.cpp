@@ -10,6 +10,13 @@
 // Ensure we have a C-style declaration matching the exported helper in MQ2Main.cpp
 extern "C" void __cdecl MQ2_ProtectPage(uintptr_t addr);
 
+// Runtime toggles are defined once in eqgame.cpp via `_options.h`.
+extern bool isDebugLoggingEnabled;
+extern bool isMQ2LabelsInitLoggingEnabled;
+extern bool isMQ2LabelsPerSidlLoggingEnabled;
+extern bool isMQ2LabelsWriteUILoggingEnabled;
+extern bool isMQ2LabelsWriteWatchEnabled;
+
 typedef string(*pEqTypesFunc)();
 
 // Provided by eqgame.cpp to cache server-reported HP for the local player.
@@ -155,7 +162,7 @@ public:
 		    // Override legacy EQTypes (5-11 stats, 17/18 HP) to pull uncapped server values via MQ2 data
 		    DWORD sidl = (DWORD)pThisLabel->SidlPiece;
 			// Log first draw we see, to confirm detour is active
-			if (!s_seenDraw) {
+			if (!s_seenDraw && isDebugLoggingEnabled && isMQ2LabelsInitLoggingEnabled) {
 				FILE* f = nullptr;
 				if (fopen_s(&f, "dinput8_debug.log", "a") == 0 && f) {
 					fprintf(f, "MQ2Labels: Draw_Detour hit, first SidlPiece=%lu\n", sidl);
@@ -171,7 +178,7 @@ public:
 			{
 				// Pull directly from client memory (populated by server packet). No macro fallback since it has proven unreliable.
 				static bool s_loggedFirstDraw = false;
-				if (!s_loggedFirstDraw) {
+				if (!s_loggedFirstDraw && isDebugLoggingEnabled && isMQ2LabelsInitLoggingEnabled) {
 					FILE* f2 = nullptr;
 					if (fopen_s(&f2, "dinput8_debug.log", "a") == 0 && f2) {
 						fprintf(f2, "MQ2Labels: Draw_Detour first hit sidl=%lu\n", sidl);
@@ -237,7 +244,7 @@ public:
 
 					// One-time snapshot of all server-fed values to help verify the profile packet contents.
 					static bool s_loggedSnapshot = false;
-					if (!s_loggedSnapshot) {
+					if (!s_loggedSnapshot && isDebugLoggingEnabled && isMQ2LabelsPerSidlLoggingEnabled) {
 						PCHARINFO ci = GetCharInfo();
 						if (ci) {
 							FILE* f = nullptr;
@@ -255,7 +262,7 @@ public:
 					}
 
 					// Debug: log first few values per EQType to verify what we are pushing to the UI
-					if (sidl < 256 && s_logValueCount[sidl] < 3) {
+					if (isDebugLoggingEnabled && isMQ2LabelsPerSidlLoggingEnabled && sidl < 256 && s_logValueCount[sidl] < 3) {
 						FILE* f = nullptr;
 						if (fopen_s(&f, "dinput8_debug.log", "a") == 0 && f) {
 							fprintf(f, "MQ2Labels: sidl=%lu direct=%lld chosen=%lld (server_hp_cache=%d/%d)\n", sidl, direct_val, direct_val, g_serverCurHP, g_serverMaxHP);
@@ -272,7 +279,7 @@ public:
 			if (Found && !s_loggedOverride) {
 				DebugSpewAlways("MQ2Labels: overriding legacy EQType %lu with server values (first occurrence)", sidl);
 				// also drop a breadcrumb to dinput8_debug.log in case MQ2 logging is disabled
-				if (!s_fileLogged) {
+				if (!s_fileLogged && isDebugLoggingEnabled && isMQ2LabelsInitLoggingEnabled) {
 					FILE* f = nullptr;
 					if (fopen_s(&f, "dinput8_debug.log", "a") == 0 && f) {
 						fprintf(f, "MQ2Labels: legacy EQType override active (first occurrence sidl=%lu)\n", sidl);
@@ -283,7 +290,7 @@ public:
 				s_loggedOverride = true;
 			} else if (!Found) {
 				// Log only the first few misses to avoid spam
-				if ((sidl >= 5 && sidl <= 11) || sidl == 17 || sidl == 18) {
+				if (isDebugLoggingEnabled && isMQ2LabelsPerSidlLoggingEnabled && ((sidl >= 5 && sidl <= 11) || sidl == 17 || sidl == 18)) {
 					if (s_logMissCount < 10) {
 						FILE* f = nullptr;
 						if (fopen_s(&f, "dinput8_debug.log", "a") == 0 && f) {
@@ -326,61 +333,63 @@ public:
 		if (Found && !eqtypesString.empty()) {
 			// Detailed debug: log exact value about to be written to the UI for correlation.
 			{
+				const bool want_write_ui_log = (isDebugLoggingEnabled && isMQ2LabelsWriteUILoggingEnabled);
 				// Initialize last-logged table once
 				if (!s_lastLoggedInit) {
 					for (int i = 0; i < 256; ++i) s_lastLoggedValue[i] = LLONG_MIN;
 					s_lastLoggedInit = true;
 				}
-				FILE* lf = nullptr;
-				if (fopen_s(&lf, "dinput8_debug.log", "a") == 0 && lf) {
-					time_t now = time(nullptr);
-					struct tm *tmv = localtime(&now);
-					char tb[32] = {0};
-					strftime(tb, sizeof(tb), "%Y%m%d_%H%M%S", tmv);
-					PCHARINFO ci = GetCharInfo();
-					int ci_val = -999;
-					void* ci_addr = nullptr;
-					if (ci) {
-						// log the field we read for legacy EQTypes (use direct member where available)
-						switch ((DWORD)pThisLabel->SidlPiece) {
-						case 5: ci_val = (int)ci->STR; ci_addr = (void*)&ci->STR; break;
-						case 6: ci_val = (int)ci->STA; ci_addr = (void*)&ci->STA; break;
-						case 7: ci_val = (int)ci->DEX; ci_addr = (void*)&ci->DEX; break;
-						case 8: ci_val = (int)ci->AGI; ci_addr = (void*)&ci->AGI; break;
-						case 9: ci_val = (int)ci->INT; ci_addr = (void*)&ci->INT; break;
-						case 10: ci_val = (int)ci->WIS; ci_addr = (void*)&ci->WIS; break;
-						case 11: ci_val = (int)ci->CHA; ci_addr = (void*)&ci->CHA; break;
-						default: ci_val = -999; ci_addr = (void*)ci; break;
-						}
+				PCHARINFO ci = GetCharInfo();
+				int ci_val = -999;
+				void* ci_addr = nullptr;
+				if (ci) {
+					switch ((DWORD)pThisLabel->SidlPiece) {
+					case 5:  ci_val = (int)ci->STR; ci_addr = (void*)&ci->STR; break;
+					case 6:  ci_val = (int)ci->STA; ci_addr = (void*)&ci->STA; break;
+					case 7:  ci_val = (int)ci->DEX; ci_addr = (void*)&ci->DEX; break;
+					case 8:  ci_val = (int)ci->AGI; ci_addr = (void*)&ci->AGI; break;
+					case 9:  ci_val = (int)ci->INT; ci_addr = (void*)&ci->INT; break;
+					case 10: ci_val = (int)ci->WIS; ci_addr = (void*)&ci->WIS; break;
+					case 11: ci_val = (int)ci->CHA; ci_addr = (void*)&ci->CHA; break;
+					default: ci_val = -999; ci_addr = (void*)ci; break;
 					}
-					// Request page protection for the page containing the observed client field.
-					// Use the core-exported helper so protections are queued until the VEH is installed.
-					if (ci_addr) {
-						MQ2_ProtectPage((uintptr_t)ci_addr);
+				}
+				if (ci_addr && isMQ2LabelsWriteWatchEnabled) {
+					MQ2_ProtectPage((uintptr_t)ci_addr);
+					if (want_write_ui_log) {
 						FILE* lf2 = nullptr;
 						if (fopen_s(&lf2, "dinput8_debug.log", "a") == 0 && lf2) {
 							fprintf(lf2, "MQ2Labels: Requested Protect (queued) for ci_addr=%p\n", ci_addr);
 							fclose(lf2);
 						}
 					}
-					int server_val = -999;
-					if (g_serverProfile.has_profile) server_val = g_serverProfile.dex;
-					long long dv = 0;
-					if (!eqtypesString.empty()) dv = atoll(eqtypesString.c_str());
-					// Only log when the chosen numeric value changes for this sidl
-					DWORD sidl_val = (DWORD)pThisLabel->SidlPiece;
-					if (sidl_val < 256) {
-						if (dv != s_lastLoggedValue[sidl_val]) {
+				}
+
+				if (want_write_ui_log) {
+					FILE* lf = nullptr;
+					if (fopen_s(&lf, "dinput8_debug.log", "a") == 0 && lf) {
+						time_t now = time(nullptr);
+						struct tm *tmv = localtime(&now);
+						char tb[32] = {0};
+						strftime(tb, sizeof(tb), "%Y%m%d_%H%M%S", tmv);
+
+						int server_val = -999;
+						if (g_serverProfile.has_profile) server_val = g_serverProfile.dex;
+						long long dv = atoll(eqtypesString.c_str());
+
+						DWORD sidl_val = (DWORD)pThisLabel->SidlPiece;
+						if (sidl_val < 256) {
+							if (dv != s_lastLoggedValue[sidl_val]) {
+								fprintf(lf, "%s MQ2Labels: WRITE_UI sidl=%lu chosen=%s chosen_val=%lld ci_val=%d ci_addr=%p server_profile=%d has_profile=%d\n",
+									tb, sidl_val, eqtypesString.c_str(), dv, ci_val, ci_addr, server_val, g_serverProfile.has_profile ? 1 : 0);
+								s_lastLoggedValue[sidl_val] = dv;
+							}
+						} else {
 							fprintf(lf, "%s MQ2Labels: WRITE_UI sidl=%lu chosen=%s chosen_val=%lld ci_val=%d ci_addr=%p server_profile=%d has_profile=%d\n",
 								tb, sidl_val, eqtypesString.c_str(), dv, ci_val, ci_addr, server_val, g_serverProfile.has_profile ? 1 : 0);
-							s_lastLoggedValue[sidl_val] = dv;
 						}
-					} else {
-						// out-of-range sidl, log once per change using timestamp
-						fprintf(lf, "%s MQ2Labels: WRITE_UI sidl=%lu chosen=%s chosen_val=%lld ci_val=%d ci_addr=%p server_profile=%d has_profile=%d\n",
-							tb, sidl_val, eqtypesString.c_str(), dv, ci_val, ci_addr, server_val, g_serverProfile.has_profile ? 1 : 0);
+						fclose(lf);
 					}
-					fclose(lf);
 				}
 			}
 			SetCXStr(&(pThisLabel->Wnd.WindowText),(PCHAR)eqtypesString.c_str());
@@ -410,20 +419,27 @@ PLUGIN_API VOID InitializeMQ2Labels(VOID)
 	EzDetour(CSidlManager__CreateLabel,&CSidlManagerHook::CreateLabel_Detour,&CSidlManagerHook::CreateLabel_Trampoline);
 
 	// Drop a breadcrumb to dinput8_debug.log on load so we know the DLL is active
-	FILE* f = nullptr;
-	if (fopen_s(&f, "dinput8_debug.log", "a") == 0 && f) {
-		fprintf(f, "MQ2Labels: initialized and hooks installed\n");
-		fclose(f);
+	if (isDebugLoggingEnabled && isMQ2LabelsInitLoggingEnabled) {
+		FILE* f = nullptr;
+		if (fopen_s(&f, "dinput8_debug.log", "a") == 0 && f) {
+			fprintf(f, "MQ2Labels: initialized and hooks installed\n");
+			fclose(f);
+		}
 	}
 
 	// Also ensure the repo stats_debug.log exists and note DLL load there.
-	FILE* rf = nullptr;
-	if (fopen_s(&rf, "C:\\Users\\marsh\\OneDrive\\Documents\\GitHub\\EQ_Server\\logs\\stats_debug.log", "a") == 0 && rf) {
-		fprintf(rf, "MQ2Labels: DLL loaded and initialized\n");
-		fclose(rf);
+	if (isDebugLoggingEnabled && isMQ2LabelsInitLoggingEnabled) {
+		FILE* rf = nullptr;
+		if (fopen_s(&rf, "C:\\Users\\marsh\\OneDrive\\Documents\\GitHub\\EQ_Server\\logs\\stats_debug.log", "a") == 0 && rf) {
+			fprintf(rf, "MQ2Labels: DLL loaded and initialized\n");
+			fclose(rf);
+		}
 	}
 
 	auto logDebug = [](const char* fmt, ...) {
+		if (!isDebugLoggingEnabled || !isMQ2LabelsInitLoggingEnabled) {
+			return;
+		}
 		FILE* lf = nullptr;
 		if (fopen_s(&lf, "dinput8_debug.log", "a") != 0 || !lf) {
 			return;

@@ -119,6 +119,21 @@ bool Client::Process() {
 			SendHPUpdate();
 		}
 
+		// RoF2 + custom DLL: re-send EdgeStatLabel a few times after connect so the DLL has a chance to capture it
+		// once it installs detours (which happens after GAMESTATE_INGAME client-side).
+		if (edge_stats_retry_timer.Enabled() && edge_stats_retry_timer.Check()) {
+			if (ClientVersion() == EQ::versions::ClientVersion::RoF2 && (RuleB(Custom, ServerAuthStats) || RuleB(Custom, MulticlassingEnabled))) {
+				SendEdgeStats();
+			}
+
+			++edge_stats_retry_attempts;
+			// Some clients can take a while to reach GAMESTATE_INGAME and install DLL detours; keep
+			// retrying long enough that a manual `#multiclassdiag refresh` isn't needed each login.
+			if (edge_stats_retry_attempts >= 24) {
+				edge_stats_retry_timer.Disable();
+			}
+		}
+
 		/* I haven't naturally updated my position in 10 seconds, updating manually */
 		if (!IsMoving() && m_position_update_timer.Check()) {
 			BroadcastPositionUpdate();
@@ -932,6 +947,25 @@ void Client::BulkSendMerchantInventory(int merchant_id, int npcid) {
 
 		item = database.GetItem(ml.item);
 		if (item) {
+			if (RuleB(Custom, MulticlassDebug) && item->ID == 15380) {
+				LogDebug(
+					"MCDIAG_MERCHANT_LIST name=[{}] char_id=[{}] base_class=[{}] classes_bits=0x{:08X} merchant_id=[{}] npcid=[{}] ml_item=[{}] ml_slot=[{}] ml_classes_required=0x{:08X} item_classes=0x{:08X} item_type=[{}] scroll_spell=[{}] item_name=[{}]",
+					GetCleanName(),
+					CharacterID(),
+					static_cast<int>(GetClass()),
+					static_cast<uint32>(GetClassesBits()),
+					merchant_id,
+					npcid,
+					ml.item,
+					ml.slot,
+					static_cast<uint32>(ml.classes_required),
+					static_cast<uint32>(item->Classes),
+					static_cast<int>(item->ItemType),
+					static_cast<int>(item->Scroll.Effect),
+					item->Name
+				);
+			}
+
 			if (!handy_chance) {
 				handy_item = item;
 			} else {

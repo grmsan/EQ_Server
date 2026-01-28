@@ -54,26 +54,43 @@ static uint16 GetMulticlassBitsOrBase(uint32 character_id, uint8 base_class_id)
 {
 	const uint16 base_bit = GetPlayerClassBit(base_class_id);
 
-	const auto bucket_key = RuleS(Custom, MulticlassBucketKey);
-	if (bucket_key.empty() || character_id == 0) {
+	if (character_id == 0) {
 		return base_bit;
 	}
 
-	const auto query = fmt::format(
-		"SELECT value FROM data_buckets "
-		"WHERE `key` = '{}' AND character_id = {} AND account_id = 0 AND npc_id = 0 AND bot_id = 0 AND zone_id = 0 AND instance_id = 0 "
-		"LIMIT 1",
-		Strings::Escape(bucket_key),
-		character_id
-	);
+	auto get_bucket_value = [&](const std::string &key) -> std::string {
+		const auto query = fmt::format(
+			"SELECT value FROM data_buckets "
+			"WHERE `key` = '{}' AND character_id = {} AND account_id = 0 AND npc_id = 0 AND bot_id = 0 AND zone_id = 0 AND instance_id = 0 "
+			"LIMIT 1",
+			Strings::Escape(key),
+			character_id
+		);
 
-	auto results = database.QueryDatabase(query);
-	if (!results.Success() || results.RowCount() != 1) {
-		return base_bit;
+		auto results = database.QueryDatabase(query);
+		if (!results.Success() || results.RowCount() != 1) {
+			return {};
+		}
+
+		auto row = results.begin();
+		return (row[0] ? row[0] : "");
+	};
+
+	// THJServer parity: prefer GestaltClasses as the canonical bucket key.
+	std::string raw = get_bucket_value("GestaltClasses");
+
+	// Back-compat: fall back to configured key if different.
+	if (raw.empty()) {
+		const auto bucket_key = RuleS(Custom, MulticlassBucketKey);
+		if (!bucket_key.empty() && bucket_key != "GestaltClasses") {
+			raw = get_bucket_value(bucket_key);
+		}
+		// Historical default for older deployments.
+		if (raw.empty()) {
+			raw = get_bucket_value("multiclass.classes_bitmask");
+		}
 	}
 
-	auto row = results.begin();
-	const std::string raw = row[0] ? row[0] : "";
 	if (raw.empty()) {
 		return base_bit;
 	}
@@ -95,7 +112,7 @@ static std::string BuildMulticlassBaseList(uint16 bits)
 			out += "/";
 		}
 
-		out += GetClassIDName(class_id);
+		out += GetPlayerClassAbbreviation(class_id);
 	}
 
 	return out;
@@ -712,7 +729,18 @@ void ClientList::SendWhoAll(uint32 fromid,const char* to, int16 admin, Who_All_S
 
 		uint32 totalusers=0;
 		uint32 totallength=0;
-		std::unordered_map<uint32, std::string> who_display_name_by_char_id;
+
+		auto matches_class = [&](ClientListEntry *e) -> bool {
+			if (!whom || whom->wclass == 0xFFFF) {
+				return true;
+			}
+			if (whom->wclass < 1 || whom->wclass > 16) {
+				return false;
+			}
+			const uint16 bits = GetMulticlassBitsOrBase(e->CharID(), e->class_());
+			return (bits & GetPlayerClassBit(static_cast<uint8>(whom->wclass))) != 0;
+		};
+
 		countclients.Reset();
 		while (countclients.MoreElements()) {
 			countcle = countclients.GetData();
@@ -725,8 +753,7 @@ void ClientList::SendWhoAll(uint32 fromid,const char* to, int16 admin, Who_All_S
 					(whom->lvllow == 0xFFFF ||
 									(countcle->level() >= whom->lvllow && countcle->level() <= whom->lvlhigh &&
 									(countcle->Anon() == 0 || admin > countcle->Admin()))) &&
-									(whom->wclass == 0xFFFF || (countcle->class_() == whom->wclass &&
-																(countcle->Anon() == 0 || admin > countcle->Admin()))) &&
+									(matches_class(countcle) && (countcle->Anon() == 0 || admin > countcle->Admin())) &&
 									(whom->wrace == 0xFFFF ||
 									(countcle->race() == whom->wrace && (countcle->Anon() == 0 || admin > countcle->Admin()))) &&
 					(whomlen == 0 || (
@@ -741,62 +768,23 @@ void ClientList::SendWhoAll(uint32 fromid,const char* to, int16 admin, Who_All_S
 				if ((countcle->Anon()>0 && admin >= countcle->Admin() && admin > AccountStatus::Player) || countcle->Anon()==0 ) {
 					totalusers++;
 					if (totalusers<=20 || admin >= AccountStatus::GMAdmin) {
-						std::string display_name = countcle->name();
-						const uint16 bits = GetMulticlassBitsOrBase(countcle->CharID(), countcle->class_());
-						if (CountBits16(bits) > 1) {
-							display_name = fmt::format("{} [{}]", countcle->name(), BuildMulticlassBaseList(bits));
-							if (display_name.size() >= 64) {
-								display_name.resize(63);
-							}
-						}
-						who_display_name_by_char_id[countcle->CharID()] = display_name;
-
 						totallength = totallength + strlen(countcle->name()) + strlen(countcle->AccountName()) +
 									strlen(guild_mgr.GetGuildName(countcle->GuildID())) + 5;
-						if (display_name.size() > strlen(countcle->name())) {
-							totallength += static_cast<uint32>(display_name.size() - strlen(countcle->name()));
-						}
 					}
 				} else if (((countcle->Anon() == 1 && admin <= countcle->Admin()) && whomlen != 0 &&
 							strncasecmp(countcle->name(), whom->whom, whomlen) == 0)) {
 					totalusers++;
 					if (totalusers <= 20 || admin >= AccountStatus::GMAdmin) {
-						std::string display_name = countcle->name();
-						const uint16 bits = GetMulticlassBitsOrBase(countcle->CharID(), countcle->class_());
-						if (CountBits16(bits) > 1) {
-							display_name = fmt::format("{} [{}]", countcle->name(), BuildMulticlassBaseList(bits));
-							if (display_name.size() >= 64) {
-								display_name.resize(63);
-							}
-						}
-						who_display_name_by_char_id[countcle->CharID()] = display_name;
-
 						totallength = totallength + strlen(countcle->name()) + strlen(countcle->AccountName()) +
 									strlen(guild_mgr.GetGuildName(countcle->GuildID())) + 5;
-						if (display_name.size() > strlen(countcle->name())) {
-							totallength += static_cast<uint32>(display_name.size() - strlen(countcle->name()));
-						}
 					}
 				} else if (((countcle->Anon() == 2 && admin <= countcle->Admin()) && whomlen != 0 &&
 							(strncasecmp(countcle->name(), whom->whom, whomlen) == 0 ||
 							strncasecmp(guild_mgr.GetGuildName(countcle->GuildID()), whom->whom, whomlen) == 0))) {
 					totalusers++;
 					if (totalusers <= 20 || admin >= AccountStatus::GMAdmin) {
-						std::string display_name = countcle->name();
-						const uint16 bits = GetMulticlassBitsOrBase(countcle->CharID(), countcle->class_());
-						if (CountBits16(bits) > 1) {
-							display_name = fmt::format("{} [{}]", countcle->name(), BuildMulticlassBaseList(bits));
-							if (display_name.size() >= 64) {
-								display_name.resize(63);
-							}
-						}
-						who_display_name_by_char_id[countcle->CharID()] = display_name;
-
 						totallength = totallength + strlen(countcle->name()) + strlen(countcle->AccountName()) +
 									strlen(guild_mgr.GetGuildName(countcle->GuildID())) + 5;
-						if (display_name.size() > strlen(countcle->name())) {
-							totallength += static_cast<uint32>(display_name.size() - strlen(countcle->name()));
-						}
 					}
 				}
 			}
@@ -862,7 +850,7 @@ void ClientList::SendWhoAll(uint32 fromid,const char* to, int16 admin, Who_All_S
 				(whom == 0 || (
 					((cle->Admin() >= AccountStatus::QuestTroupe && cle->GetGM()) || whom->gmlookup == 0xFFFF) &&
 					(whom->lvllow == 0xFFFF || (cle->level() >= whom->lvllow && cle->level() <= whom->lvlhigh && (cle->Anon()==0 || admin>cle->Admin()))) &&
-					(whom->wclass == 0xFFFF || (cle->class_() == whom->wclass && (cle->Anon()==0 || admin>cle->Admin()))) &&
+					(matches_class(cle) && (cle->Anon()==0 || admin>cle->Admin())) &&
 					(whom->wrace == 0xFFFF || (cle->race() == whom->wrace && (cle->Anon()==0 || admin>cle->Admin()))) &&
 					(whomlen == 0 || (
 						(tmpZone != 0 && strncasecmp(tmpZone, whom->whom, whomlen) == 0) ||
@@ -951,7 +939,9 @@ void ClientList::SendWhoAll(uint32 fromid,const char* to, int16 admin, Who_All_S
 				uint32 unknown80[2];
 
 				if (cle->Anon()==0 || (admin>=cle->Admin() && admin> AccountStatus::Player)) {
-					plclass_=cle->class_();
+					// Keep the class field as a single class id for stock clients (/who will otherwise show "Unknown").
+					// Multiclass display is handled via appended name suffix and/or custom DLLs.
+					plclass_ = cle->class_();
 					pllevel=cle->level();
 
 					if(admin>=AccountStatus::GMAdmin) {
@@ -973,12 +963,7 @@ void ClientList::SendWhoAll(uint32 fromid,const char* to, int16 admin, Who_All_S
 				//char plstatus[20]={0};
 				//sprintf(plstatus, "Status %i",cle->Admin());
 				char plname[64]={0};
-				auto it_name = who_display_name_by_char_id.find(cle->CharID());
-				if (it_name != who_display_name_by_char_id.end()) {
-					strncpy(plname, it_name->second.c_str(), sizeof(plname) - 1);
-				} else {
-					strcpy(plname, cle->name());
-				}
+				strcpy(plname, cle->name());
 
 				char placcount[30]={0};
 				if (admin>=cle->Admin() && admin > AccountStatus::Player) {

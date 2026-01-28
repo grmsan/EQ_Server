@@ -3012,6 +3012,25 @@ void Client::SendItemPacket(int16 slot_id, const EQ::ItemInstance* inst, ItemPac
 		return;
 	}
 
+	if (packet_type == ItemPacketMerchant && RuleB(Custom, MulticlassDebug)) {
+		const EQ::ItemData* item = inst->GetItem();
+		if (item && item->ID == 15380) {
+			LogDebug(
+				"MCDIAG_MERCHANT_ITEM_PACKET name=[{}] char_id=[{}] base_class=[{}] classes_bits=0x{:08X} slot_id=[{}] item_id=[{}] item_classes=0x{:08X} item_type=[{}] scroll_spell=[{}] item_name=[{}]",
+				GetCleanName(),
+				CharacterID(),
+				static_cast<int>(GetClass()),
+				static_cast<uint32>(GetClassesBits()),
+				slot_id,
+				static_cast<uint32>(item->ID),
+				static_cast<uint32>(item->Classes),
+				static_cast<int>(item->ItemType),
+				static_cast<int>(item->Scroll.Effect),
+				item->Name
+			);
+		}
+	}
+
 	if (packet_type != ItemPacketMerchant) {
 		if (slot_id <= EQ::invslot::POSSESSIONS_END && slot_id >= EQ::invslot::POSSESSIONS_BEGIN) {
 			if ((((uint64)1 << slot_id) & GetInv().GetLookup()->PossessionsBitmask) == 0) {

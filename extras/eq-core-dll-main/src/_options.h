@@ -44,6 +44,10 @@ bool isMulticlassUsableClassesOverrideEnabled = true;
 // when your server-provided multiclass bitmask contains any spellcasting class.
 bool isMulticlassSpellUiOverrideEnabled = true;
 
+// isMulticlassClassNameOverrideEnabled allows the DLL to display multiclass strings in places where the client
+// normally expects a single class id (e.g., /who class column, character select class label).
+bool isMulticlassClassNameOverrideEnabled = true;
+
 // isPatchmeDisabled if set to true will let you double click eqgame.exe and not get the "Please run EverQuest" message, will start properly
 bool isPatchmeDisabled = true;
 
@@ -68,6 +72,22 @@ bool isDebugLoggingEnabled = true;
 
 // Track a circular buffer of recent incoming world packets (opcode/size/head/tail) to assist debugging zoning/stat issues.
 bool isRecentPacketTraceEnabled = true;
+
+// ---- MQ2Labels Logging ----
+// MQ2Labels can generate extremely high-frequency logs during normal UI rendering.
+// Keep these off by default so dinput8_debug.log remains usable.
+
+// Log plugin init/load breadcrumbs to dinput8_debug.log.
+bool isMQ2LabelsInitLoggingEnabled = true;
+
+// Log per-SIDL value selection (e.g., "sidl=17 direct=... chosen=...") a few times per label.
+bool isMQ2LabelsPerSidlLoggingEnabled = false;
+
+// Log WRITE_UI lines that correlate chosen values to client memory fields.
+bool isMQ2LabelsWriteUILoggingEnabled = false;
+
+// Enable MQ2Labels write-watch page protection requests (VERY invasive; use only while debugging memory stomps).
+bool isMQ2LabelsWriteWatchEnabled = false;
 
 // Log parsed EdgeStatLabel packets (0x1338) into repo logs/stats_debug.log (no toggle files needed).
 bool isEdgeStatLabelLoggingEnabled = true;

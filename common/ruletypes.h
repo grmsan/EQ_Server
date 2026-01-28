@@ -1190,10 +1190,14 @@ RULE_BOOL(EvolvingItems, DestroyAugmentsOnEvolve, false, "If this is enabled, an
 RULE_CATEGORY_END()
 
 RULE_CATEGORY(Custom)
-RULE_BOOL(Custom, MulticlassingEnabled, true, "Enable multiclass foundations (server-side class bitmask stored in data buckets). Does not change core class logic yet.")
+RULE_BOOL(Custom, MulticlassingEnabled, true, "Enable multiclass foundations (server-side class bitmask stored in data buckets).")
 RULE_INT(Custom, MulticlassMaxClasses, 3, "Maximum number of classes allowed in the classes bitmask (includes base class).")
-RULE_STRING(Custom, MulticlassBucketKey, "multiclass.classes_bitmask", "Character-scoped data bucket key where the class bitmask is stored.")
+RULE_STRING(Custom, MulticlassBucketKey, "GestaltClasses", "Character-scoped data bucket key where the class bitmask is stored (THJServer uses GestaltClasses).")
 RULE_BOOL(Custom, ServerAuthStats, true, "Compatibility rule used by multiclass-era quest scripts to gate server-authoritative stats features.")
+RULE_BOOL(Custom, UseDynamicAATimers, true, "Enable using dynamic AA timers. Required to deconflict multiclass AA timers (THJServer parity).")
+RULE_BOOL(Custom, BypassMulticlassStackConflict, false, "Allow all of your class spells to stack (THJServer parity).")
+RULE_BOOL(Custom, MulticlassDebug, false, "Enable multiclass debug logging in zone/world.")
+RULE_INT(Custom, MulticlassDebugVerbosity, 0, "Multiclass debug verbosity (0=off/minimal, 1=verbose).")
 RULE_CATEGORY_END()
 
 #undef RULE_CATEGORY

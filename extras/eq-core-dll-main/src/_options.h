@@ -14,7 +14,7 @@ bool isEQGOverrideEnabled = false;
 // isMQInjectsEnabled if set to true will cause some edge-inspired features to work:
 // MQ2Spawns, MQ2Maps, MQ2Commands, MQ2Pulse, MQ2Spawns, MapPlugin, MQ2ItemDisplay, MQ2Labels
 // NOT RECOMMENDED. Known to cause memory leaks due to mq2maps strings
-bool isMQInjectsEnabled = true;
+bool isMQInjectsEnabled = false;  // TESTING: disabled to isolate spell tooltip issue
 
 // isMapWindowDisabled if set to true will do a soft patch to disable the map in game. If disabled, I suggest isMQInjectsEnabled being false as well, else npc data is still populated
 bool isMapWindowDisabled = false;
@@ -38,7 +38,7 @@ bool isServerAuthoritativeStatsEnabled = true;
 
 // isMulticlassUsableClassesOverrideEnabled detours EQ_Character__GetUsableClasses so the client treats your server-provided
 // multiclass bitmask as your "usable classes" for client-side filters (AA window, usability checks, etc).
-bool isMulticlassUsableClassesOverrideEnabled = true;
+bool isMulticlassUsableClassesOverrideEnabled = true;  // Re-enabled with context-aware logic
 
 // isMulticlassSpellUiOverrideEnabled forces the client to treat you as a spellcaster (spellbook/mana UI gating)
 // when your server-provided multiclass bitmask contains any spellcasting class.

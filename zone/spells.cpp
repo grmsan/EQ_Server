@@ -1057,6 +1057,38 @@ only works for clients, npcs shouldn't be fizzling..
 new algorithm thats closer to live eq (i hope)
 TODO: Add aa skills, item mods, reduced the chance to fizzle
 */
+
+// THJServer parity: multiclass helper to find best spell level and class across all owned classes.
+// Returns the lowest required level (best) and the class_id that provides it.
+static void GetBestSpellLevelForMulticlass(uint16 spell_id, uint32 classes_bits, uint8 &out_level, uint8 &out_class_id)
+{
+	out_level = 255;
+	out_class_id = 0;
+
+	for (int class_id = 1; class_id <= 16; ++class_id) {
+		if ((classes_bits & (1u << (class_id - 1))) == 0) {
+			continue;
+		}
+
+		uint8 req = spells[spell_id].classes[class_id - 1];
+		// 0 and 255 typically mean "not usable by this class"
+		if (req > 0 && req < out_level) {
+			out_level = req;
+			out_class_id = static_cast<uint8>(class_id);
+		}
+	}
+
+	if (RuleB(Custom, MulticlassDebug) && out_level != 255) {
+		LogDebug(
+			"MCDIAG_SPELL_LEVEL spell_id=[{}] classes_bits=0x{:08X} best_level=[{}] best_class=[{}]",
+			spell_id,
+			classes_bits,
+			static_cast<int>(out_level),
+			static_cast<int>(out_class_id)
+		);
+	}
+}
+
 bool Mob::CheckFizzle(uint16 spell_id)
 {
 	return(true);
@@ -1070,12 +1102,22 @@ bool Client::CheckFizzle(uint16 spell_id)
 		return true;
 	}
 
+	// THJServer parity: determine best spell level across all owned classes
+	uint8 spell_level = 255;
+	uint8 spell_class = 0;
+	if (RuleB(Custom, MulticlassingEnabled)) {
+		GetBestSpellLevelForMulticlass(spell_id, GetClassesBits(), spell_level, spell_class);
+	} else {
+		spell_level = spells[spell_id].classes[GetClass() - 1];
+		spell_class = GetClass();
+	}
+
 	uint8 no_fizzle_level = 0;
 
 	//Live AA - Spell Casting Expertise, Mastery of the Past
 	no_fizzle_level = aabonuses.MasteryofPast + itembonuses.MasteryofPast + spellbonuses.MasteryofPast;
 
-	if (spells[spell_id].classes[GetClass()-1] < no_fizzle_level) {
+	if (spell_level < no_fizzle_level) {
 		return true;
 	}
 
@@ -1155,12 +1197,13 @@ bool Client::CheckFizzle(uint16 spell_id)
 	int par_skill;
 	int act_skill;
 
-	par_skill = spells[spell_id].classes[GetClass()-1] * 5 - 10;//IIRC even if you are lagging behind the skill levels you don't fizzle much
+	// THJServer parity: use best spell level from multiclass (already computed at top of function)
+	par_skill = spell_level * 5 - 10;//IIRC even if you are lagging behind the skill levels you don't fizzle much
 	if (par_skill > 235) {
 		par_skill = 235;
 	}
 
-	par_skill += spells[spell_id].classes[GetClass()-1]; // maximum of 270 for level 65 spell
+	par_skill += spell_level; // maximum of 270 for level 65 spell
 
 	act_skill = GetSkill(spells[spell_id].skill);
 	act_skill += GetLevel(); // maximum of whatever the client can cheat
@@ -1195,7 +1238,8 @@ bool Client::CheckFizzle(uint16 spell_id)
 	float diff = par_skill + static_cast<float>(spells[spell_id].base_difficulty) - act_skill;
 
 	// if you have high int/wis you fizzle less, you fizzle more if you are stupid
-	if (GetClass() == Class::Bard) {
+	// THJServer parity: use spell_class (best multiclass match) rather than base class
+	if (spell_class == Class::Bard) {
 		diff -= (GetCHA() - 110) / 20.0;
 	} else if (IsIntelligenceCasterClass()) {
 		diff -= (GetINT() - 125) / 20.0;

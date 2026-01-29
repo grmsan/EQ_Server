@@ -12,10 +12,26 @@ Important design intent and specifications are stored under:
 
   \game_design\
 
+Design documentation structure:
+  \game_design\multiclass\     Multiclass (gestalt) system - ACTIVE DEVELOPMENT
+  \game_design\stats\          Stats, damage, scaling, AC
+  \game_design\abilities\      AAs, spells, effects
+  \game_design\classes\        Class-specific behaviors
+  \game_design\mechanics\      Combat, quests, NPC behavior
+  \game_design\infinite_progression\  Scaling and progression systems
+
+Project tracking documents (root level):
+  TODO_MULTICLASS.md                    Multiclass bug tracking and test checklist
+  TODO_THJSERVER_MULTICLASS_PORT.md     File-by-file THJServer parity checklist
+  TODO_THJSERVER_MULTICLASS_TESTS.md    Multiclass test tracker
+  TODO_DEX_MIGRATION.md                 DEX stat migration tracking
+  MULTICLASS_SYSTEM_OVERVIEW.md         High-level multiclass architecture
+
 Before modifying or implementing any behavior, you must:
 
   - Search the repository for relevant code, tests, or related modules.
   - Search and read the relevant docs in \game_design\.
+  - Check TODO_*.md files for related work items or known issues.
   - Compare design docs with existing code to understand what the project *intends*, not just what it currently does.
   - Only after understanding the design should you implement or refactor code.
 
@@ -44,6 +60,7 @@ Key directories to inspect:
 Client-side support:
   extras/eq-core-dll-main/
   extras/classless-dll-main/ (this repository is for resarch only. never change code here or build this dll.)
+  extras/THJServer/          Reference implementation for multiclass (read-only reference)
 
 The DLLs can be used for **client-behavior testing**, packet experiments, and client-side validation.
 You may inspect them when relevant to packet structures, scaling behavior, or client display logic.
@@ -185,6 +202,7 @@ When tasks involve systems such as:
   - Quests, NPC behavior, combat loops
   - Client-server packet behavior
   - UI or UX foundations
+  - Multiclass / gestalt system
 
 You MUST:
   1. Search \game_design\
@@ -193,10 +211,51 @@ You MUST:
   4. Document assumptions in comments when design is incomplete
 
 ============================================================
+10a. Multiclass System (Active Development)
+============================================================
+
+The multiclass (gestalt) system is under active development. Key documentation:
+
+Master technical document (START HERE for multiclass work):
+  \game_design\multiclass\IMPLEMENTATION_PLAN.md
+
+Supporting documents:
+  \game_design\multiclass\DLL_INTEGRATION.md   Client DLL build and debug guide
+  \game_design\multiclass\QUICK_START.md       15-minute setup guide
+  \MULTICLASS_SYSTEM_OVERVIEW.md               High-level architecture
+
+Work tracking:
+  \TODO_THJSERVER_MULTICLASS_PORT.md           File-by-file port checklist (priority guide)
+  \TODO_THJSERVER_MULTICLASS_TESTS.md          Test tracker and known bugs
+  \TODO_MULTICLASS.md                          General bug tracking
+
+Reference implementation:
+  \extras\THJServer\                           Working multiclass server (read-only reference)
+  \extras\THJServer\docs\multiclass.md         THJ multiclass documentation
+
+Key patterns:
+  - Use GetClassesBits() / HasClass() instead of GetClass() for eligibility checks
+  - Class bitmask stored in data_buckets with key "GestaltClasses"
+  - Server sends EdgeStatLabel (opcode 0x1338, key 200) to sync bitmask to DLL
+  - DLL (dinput8.dll) hooks client functions for UI visibility
+
+When modifying multiclass-related code:
+  1. Read IMPLEMENTATION_PLAN.md first
+  2. Check TODO_THJSERVER_MULTICLASS_PORT.md for file-specific status
+  3. Compare with THJServer reference when uncertain
+  4. Update test tracker after changes
+
+============================================================
 11. DLL Awareness (Client-Side Testing Tools)
 ============================================================
 
 The DLLs in extras/ are safe to reference and inspect.
+
+eq-core-dll-main (dinput8.dll):
+  - Primary client-side support for multiclass and server-authoritative stats
+  - Key files: eqgame.cpp (detours), _options.h (feature toggles)
+  - Debug output: <RoF2 client>/dinput8_debug.log
+  - Build: VS2022, x86/Win32, Release
 
 They can be used to:
   - Understand client interpretation of packets

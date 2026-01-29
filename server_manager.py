@@ -141,6 +141,10 @@ class ServerManagerApp(tk.Tk):
         self.shared_mem_btn = ttk.Button(global_frame, text="Run Shared Memory", command=self.run_shared_memory_thread)
         self.shared_mem_btn.pack(side="left", padx=5, pady=5)
 
+        # Quick restart for testing - kills zones and restarts eqlaunch
+        self.restart_zones_btn = ttk.Button(global_frame, text="Restart Zones", command=self.restart_zones)
+        self.restart_zones_btn.pack(side="left", padx=5, pady=5)
+
         # Client assets/status + quick actions
         client_frame = ttk.LabelFrame(self.main_tab, text="Client Assets (EQ Folder + DLL/Exports)")
         client_frame.pack(fill="x", padx=10, pady=5)
@@ -411,16 +415,21 @@ class ServerManagerApp(tk.Tk):
         ttk.Button(btn_frame, text="Refresh List", command=self.refresh_scripts).pack(side="left", padx=5)
         ttk.Button(btn_frame, text="Run Selected Script", command=self.run_selected_script).pack(side="left", padx=5)
 
-        # EQ client utilities
-        client_frame = ttk.LabelFrame(tools_frame, text="EQ Client Utilities")
-        client_frame.pack(fill="x", pady=10, padx=2)
-        ttk.Label(client_frame, text="EQ Client Folder:").grid(row=0, column=0, padx=5, pady=5, sticky="e")
-        ttk.Entry(client_frame, textvariable=self.eq_dir_var, width=50).grid(row=0, column=1, padx=5, pady=5, sticky="w")
-        ttk.Button(client_frame, text="Browse", command=self.browse_eq_dir).grid(row=0, column=2, padx=5, pady=5)
-        ttk.Button(client_frame, text="Build + Copy eqcore DLL", command=self.run_build_eqcore_thread).grid(row=1, column=0, padx=5, pady=5, sticky="w")
-        ttk.Button(client_frame, text="Copy eqcore DLL (no build)", command=self.copy_eqcore_dll).grid(row=1, column=1, padx=5, pady=5, sticky="w")
-        ttk.Button(client_frame, text="Launch eqgame.exe (patchme)", command=self.launch_eqgame).grid(row=1, column=2, padx=5, pady=5, sticky="w")
-        ttk.Button(client_frame, text="Show DLL Info", command=self.show_dll_info).grid(row=2, column=0, padx=5, pady=5, sticky="w")
+        # Quick Actions for testing workflow
+        quick_frame = ttk.LabelFrame(tools_frame, text="Quick Actions (Testing Workflow)")
+        quick_frame.pack(fill="x", pady=10, padx=2)
+        ttk.Button(quick_frame, text="1. Build Zone",
+                  command=lambda: self.quick_build("zone")).grid(row=0, column=0, padx=5, pady=5, sticky="ew")
+        ttk.Button(quick_frame, text="2. Restart Zones",
+                  command=self.restart_zones).grid(row=0, column=1, padx=5, pady=5, sticky="ew")
+        ttk.Button(quick_frame, text="3. Launch EQ Client",
+                  command=self.launch_eqgame).grid(row=0, column=2, padx=5, pady=5, sticky="ew")
+        ttk.Button(quick_frame, text="Build + Copy DLL",
+                  command=self.run_build_eqcore_thread).grid(row=1, column=0, padx=5, pady=5, sticky="ew")
+        ttk.Button(quick_frame, text="Export Client Files",
+                  command=self.export_all_client_files).grid(row=1, column=1, padx=5, pady=5, sticky="ew")
+        ttk.Button(quick_frame, text="Full Rebuild + Restart",
+                  command=self.full_rebuild_and_restart).grid(row=1, column=2, padx=5, pady=5, sticky="ew")
 
     # ==================== Console Output Methods ====================
 
@@ -768,7 +777,6 @@ class ServerManagerApp(tk.Tk):
         def backup():
             try:
                 # Read database config
-                import json
                 with open('eqemu_config.json', 'r') as f:
                     config = json.load(f)
 
@@ -840,7 +848,6 @@ class ServerManagerApp(tk.Tk):
 
         def restore():
             try:
-                import json
                 with open('eqemu_config.json', 'r') as f:
                     config = json.load(f)
 
@@ -1037,41 +1044,47 @@ class ServerManagerApp(tk.Tk):
         threading.Thread(target=self.build_eqcore_and_copy, daemon=True).start()
 
     def build_eqcore_and_copy(self):
+        """Build the eq-core DLL using MSBuild and copy to EQ client folder"""
         try:
-            self.log("Building eqcore DLL target...")
-            # Prefer building via CMake if the target exists
-            cmd = ["cmake", "--build", self.build_dir, "--target", "eqcore-dll"]
-            if sys.platform == "win32":
-                cmd += ["--config", "RelWithDebInfo"]
+            self.log("Building eq-core DLL (MSBuild)...")
 
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            if result.returncode == 0:
-                self.log("eqcore build complete (cmake target), copying...")
-                self.copy_eqcore_dll()
+            # Use MSBuild directly - this matches the VS Code task
+            msbuild = r"C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe"
+            sln_path = os.path.join("extras", "eq-core-dll-main", "eq-core-dll-visualstudio2022.sln")
+
+            if not os.path.exists(msbuild):
+                self.log(f"MSBuild not found at {msbuild}")
                 return
 
-            # If CMake target not available or failed, try the included PowerShell helper (Windows only)
-            self.log(f"eqcore cmake build failed or target missing: {result.stderr.strip()}" )
-            ps_script = os.path.join("extras", "eq-core-dll-main", "build_dll.ps1")
-            if sys.platform == "win32" and os.path.exists(ps_script):
-                self.log("Falling back to PowerShell build script: build_dll.ps1")
-                try:
-                    ps_cmd = ["powershell", "-ExecutionPolicy", "Bypass", "-File", ps_script]
-                    ps_result = subprocess.run(ps_cmd, capture_output=True, text=True)
-                    if ps_result.returncode != 0:
-                        self.log(f"PowerShell build failed: {ps_result.stderr}")
-                        return
-                    self.log("PowerShell build complete, copying...")
-                    self.copy_eqcore_dll()
-                    return
-                except Exception as e:
-                    self.log(f"PowerShell build invocation failed: {e}")
-                    return
+            if not os.path.exists(sln_path):
+                self.log(f"Solution not found at {sln_path}")
+                return
 
-            # No fallback available or all builds failed
-            self.log("eqcore build failed and no fallback succeeded.")
+            cmd = [
+                msbuild,
+                sln_path,
+                "/p:Configuration=Release",
+                "/p:Platform=Win32",
+                "/p:PlatformToolset=v143"
+            ]
+
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            while True:
+                line = proc.stdout.readline()
+                if not line:
+                    break
+                line = line.strip()
+                if line:  # Skip empty lines
+                    self.log(line)
+            proc.wait()
+
+            if proc.returncode == 0:
+                self.log("DLL build complete, copying...")
+                self.copy_eqcore_dll()
+            else:
+                self.log(f"DLL build failed with code {proc.returncode}")
         except Exception as e:
-            self.log(f"eqcore build/copy failed: {e}")
+            self.log(f"DLL build/copy failed: {e}")
 
     def copy_eqcore_dll(self):
         try:
@@ -1174,6 +1187,102 @@ class ServerManagerApp(tk.Tk):
                 self.db_output.insert("end", f"Export status failed: {e}\n")
                 self.db_output.see("end")
 
+    # ==================== Quick Action Methods ====================
+
+    def quick_build(self, target):
+        """Quick build a specific target without reconfiguring"""
+        def do_build():
+            self.build_btn.config(state="disabled")
+            self.build_status_lbl.config(text=f"Building {target}...")
+
+            cmd = ["cmake", "--build", "build", "--target", target, "--config", "RelWithDebInfo", "--parallel"]
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+
+            while True:
+                line = proc.stdout.readline()
+                if not line:
+                    break
+                line = line.strip()
+                if line:
+                    self.log(line)
+            proc.wait()
+
+            if proc.returncode == 0:
+                self.log(f"Build {target} complete.")
+                self.build_status_lbl.config(text="Build Complete")
+                self.bin_dir = self.find_bin_dir()
+            else:
+                self.log(f"Build {target} failed.")
+                self.build_status_lbl.config(text="Build Failed")
+
+            self.build_btn.config(state="normal")
+
+        threading.Thread(target=do_build, daemon=True).start()
+
+    def export_all_client_files(self):
+        """Export both spells_us and dbstr_us"""
+        def do_export():
+            self.log("Exporting client files...")
+            self.export_spells()
+            self.export_dbstr()
+            self.log("Client file export complete.")
+            self.refresh_status_indicators()
+
+        threading.Thread(target=do_export, daemon=True).start()
+
+    def full_rebuild_and_restart(self):
+        """Build zone, restart zones - common testing workflow"""
+        def do_full():
+            self.log("=== Full Rebuild and Restart ===")
+
+            # Build zone
+            self.build_btn.config(state="disabled")
+            self.build_status_lbl.config(text="Building zone...")
+
+            cmd = ["cmake", "--build", "build", "--target", "zone", "--config", "RelWithDebInfo", "--parallel"]
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+
+            while True:
+                line = proc.stdout.readline()
+                if not line:
+                    break
+                line = line.strip()
+                if line:
+                    self.log(line)
+            proc.wait()
+
+            if proc.returncode != 0:
+                self.log("Build failed, aborting restart.")
+                self.build_status_lbl.config(text="Build Failed")
+                self.build_btn.config(state="normal")
+                return
+
+            self.build_status_lbl.config(text="Restarting...")
+            self.bin_dir = self.find_bin_dir()
+
+            # Kill zones
+            try:
+                subprocess.run(["taskkill", "/F", "/IM", "zone.exe"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.run(["taskkill", "/F", "/IM", "eqlaunch.exe"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception:
+                pass
+
+            if "eqlaunch" in self.processes:
+                del self.processes["eqlaunch"]
+            if "zone" in self.processes:
+                del self.processes["zone"]
+
+            time.sleep(1)
+
+            # Restart eqlaunch
+            self.after(0, lambda: self.start_process("eqlaunch"))
+
+            self.build_status_lbl.config(text="Ready")
+            self.build_btn.config(state="normal")
+            self.log("=== Rebuild and Restart Complete ===")
+
+        threading.Thread(target=do_full, daemon=True).start()
+
     # ==================== Original Methods ====================
 
     def refresh_scripts(self):
@@ -1216,21 +1325,23 @@ class ServerManagerApp(tk.Tk):
         try:
             # DLL status
             dll_ok, dll_msg = self._compute_dll_status()
-            self.after(0, lambda: self.set_status_label("dll", dll_ok, dll_msg))
+            self.after(0, lambda ok=dll_ok, msg=dll_msg: self.set_status_label("dll", ok, msg))
         except Exception as e:
-            self.after(0, lambda: self.set_status_label("dll", False, f"DLL: error {e}"))
+            err_msg = f"DLL: error {e}"
+            self.after(0, lambda msg=err_msg: self.set_status_label("dll", False, msg))
 
         try:
             spells_ok, spells_msg, dbstr_ok, dbstr_msg = self._compute_export_status()
-            self.after(0, lambda: self.set_status_label("spells", spells_ok, spells_msg))
-            self.after(0, lambda: self.set_status_label("dbstr", dbstr_ok, dbstr_msg))
+            self.after(0, lambda ok=spells_ok, msg=spells_msg: self.set_status_label("spells", ok, msg))
+            self.after(0, lambda ok=dbstr_ok, msg=dbstr_msg: self.set_status_label("dbstr", ok, msg))
         except Exception as e:
-            self.after(0, lambda: self.set_status_label("spells", False, f"spells_us: error {e}"))
-            self.after(0, lambda: self.set_status_label("dbstr", False, f"dbstr_us: error {e}"))
+            spells_err = f"spells_us: error {e}"
+            dbstr_err = f"dbstr_us: error {e}"
+            self.after(0, lambda msg=spells_err: self.set_status_label("spells", False, msg))
+            self.after(0, lambda msg=dbstr_err: self.set_status_label("dbstr", False, msg))
 
     def clean_build(self):
         if messagebox.askyesno("Clean Build", "Are you sure you want to delete the build directory?"):
-            import shutil
             if os.path.exists(self.build_dir):
                 try:
                     shutil.rmtree(self.build_dir)
@@ -1416,19 +1527,52 @@ class ServerManagerApp(tk.Tk):
 
     def force_kill_all(self):
         if messagebox.askyesno("Force Kill", "This will forcefully terminate all server processes (taskkill). Continue?"):
-            self.log("Force killing all server processes...")
-            targets = ["loginserver.exe", "world.exe", "ucs.exe", "queryserv.exe", "eqlaunch.exe", "zone.exe", "shared_memory.exe"]
-            for target in targets:
-                try:
-                    subprocess.run(["taskkill", "/F", "/IM", target], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                    self.log(f"Sent kill signal to {target}")
-                except Exception as e:
-                    self.log(f"Error killing {target}: {e}")
+            self._kill_all_server_processes()
 
-            # Clear internal state
-            self.processes.clear()
-            for name in self.proc_widgets:
-                self.update_ui_state(name, False)
+    def _kill_all_server_processes(self):
+        """Kill all server processes without confirmation"""
+        self.log("Force killing all server processes...")
+        targets = ["loginserver.exe", "world.exe", "ucs.exe", "queryserv.exe", "eqlaunch.exe", "zone.exe", "shared_memory.exe"]
+        for target in targets:
+            try:
+                subprocess.run(["taskkill", "/F", "/IM", target], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception:
+                pass
+
+        # Clear internal state
+        self.processes.clear()
+        for name in self.proc_widgets:
+            self.update_ui_state(name, False)
+        self.log("All processes killed.")
+
+    def restart_zones(self):
+        """Quick restart: kill zone processes and restart eqlaunch for rapid testing"""
+        def do_restart():
+            self.log("Restarting zones...")
+            # Kill zone and eqlaunch
+            try:
+                subprocess.run(["taskkill", "/F", "/IM", "zone.exe"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.run(["taskkill", "/F", "/IM", "eqlaunch.exe"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception:
+                pass
+
+            # Update UI state
+            if "zone" in self.proc_widgets:
+                self.after(0, lambda: self.update_ui_state("zone", False))
+            if "eqlaunch" in self.proc_widgets:
+                self.after(0, lambda: self.update_ui_state("eqlaunch", False))
+            if "eqlaunch" in self.processes:
+                del self.processes["eqlaunch"]
+            if "zone" in self.processes:
+                del self.processes["zone"]
+
+            time.sleep(1)
+
+            # Restart eqlaunch
+            self.after(0, lambda: self.start_process("eqlaunch"))
+            self.log("Zones restarting via eqlaunch...")
+
+        threading.Thread(target=do_restart, daemon=True).start()
 
     def update_ui_state(self, name, is_running):
         widgets = self.proc_widgets[name]

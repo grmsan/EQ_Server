@@ -924,7 +924,18 @@ void Client::BulkSendMerchantInventory(int merchant_id, int npcid) {
 			continue;
 		}
 
-		if (!(ml.classes_required & (1 << (GetClass() - 1)))) {
+		// THJServer parity: use union-of-classes bitmask for merchant filtering
+		const uint32 classes_bits = GetClassesBits();
+		if (!(ml.classes_required & classes_bits)) {
+			if (RuleB(Custom, MulticlassDebug)) {
+				LogDebug(
+					"MCDIAG_MERCHANT_SKIP name=[{}] ml_item=[{}] ml_classes_required=0x{:08X} classes_bits=0x{:08X} (no match)",
+					GetCleanName(),
+					ml.item,
+					static_cast<uint32>(ml.classes_required),
+					classes_bits
+				);
+			}
 			continue;
 		}
 

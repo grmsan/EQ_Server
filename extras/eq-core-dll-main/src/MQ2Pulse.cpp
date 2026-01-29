@@ -20,6 +20,10 @@ GNU General Public License for more details.
 
 //#define DEBUG_TRY 1
 #include "MQ2Main.h"
+
+// External logging function from eqgame.cpp
+extern void LogDebug(const char* format, ...);
+
 BOOL TurnNotDone=FALSE;
 
 #ifndef ISXEQ
@@ -57,7 +61,7 @@ BOOL DoNextCommand()
 #ifdef MQ2_PROFILING
             LARGE_INTEGER BeforeCommand;
             QueryPerformanceCounter(&BeforeCommand);
-            PMACROBLOCK ThisMacroBlock = gMacroBlock; 
+            PMACROBLOCK ThisMacroBlock = gMacroBlock;
 #endif
             gMacroBlock->MacroCmd = 0;
             DoCommand(pChar,gMacroBlock->Line);
@@ -66,13 +70,13 @@ BOOL DoNextCommand()
                 LARGE_INTEGER AfterCommand;
                 QueryPerformanceCounter(&AfterCommand);
                 ThisMacroBlock->ExecutionCount++;
-                ThisMacroBlock->ExecutionTime += AfterCommand.QuadPart - BeforeCommand.QuadPart; 
+                ThisMacroBlock->ExecutionTime += AfterCommand.QuadPart - BeforeCommand.QuadPart;
 #endif
                 if (!gMacroBlock->pNext) {
                     FatalError("Reached end of macro.");
                 } else {
-                    // if the macro block changed and there was a /macro 
-                    // command don't bump the line 
+                    // if the macro block changed and there was a /macro
+                    // command don't bump the line
                     //if (gMacroBlock == tmpBlock || !gMacroBlock->MacroCmd) {
                     gMacroBlock = gMacroBlock->pNext;
                     //}
@@ -131,7 +135,7 @@ void Pulse()
         pDoorTarget=0;
         LastHealth=GetCurHPS();
         LastMana=GetCharInfo2()->Mana;
-        LastEndurance=GetCharInfo2()->Endurance; 
+        LastEndurance=GetCharInfo2()->Endurance;
         ManaGained=0;
         HealthGained=0;
         EnduranceGained=0;
@@ -179,13 +183,13 @@ void Pulse()
     }
     LastMana=GetCharInfo2()->Mana;
 
-    if (LastEndurance && GetCharInfo2()->Endurance > LastEndurance) 
-    { 
-        if (GetCharInfo2()->Endurance != GetMaxEndurance()) 
-        { 
-            EnduranceGained = GetCharInfo2()->Endurance - LastEndurance; 
-        } 
-    } 
+    if (LastEndurance && GetCharInfo2()->Endurance > LastEndurance)
+    {
+        if (GetCharInfo2()->Endurance != GetMaxEndurance())
+        {
+            EnduranceGained = GetCharInfo2()->Endurance - LastEndurance;
+        }
+    }
     LastEndurance = GetCharInfo2()->Endurance;
 
     if (gbDoAutoRun && pChar && pCharInfo) {
@@ -256,47 +260,61 @@ void Pulse()
 
 void Heartbeat()
 {
+    static int s_lastLoggedState = -99;
     int GameState=GetGameState();
     if (GameState!=-1)
     {
         if ((DWORD)GameState!=gGameState)
         {
+            LogDebug("DEBUG_ZONE: Heartbeat GameState changed %d -> %d", gGameState, GameState);
             DebugSpew("GetGameState()=%d vs %d",GameState,gGameState);
 			SetMapGameState(GameState);
             gGameState=GameState;
         }
     }
+    // Log periodically when state is different from last logged
+    if (GameState != s_lastLoggedState) {
+        LogDebug("DEBUG_ZONE: Heartbeat current GameState=%d", GameState);
+        s_lastLoggedState = GameState;
+    }
     UpdateMQ2SpawnSort();
 }
 
 #ifndef ISXEQ_LEGACY
-// *************************************************************************** 
-// Function:    ProcessGameEvents 
+// ***************************************************************************
+// Function:    ProcessGameEvents
 // Description: Our ProcessGameEvents Hook
-// *************************************************************************** 
+// ***************************************************************************
 extern void EdgeStats_MaybeInstallDetoursFromMainThread();
 
-BOOL Trampoline_ProcessGameEvents(VOID); 
-BOOL Detour_ProcessGameEvents(VOID) 
-{ 
+BOOL Trampoline_ProcessGameEvents(VOID);
+BOOL Detour_ProcessGameEvents(VOID)
+{
+    static bool s_loggedFirst = false;
+    if (!s_loggedFirst) {
+        LogDebug("DEBUG_ZONE: Detour_ProcessGameEvents first call");
+        s_loggedFirst = true;
+    }
     Heartbeat();
 	// If server-authoritative stats are enabled, this is a safe main-thread hook
 	// to install the detours once we are fully in-game.
 	EdgeStats_MaybeInstallDetoursFromMainThread();
 #ifdef ISXEQ
-    if (!pISInterface->ScriptEngineActive()) 
+    if (!pISInterface->ScriptEngineActive())
         pISInterface->LavishScriptPulse();
 #endif
     return Trampoline_ProcessGameEvents();
 }
 
-DETOUR_TRAMPOLINE_EMPTY(BOOL Trampoline_ProcessGameEvents(VOID)); 
+DETOUR_TRAMPOLINE_EMPTY(BOOL Trampoline_ProcessGameEvents(VOID));
 class CEverQuestHook {
 public:
     VOID EnterZone_Trampoline(PVOID pVoid);
     VOID EnterZone_Detour(PVOID pVoid)
     {
+        LogDebug("DEBUG_ZONE: EnterZone_Detour called, calling trampoline...");
         EnterZone_Trampoline(pVoid);
+        LogDebug("DEBUG_ZONE: EnterZone_Detour trampoline returned, setting gZoning=TRUE");
         gZoning = TRUE;
         WereWeZoning = TRUE;
     }
@@ -304,10 +322,12 @@ public:
     VOID SetGameState_Trampoline(DWORD GameState);
     VOID SetGameState_Detour(DWORD GameState)
     {
-//        DebugSpew("SetGameState_Detour(%d)",GameState);
+        LogDebug("DEBUG_ZONE: SetGameState_Detour called with GameState=%u", (unsigned)GameState);
 
 		SetMapGameState(GameState);
+        LogDebug("DEBUG_ZONE: SetGameState_Detour calling trampoline...");
         SetGameState_Trampoline(GameState);
+        LogDebug("DEBUG_ZONE: SetGameState_Detour trampoline returned");
     }
 };
 

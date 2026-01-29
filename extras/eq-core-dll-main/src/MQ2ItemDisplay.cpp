@@ -16,17 +16,21 @@
 // thanks, finally, SOE. we'll leave this here for a while and eventually remove it
 #define DISABLE_TOOLTIP_TIMERS
 
-void Comment(PSPAWNINFO pChar, PCHAR szLine); 
+void Comment(PSPAWNINFO pChar, PCHAR szLine);
+
+// Debug logging for spell display investigation
+extern void LogDebug(const char* fmt, ...);
+extern bool isDebugLoggingEnabled;
 
 extern "C" {
     __declspec(dllexport) ITEMINFO g_Item;
     CONTENTS g_Contents;
 }
 
-// *************************************************************************** 
+// ***************************************************************************
 // Function:    ItemDisplayHook
-// Description: Our Item display hook 
-// *************************************************************************** 
+// Description: Our Item display hook
+// ***************************************************************************
 class ItemDisplayHook
 {
     typedef enum {None = 0, Clicky, Proc, Worn, Focus, Scroll} SEffectType;
@@ -123,16 +127,31 @@ public:
     VOID SetSpell_Trampoline(int SpellID,bool HasSpellDescr);
     VOID SetSpell_Detour(int SpellID,bool HasSpellDescr)
     {
+        // ALWAYS log to see if this function is ever called
+        LogDebug("[SPELL_DISPLAY] SetSpell_Detour ENTRY: SpellID=%d bNoSpellTramp=%d", SpellID, bNoSpellTramp ? 1 : 0);
+
         PEQSPELLINFOWINDOW This=(PEQSPELLINFOWINDOW)this;
         PCHARINFO pCharInfo = NULL;
         if (NULL == (pCharInfo = GetCharInfo())) return;
         PSPELL pSpell = GetSpellByID(SpellID);
         if (pSpell == NULL) {
+            LogDebug("[SPELL_DISPLAY] GetSpellByID returned NULL for SpellID=%d", SpellID);
             return;
         }
+
+        // DEBUG: Log spell info and Level array before calling trampoline
+        LogDebug("[SPELL_DISPLAY] Spell Name=%s", pSpell->Name ? pSpell->Name : "NULL");
+        LogDebug("[SPELL_DISPLAY] Level[0-7]: %d %d %d %d %d %d %d %d",
+            pSpell->Level[0], pSpell->Level[1], pSpell->Level[2], pSpell->Level[3],
+            pSpell->Level[4], pSpell->Level[5], pSpell->Level[6], pSpell->Level[7]);
+        LogDebug("[SPELL_DISPLAY] Level[8-15]: %d %d %d %d %d %d %d %d",
+            pSpell->Level[8], pSpell->Level[9], pSpell->Level[10], pSpell->Level[11],
+            pSpell->Level[12], pSpell->Level[13], pSpell->Level[14], pSpell->Level[15]);
+
         CHAR out[MAX_STRING] = {0};
         CHAR temp[MAX_STRING] = {0};
         if (!bNoSpellTramp) {
+            LogDebug("[SPELL_DISPLAY] Calling SetSpell_Trampoline (native)");
             SetSpell_Trampoline(SpellID,HasSpellDescr);
             strcpy(out,"<BR><c \"#00FFFF\">");
         } else {
@@ -172,7 +191,7 @@ public:
         DWORD Tics=GetSpellDuration(pSpell,pCharInfo->pSpawn);
         if (Tics==0xFFFFFFFF)
             strcat(out, "Duration: Permanent<br>" );
-        else if (Tics==0xFFFFFFFE) 
+        else if (Tics==0xFFFFFFFE)
             strcat(out, "Duration: Unknown<br>" );
         else if (Tics==0) {
             // It's "instant", who cares?
@@ -194,7 +213,7 @@ public:
         }
 
         if (pSpell->PushBack != 0.0f ) {
-            if (pSpell->Range > 0.0f ) 
+            if (pSpell->Range > 0.0f )
                 strcat(out, "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;" );
             sprintf(temp, "PushBack: %1.1f", pSpell->PushBack );
             strcat(out, temp);
@@ -232,50 +251,30 @@ public:
                 } else {
                     strcat(out,"<br>");
                 }
-            } 
+            }
         }
 
         strcat(out, "<br>" );
         ShowSpellSlotInfo(pSpell,&out[strlen(out)]);
 
-        //show usable classes routine by Koad//
+        if (pSpell->CastOnYou[0]) {
+            sprintf(temp, "Cast on you: %s<br>", pSpell->CastOnYou);
+            strcat(out,temp);
+        }
 
+        if (pSpell->CastOnAnother[0]) {
+            sprintf(temp, "Cast on another: %s<br>", pSpell->CastOnAnother);
+            strcat(out,temp);
+        }
 
-        bool bUseableClasses = false; 
-
-		if (pLocalPlayer && pLocalPlayer->Data.GM)
-		{
-			strcat(out, "<br>");
-			for (int j = 0; j < 16; j++) {  // Ziggy - output will word wrap properly now
-				if (pSpell->Level[j] > 0 && pSpell->Level[j] <= 70) {
-					if (bUseableClasses) strcat(out, ", ");
-
-					sprintf(temp, "%s(%d)", GetClassDesc(j + 1), pSpell->Level[j]);
-					strcat(out, temp);
-					bUseableClasses = true;
-				}
-			}
-			if (bUseableClasses) strcat(out, "<br><br>");
-		}
-
-        if (pSpell->CastOnYou[0]) { 
-            sprintf(temp, "Cast on you: %s<br>", pSpell->CastOnYou); 
-            strcat(out,temp); 
-        } 
-
-        if (pSpell->CastOnAnother[0]) { 
-            sprintf(temp, "Cast on another: %s<br>", pSpell->CastOnAnother); 
-            strcat(out,temp); 
-        } 
-
-        if (pSpell->WearOff[0]) { 
-            sprintf(temp, "Wears off: %s<br>", pSpell->WearOff); 
-            strcat(out,temp); 
-        } 
+        if (pSpell->WearOff[0]) {
+            sprintf(temp, "Wears off: %s<br>", pSpell->WearOff);
+            strcat(out,temp);
+        }
 
         if (out[0]!=17) {
             strcat(out,"</c>");
-            AppendCXStr(&This->ItemInfo,&out[0]);  
+            AppendCXStr(&This->ItemInfo,&out[0]);
         }
     }
 
@@ -339,7 +338,7 @@ public:
         DWORD Tics=GetSpellDuration(pSpell,pCharInfo->pSpawn);
         if (Tics==0xFFFFFFFF)
             strcat(out, "Duration: Permanent<br>" );
-        else if (Tics==0xFFFFFFFE) 
+        else if (Tics==0xFFFFFFFE)
             strcat(out, "Duration: Unknown<br>" );
         else if (Tics==0) {
             // It's "instant", who cares?
@@ -361,7 +360,7 @@ public:
         }
 
         if (pSpell->PushBack != 0.0f ) {
-            if (pSpell->Range > 0.0f ) 
+            if (pSpell->Range > 0.0f )
                 strcat(out, "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;" );
             sprintf(temp, "PushBack: %1.1f", pSpell->PushBack );
             strcat(out, temp);
@@ -399,48 +398,31 @@ public:
                 } else {
                     strcat(out,"<br>");
                 }
-            } 
+            }
         }
 
         strcat(out, "<br>" );
         ShowSpellSlotInfo(pSpell,&out[strlen(out)]);
 
-        //show usable classes routine by Koad//
-		if (pLocalPlayer && pLocalPlayer->Data.GM)
-		{
-			bool bUseableClasses = false;
-			strcat(out, "<br>");
-			for (int j = 0; j < 16; j++) {  // Ziggy - output will word wrap properly now
-				if (pSpell->Level[j] > 0 && pSpell->Level[j] <= 70) {
-					if (bUseableClasses) strcat(out, ", ");
+        if (pSpell->CastOnYou[0]) {
+            sprintf(temp, "Cast on you: %s<br>", pSpell->CastOnYou);
+            strcat(out,temp);
+        }
 
-					sprintf(temp, "%s(%d)", GetClassDesc(j + 1), pSpell->Level[j]);
-					strcat(out, temp);
-					bUseableClasses = true;
-				}
-			}
-			if (bUseableClasses) strcat(out, "<br><br>");
-		}
+        if (pSpell->CastOnAnother[0]) {
+            sprintf(temp, "Cast on another: %s<br>", pSpell->CastOnAnother);
+            strcat(out,temp);
+        }
 
-        if (pSpell->CastOnYou[0]) { 
-            sprintf(temp, "Cast on you: %s<br>", pSpell->CastOnYou); 
-            strcat(out,temp); 
-        } 
-
-        if (pSpell->CastOnAnother[0]) { 
-            sprintf(temp, "Cast on another: %s<br>", pSpell->CastOnAnother); 
-            strcat(out,temp); 
-        } 
-
-        if (pSpell->WearOff[0]) { 
-            sprintf(temp, "Wears off: %s<br>", pSpell->WearOff); 
-            strcat(out,temp); 
-        } 
+        if (pSpell->WearOff[0]) {
+            sprintf(temp, "Wears off: %s<br>", pSpell->WearOff);
+            strcat(out,temp);
+        }
 
         if (out[0]!=17) {
             strcat(out,"</c>");
             //((CXStr)This->ItemInfo)+=
-            AppendCXStr(&This->ItemInfo,&out[0]);   
+            AppendCXStr(&This->ItemInfo,&out[0]);
         }
     }
 
@@ -461,16 +443,16 @@ public:
         memcpy(&g_Item, Item, sizeof(ITEMINFO));
 
         strcpy(out,"<BR><c \"#00FFFF\">");
-        if ( Item->ItemNumber > 0 && pLocalPlayer && pLocalPlayer->Data.GM) { 
-            sprintf(temp,"Item ID: %d<br>", Item->ItemNumber); 
-            strcat(out, temp); 
+        if ( Item->ItemNumber > 0 && pLocalPlayer && pLocalPlayer->Data.GM) {
+            sprintf(temp,"Item ID: %d<br>", Item->ItemNumber);
+            strcat(out, temp);
         }
         if ( ((EQ_Item*)item)->IsStackable() ) {
             if ( Item->StackSize > 0 ) {
                 sprintf(temp,"Stackable Count: %d<br>", Item->StackSize);
                 strcat(out, temp);
             }
-        } 
+        }
         if (Item->Cost>0) {
             DWORD cp = Item->Cost;
             DWORD sp = cp/10; cp=cp%10;
@@ -527,21 +509,21 @@ public:
             sprintf(temp,"Item Lore: %s<BR>",Item->LoreName);
             strcat(out,temp);
         }
-        PCHARINFO pChar = GetCharInfo();     // Ziggy - for item level highlights 
-        // Will be 0 for no effect or -1 if other effects present 
-        if (Item->Proc.SpellID && Item->Proc.SpellID!=-1) { 
-            if (Item->Proc.RequiredLevel == 0 ) 
-                sprintf(temp, "Procs at level 1 (Proc rate modifier: %d)<BR>", Item->Proc.ProcRate); 
-            else 
-                sprintf(temp,"%sProcs at level %d%s (Proc rate modifier: %d)<BR>", (Item->Proc.RequiredLevel > GetCharInfo2()->Level ? "<c \"#FF4040\">" : ""), Item->Proc.RequiredLevel, (Item->Proc.RequiredLevel > GetCharInfo2()->Level ? "</C>" : ""), Item->Proc.ProcRate); 
-            strcat(out,temp); 
-        } 
-        /* No longer needed? 
-        else if (Item->SpellId==998) { // 998 = haste 
-        sprintf(temp,"%d%% Haste<BR>",Item->Level+1); 
-        strcat(out,temp); 
-        } 
-        */ 
+        PCHARINFO pChar = GetCharInfo();     // Ziggy - for item level highlights
+        // Will be 0 for no effect or -1 if other effects present
+        if (Item->Proc.SpellID && Item->Proc.SpellID!=-1) {
+            if (Item->Proc.RequiredLevel == 0 )
+                sprintf(temp, "Procs at level 1 (Proc rate modifier: %d)<BR>", Item->Proc.ProcRate);
+            else
+                sprintf(temp,"%sProcs at level %d%s (Proc rate modifier: %d)<BR>", (Item->Proc.RequiredLevel > GetCharInfo2()->Level ? "<c \"#FF4040\">" : ""), Item->Proc.RequiredLevel, (Item->Proc.RequiredLevel > GetCharInfo2()->Level ? "</C>" : ""), Item->Proc.ProcRate);
+            strcat(out,temp);
+        }
+        /* No longer needed?
+        else if (Item->SpellId==998) { // 998 = haste
+        sprintf(temp,"%d%% Haste<BR>",Item->Level+1);
+        strcat(out,temp);
+        }
+        */
 
         // Just in case...
         if (This->ItemInfo && (!strstr(This->ItemInfo->Text,"(Combat)")) && Item->Proc.ProcRate > 0 )
@@ -550,22 +532,22 @@ public:
             strcat(out,temp);
         }
 
-        // Teh_Ish (02/08/2004) 
+        // Teh_Ish (02/08/2004)
         if ( Item->Clicky.EffectType==4 || Item->Clicky.EffectType==1 || Item->Clicky.EffectType==5) {
             if ( Item->Clicky.RequiredLevel == 0 )
                 sprintf(temp, "Clickable at level 1<br>");
             else
-                sprintf(temp,"%sClickable at level %d%s<BR>", (Item->Clicky.RequiredLevel > GetCharInfo2()->Level ? "<c \"#FF4040\">" : ""), Item->Clicky.RequiredLevel, (Item->Clicky.RequiredLevel > GetCharInfo2()->Level ? "</C>" : ""));  
-            strcat(out,temp); 
+                sprintf(temp,"%sClickable at level %d%s<BR>", (Item->Clicky.RequiredLevel > GetCharInfo2()->Level ? "<c \"#FF4040\">" : ""), Item->Clicky.RequiredLevel, (Item->Clicky.RequiredLevel > GetCharInfo2()->Level ? "</C>" : ""));
+            strcat(out,temp);
         }
-  
+
         // TheColonel (1/18/2004)
         /*
-        if (Item->InstrumentType != 0){ 
-        float instrumentmod = ((float)Item->InstrumentMod)/10.0f; 
-        sprintf(temp,"Instrument mod: %3.1f to %s.<BR>", instrumentmod, szItemTypes[Item->InstrumentType]); 
-        strcat(out,temp);       
-        } 
+        if (Item->InstrumentType != 0){
+        float instrumentmod = ((float)Item->InstrumentMod)/10.0f;
+        sprintf(temp,"Instrument mod: %3.1f to %s.<BR>", instrumentmod, szItemTypes[Item->InstrumentType]);
+        strcat(out,temp);
+        }
         /**/
 
         if (Item->Type == ITEMTYPE_PACK) {
@@ -624,13 +606,16 @@ DETOUR_TRAMPOLINE_EMPTY(VOID ItemDisplayHook::UpdateStrings_Trampoline());
 // Called once, when the plugin is to initialize
 PLUGIN_API VOID InitializeMQ2ItemDisplay(VOID)
 {
+    LogDebug("[SPELL_DISPLAY] InitializeMQ2ItemDisplay called");
     memset(&g_Contents, 0, sizeof(g_Contents));
     g_Contents.Item1 = NULL;
     g_Contents.Item2 = &g_Item;
     g_Item.ItemNumber = 0;
 
+    LogDebug("[SPELL_DISPLAY] Installing SetSpell detour at 0x%08X", CItemDisplayWnd__SetSpell);
     EzDetour(CItemDisplayWnd__SetSpell,&ItemDisplayHook::SetSpell_Detour,&ItemDisplayHook::SetSpell_Trampoline);
     EzDetour(CItemDisplayWnd__UpdateStrings, &ItemDisplayHook::UpdateStrings_Detour, &ItemDisplayHook::UpdateStrings_Trampoline);
+    LogDebug("[SPELL_DISPLAY] Detours installed");
 }
 
 // Called once, when the plugin is to shutdown

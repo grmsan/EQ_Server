@@ -2059,15 +2059,74 @@ int __fastcall EQCharacter_GetUsableClasses_Detour(void* This, void* edx, int a1
 {
 	g_last_hook_tag = Hook_GetUsableClasses;
 
+	void* ret_addr = _ReturnAddress();
+	DWORD ret_rva = (DWORD)((uintptr_t)ret_addr - (uintptr_t)baseAddress);
+
 	int ret = -1;
 
-	// Prefer the server-provided mask when available. Avoid calling the native trampoline when
-	// it is still an "empty trampoline" (it will intentionally fault if invoked).
-	if (isMulticlassUsableClassesOverrideEnabled && g_serverUsableClassesMask != 0) {
-		ret = static_cast<int>(g_serverUsableClassesMask & 0xFFFF);
+	// Known caller RVAs for item/spell tooltip display (viewing scrolls, items).
+	// These callers need NATIVE behavior to show only the classes that can actually use the item.
+	// RVA 0x002A6D16: Called when viewing a spell scroll in inventory/merchant
+	constexpr DWORD kTooltipCallerRVA = 0x002A6D16;
+
+	if (ret_rva == kTooltipCallerRVA) {
+		// Tooltip rendering path: call native trampoline to get item's actual usable classes
+		// This ensures only classes that can use the spell are displayed (e.g., Mag(1) for mage-only spell)
+		int nativeVal = -1;
+		__try {
+			nativeVal = EQCharacter_GetUsableClasses_Tramp(This, edx, a1, a2);
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER) {
+			nativeVal = -1;
+		}
+		ret = nativeVal;
+	} else if (isMulticlassUsableClassesOverrideEnabled && g_serverUsableClassesMask != 0) {
+		// For "Show Usable Items" and other usability checks:
+		// Get the item's native usable classes, then check if ANY multiclass class can use it.
+		int nativeItemClasses = -1;
+		__try {
+			nativeItemClasses = EQCharacter_GetUsableClasses_Tramp(This, edx, a1, a2);
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER) {
+			nativeItemClasses = -1;
+		}
+
+		if (nativeItemClasses > 0) {
+			// Check if any of our multiclass classes can use this item
+			int intersection = static_cast<int>(g_serverUsableClassesMask & nativeItemClasses);
+			if (intersection != 0) {
+				// At least one multiclass class can use this item.
+				// The client will check if the BASE class bit is set in the result.
+				// So we must include the base class bit for the filter to pass.
+				if (pLocalPlayer) {
+					const uint8_t baseClass = static_cast<uint8_t>(pLocalPlayer->Data.Class);
+					if (baseClass >= 1 && baseClass <= 16) {
+						ret = intersection | (1 << (baseClass - 1));
+					} else {
+						ret = intersection;
+					}
+				} else {
+					ret = intersection;
+				}
+			} else {
+				// No multiclass class can use this item - return 0 to filter it out
+				ret = 0;
+			}
+		} else {
+			// Item has no class restriction or error - return full multiclass mask with base class
+			if (pLocalPlayer) {
+				const uint8_t baseClass = static_cast<uint8_t>(pLocalPlayer->Data.Class);
+				if (baseClass >= 1 && baseClass <= 16) {
+					ret = static_cast<int>(g_serverUsableClassesMask | (1 << (baseClass - 1)));
+				} else {
+					ret = static_cast<int>(g_serverUsableClassesMask & 0xFFFF);
+				}
+			} else {
+				ret = static_cast<int>(g_serverUsableClassesMask & 0xFFFF);
+			}
+		}
 	} else if (isMulticlassUsableClassesOverrideEnabled && g_serverUsableClassesMask == 0) {
 		// If we don't have server data yet, prefer a conservative local baseline (base class only)
-		// over returning -1 (all classes), which can break class-based filters (spell merchants, AA UI, etc).
 		if (pLocalPlayer) {
 			const uint8_t cls = static_cast<uint8_t>(pLocalPlayer->Data.Class);
 			if (cls >= 1 && cls <= 16) {
@@ -2080,21 +2139,9 @@ int __fastcall EQCharacter_GetUsableClasses_Detour(void* This, void* edx, int a1
 			nativeVal = EQCharacter_GetUsableClasses_Tramp(This, edx, a1, a2);
 		}
 		__except (EXCEPTION_EXECUTE_HANDLER) {
-			if (isDebugLoggingEnabled) {
-				LogDebug("CLIENT_DETOUR stat=UsableClasses native trampoline faulted; returning -1 fallback");
-			}
 			nativeVal = -1;
 		}
 		ret = nativeVal;
-	}
-
-	if (isDebugLoggingEnabled && ret != g_last_logged_usable_classes_ret) {
-		g_last_logged_usable_classes_ret = ret;
-		LogDebug(
-			"CLIENT_DETOUR stat=UsableClasses ret=0x%04X server_mask=0x%04X",
-			(unsigned)(ret & 0xFFFF),
-			(unsigned)(g_serverUsableClassesMask & 0xFFFF)
-		);
 	}
 
 	return ret;
@@ -2146,150 +2193,55 @@ int __fastcall EQSpell_GetSpellLevelNeeded_Detour(void* This, void* edx, int cla
 		nativeVal = static_cast<int>(levels[classId - 1]);
 	}
 
-	if (!isMulticlassUsableClassesOverrideEnabled || g_serverUsableClassesMask == 0) {
-		if (isDebugLoggingEnabled && nativeVal == 255 && ShouldLogSpellLevelNeeded()) {
-			LogDebug(
-				"CLIENT_DETOUR stat=SpellLevelNeeded class=%d native=%d used=%d mask=0x%04X",
-				classId,
-				nativeVal,
-				nativeVal,
-				(unsigned)(g_serverUsableClassesMask & 0xFFFF)
-			);
-		}
-		return nativeVal;
-	}
-
-	// RoF2 calls this API in multiple contexts:
-	// - UI/tooltips with an explicit classId (1..16)
-	// - class-agnostic usability checks (sometimes passing values outside 1..16)
-	//
-	// For multiclass characters, some call sites (notably spell merchants) query using the *base* classId only.
-	// In that case we want the minimum required level across owned classes so "Show Usable Items" behaves as expected.
-	const uint8_t baseClassId = (pLocalPlayer ? static_cast<uint8_t>(pLocalPlayer->Data.Class) : 0);
-	const bool allowAggregate =
-		(classId < 1 || classId > 16) ||
-		(baseClassId >= 1 && baseClassId <= 16 && classId == static_cast<int>(baseClassId));
-	if (!allowAggregate) {
-		return nativeVal;
-	}
-
-	// Only intervene when the caller's class returns "not usable" but an *owned* class would be usable.
-	// Some client call sites use special sentinels (e.g. -1) for unusable; only treat [1..254] as "usable".
-	if (nativeVal > 0 && nativeVal < 255) {
-		return nativeVal;
-	}
-
-	int best = 255;
-	int bestClass = 0;
-	for (int candidateClassId = 1; candidateClassId <= 16; ++candidateClassId) {
-		if ((g_serverUsableClassesMask & (1u << (candidateClassId - 1))) == 0) {
-			continue;
-		}
-
-		int req = 255;
-		if (have_levels) {
-			req = static_cast<int>(levels[candidateClassId - 1]);
-		} else {
-			__try {
-				req = EQSpell_GetSpellLevelNeeded_Tramp(This, edx, candidateClassId);
-			}
-			__except (EXCEPTION_EXECUTE_HANDLER) {
-				req = 255;
-			}
-		}
-
-		// In RoF2 spell data, 0 and 255 are commonly used for "not usable by this class".
-		if (req > 0 && req < best) {
-			best = req;
-			bestClass = candidateClassId;
-		}
-	}
-
-	int retVal = (best != 255 ? best : nativeVal);
-
-	// Merchant window compatibility:
-	// - The merchant "Show Usable Items" checkbox appears to treat 255 as a valid numeric level in some cases.
-	// - Returning 0 for "unusable" during merchant UI evaluation keeps stock filtering behavior (hide unusable spells)
-	//   while still allowing multiclass aggregation for usable spells.
-	// We also cache the "best" class so we can display MAG/ENC/etc instead of showing the base class label.
-	const bool in_merchant = (ppMerchantWnd && pMerchantWnd);
-	if (in_merchant && allowAggregate) {
-		InterlockedExchange(&g_merchant_spell_base_class, (LONG)baseClassId);
-		InterlockedExchange(&g_merchant_spell_tick, (LONG)GetTickCount());
-
-		if (best != 255 && bestClass >= 1 && bestClass <= 16) {
-			InterlockedExchange(&g_merchant_spell_best_class, (LONG)bestClass);
-			InterlockedExchange(&g_merchant_spell_best_level, (LONG)best);
-		} else {
-			InterlockedExchange(&g_merchant_spell_best_class, 0);
-			InterlockedExchange(&g_merchant_spell_best_level, 0);
-		}
-	}
-
-	// Focused diagnostics for scroll 15380 ("Spell: Column of Frost" => spell_id 380)
-	// This helps confirm whether the merchant UI is making filtering decisions based on spell levels or item usability.
-	if (isDebugLoggingEnabled && in_merchant && have_levels && spell_id == 380) {
-		void* ra = _ReturnAddress();
-		const DWORD rva = (baseAddress ? (DWORD)((uintptr_t)ra - (uintptr_t)baseAddress) : 0);
+	// ALWAYS log for spell ID 1 (Reclaim Energy) to debug memorization
+	if (isDebugLoggingEnabled && spell_id == 1) {
 		LogDebug(
-			"CLIENT_DETOUR spell_dbg spell=%u '%s' class=%d native=%d used=%d mask=0x%04X allowAggregate=%d retaddr=%p rva=0x%08X",
-			(unsigned)spell_id,
-			spell_name,
-			classId,
-			nativeVal,
-			retVal,
-			(unsigned)(g_serverUsableClassesMask & 0xFFFF),
-			allowAggregate ? 1 : 0,
-			ra,
-			(unsigned)rva
+			"[SPELL_LEVEL_DEBUG] spell=%u '%s' class=%d native=%d have_levels=%d mask=0x%04X enabled=%d",
+			spell_id, spell_name, classId, nativeVal, have_levels ? 1 : 0,
+			g_serverUsableClassesMask, isMulticlassUsableClassesOverrideEnabled ? 1 : 0
 		);
-	}
-
-	// If the merchant filter is still showing unusable spells, try a stronger "unusable" signal for this call site.
-	// Returning 0 causes RoF2 to display the spell as usable at level 0 for the base class, which is wrong.
-	// Returning -1 is treated as "not usable" by several RoF2 UI paths and avoids adding a fake class/level entry.
-	if (in_merchant && allowAggregate && best == 255) {
-		retVal = -1;
-	}
-
-	if (isDebugLoggingEnabled && best != 255 && retVal != nativeVal) {
-		if (ShouldLogSpellLevelNeeded()) {
+		if (have_levels) {
 			LogDebug(
-				"CLIENT_DETOUR stat=SpellLevelNeeded class=%d native=%d used=%d mask=0x%04X",
-				classId,
-				nativeVal,
-				retVal,
-				(unsigned)(g_serverUsableClassesMask & 0xFFFF)
+				"[SPELL_LEVEL_DEBUG] levels: WAR=%d CLR=%d PAL=%d RNG=%d SHD=%d DRU=%d MNK=%d BRD=%d ROG=%d SHM=%d NEC=%d WIZ=%d MAG=%d ENC=%d BST=%d BER=%d",
+				levels[0], levels[1], levels[2], levels[3], levels[4], levels[5], levels[6], levels[7],
+				levels[8], levels[9], levels[10], levels[11], levels[12], levels[13], levels[14], levels[15]
 			);
-			if (have_levels) {
+		}
+	}
+
+	if (!isMulticlassUsableClassesOverrideEnabled || g_serverUsableClassesMask == 0) {
+		return nativeVal;
+	}
+
+	// For multiclass: if the queried classId's native level is 255 (can't use), but we have spell levels
+	// and one of our owned classes CAN use this spell, return the best (lowest) level among owned classes.
+	// This fixes memorization time calculation which uses the queried class's level - if it's 255, mem time is huge.
+	if (have_levels && g_serverUsableClassesMask != 0) {
+		int bestLevel = 255;
+		for (int i = 0; i < 16; ++i) {
+			uint16_t classBit = (1u << i);
+			if ((g_serverUsableClassesMask & classBit) != 0) {
+				// This class is in our multiclass mask
+				int lvl = static_cast<int>(levels[i]);
+				if (lvl > 0 && lvl < 255 && lvl < bestLevel) {
+					bestLevel = lvl;
+				}
+			}
+		}
+
+		// If we found a usable level from any owned class, and it's better than native, use it
+		if (bestLevel < 255 && bestLevel < nativeVal) {
+			if (isDebugLoggingEnabled && spell_id == 1) {
 				LogDebug(
-					"CLIENT_DETOUR stat=SpellLevelNeeded spell=%u '%s' best_class=%d best_level=%d",
-					(unsigned)spell_id,
-					spell_name,
-					bestClass,
-					retVal
+					"[SPELL_LEVEL_OVERRIDE] spell=%u class=%d native=%d -> bestLevel=%d",
+					spell_id, classId, nativeVal, bestLevel
 				);
 			}
-		}
-	}
-	if (isDebugLoggingEnabled && best == 255 && ShouldLogSpellLevelNeeded()) {
-		LogDebug(
-			"CLIENT_DETOUR stat=SpellLevelNeeded class=%d native=%d used=%d mask=0x%04X (no usable class found)",
-			classId,
-			nativeVal,
-			retVal,
-			(unsigned)(g_serverUsableClassesMask & 0xFFFF)
-		);
-		if (have_levels) {
-			LogDebug(
-				"CLIENT_DETOUR stat=SpellLevelNeeded spell=%u '%s' (no usable class found)",
-				(unsigned)spell_id,
-				spell_name
-			);
+			return bestLevel;
 		}
 	}
 
-	return retVal;
+	return nativeVal;
 }
 
 // Override PcZoneClient::GetPcSkillLimit so the Skills window can show skills that the server has granted
@@ -2634,11 +2586,23 @@ int __fastcall CSpellBookWnd_CanStartMemming_Detour(void* This, void* edx, int s
 		}
 		nativeVal = 0;
 	}
+
+	if (isDebugLoggingEnabled) {
+		LogDebug("[CAN_START_MEMMING] spellId=%d nativeVal=%d serverMask=0x%04X hasSpellcaster=%d",
+			spellId, nativeVal, g_serverUsableClassesMask,
+			MulticlassHasSpellcastingClass(g_serverUsableClassesMask) ? 1 : 0);
+	}
+
 	if (!isMulticlassSpellUiOverrideEnabled || g_serverUsableClassesMask == 0) {
 		return nativeVal;
 	}
 
-	return MulticlassHasSpellcastingClass(g_serverUsableClassesMask) ? 1 : nativeVal;
+	// If multiclass has a spellcasting class, allow memorization
+	int result = MulticlassHasSpellcastingClass(g_serverUsableClassesMask) ? 1 : nativeVal;
+	if (isDebugLoggingEnabled && result != nativeVal) {
+		LogDebug("[CAN_START_MEMMING] OVERRIDE spellId=%d native=%d result=%d", spellId, nativeVal, result);
+	}
+	return result;
 }
 
 // NOTE: TotalEffect detour removed - attempting to detour member functions
@@ -2746,6 +2710,7 @@ static void InstallServerAuthoritativeStatsDetours_Now()
 				EzDetour((DWORD)CSpellBookWnd__CanStartMemming, CSpellBookWnd_CanStartMemming_Detour, CSpellBookWnd_CanStartMemming_Tramp);
 			}
 		}
+		// Re-enabled: Needed for multiclass spell memorization time to work correctly
 		if (EQ_Spell__GetSpellLevelNeeded && isMulticlassUsableClassesOverrideEnabled) {
 			EzDetour((DWORD)EQ_Spell__GetSpellLevelNeeded, EQSpell_GetSpellLevelNeeded_Detour, EQSpell_GetSpellLevelNeeded_Tramp);
 		}
@@ -2968,7 +2933,8 @@ void InitHooks()
 		InitializeMQ2Pulse();
 		InitializeMQ2Spawns();
 		InitializeMapPlugin();
-		InitializeMQ2ItemDisplay();
+		// DISABLED: Testing if MQ2ItemDisplay causes item tooltip corruption
+		// InitializeMQ2ItemDisplay();
 		InitializeMQ2Labels();
 	} else {
 		LogDebug("InitHooks: MQ2 injects disabled");

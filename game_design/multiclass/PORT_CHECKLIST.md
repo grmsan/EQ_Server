@@ -1,15 +1,12 @@
 # THJServer Multiclass Port Checklist
 
-This is the file-by-file port plan to implement **all multiclass (gestalt) behaviors** found in `extras/THJServer/` into this repo’s codebase.
-
-**Master Technical Document:** [game_design/multiclass/IMPLEMENTATION_PLAN.md](game_design/multiclass/IMPLEMENTATION_PLAN.md)
+**Last Updated:** 2026-01-31
+**Master Technical Document:** [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
+**Test Tracker:** [TEST_TRACKER.md](TEST_TRACKER.md)
 
 **Inputs**
 - Reference report: `tools/output/multiclass_references.csv` (line hits from THJServer)
 - Upstream implementation: `extras/THJServer/`
-
-**Testing tracker**
-- `TODO_THJSERVER_MULTICLASS_TESTS.md`
 
 **How to compare any file**
 - `git diff --no-index <relpath> extras/THJServer/<relpath>`
@@ -58,38 +55,34 @@ Files that control item class restrictions.
 ## Work Order (recommended)
 1. **Persistence + load path**
    - Ensure `GestaltClasses` is written on character creation and on class add/remove, and is loaded consistently by zone/world.
-2. **Core APIs (server authoritative “what classes do I have?”)**
-   - Align on one canonical “classes bitmask” getter/setter used everywhere (THJ’s `GetClassesBits()` + `HasClass()` patterns).
+2. **Core APIs (server authoritative "what classes do I have?")**
+   - Align on one canonical "classes bitmask" getter/setter used everywhere (THJ's `GetClassesBits()` + `HasClass()` patterns).
 3. **Spells / casting / stacking**
-   - Port THJ’s multiclass logic in `zone/spells.cpp` and related spell/cast codepaths.
+   - Port THJ's multiclass logic in `zone/spells.cpp` and related spell/cast codepaths.
 4. **AA visibility + timers**
-   - Port THJ’s AA filtering logic and `UseDynamicAATimers` behaviors.
-5. **Items + “show usable” filtering**
-   - Port THJ’s equip/use gating to union-of-classes (vendor “usable” filters, item class masks).
+   - Port THJ's AA filtering logic and `UseDynamicAATimers` behaviors.
+5. **Items + "show usable" filtering**
+   - Port THJ's equip/use gating to union-of-classes (vendor "usable" filters, item class masks).
 6. **Skills / caps / UI exposure**
-   - Port THJ’s skill limit logic (server-side caps) and ensure add/remove class flows expose skills.
+   - Port THJ's skill limit logic (server-side caps) and ensure add/remove class flows expose skills.
 7. **Bots, misc subsystems, and docs**
    - Sweep remaining diffs; port THJ-only files (waypoints, docs) as needed.
 
 ## Key Design Notes (THJServer assumptions)
 - Primary class remains in `character_data.class`, but *gestalt membership* is persisted in `data_buckets` under `key='GestaltClasses'`.
-- THJServer uses `Client::GetClassesBits()` (uint32) extensively; most checks become “union-of-classes”.
+- THJServer uses `Client::GetClassesBits()` (uint32) extensively; most checks become "union-of-classes".
 - THJServer uses rules for enabling and for special handling:
   - `Custom:MulticlassingEnabled`
   - `Custom:UseDynamicAATimers`
   - `Custom:BypassMulticlassStackConflict`
+
+---
 
 ## Checklist (by file)
 
 Legend:
 - `[x]` already identical to THJServer
 - `[ ]` needs porting / review
-
-### CHANGELOG.md
-- [ ] `CHANGELOG.md` (refs: 2, parity: diff)
-
-### client_files
-- [ ] `client_files/export/main.cpp` (refs: 13, parity: diff)
 
 ### common
 - [ ] `common/database/database_update_manifest.cpp` (refs: 38, parity: diff)
@@ -99,32 +92,19 @@ Legend:
 - [x] `common/repositories/data_buckets_repository.h` (refs: 4, parity: same)
 - [ ] `common/guild_base.cpp` (refs: 3, parity: diff)
 - [ ] `common/shareddb.cpp` (refs: 3, parity: diff)
-- [ ] `common/CMakeLists.txt` (refs: 2, parity: diff)
-- [ ] `common/database_schema.h` (refs: 2, parity: diff)
-- [ ] `common/database/database_schema.h` (refs: 2, parity: THJ-only)
 - [ ] `common/classes.h` (refs: 1, parity: diff)
 - [x] `common/data_bucket.h` (refs: 1, parity: same)
 - [x] `common/database_instances.cpp` (refs: 1, parity: same)
 - [ ] `common/eq_packet_structs.h` (refs: 1, parity: diff)
-- [ ] `common/repositories/db_str_repository.h` (refs: 1, parity: diff)
-- [ ] `common/repositories/skill_caps_repository.h` (refs: 1, parity: diff)
-- [ ] `common/repositories/spells_new_repository.h` (refs: 1, parity: diff)
-
-### submodules
-- [x] `submodules/recastnavigation/Tests/catch.hpp` (refs: 2, parity: same)
-
-### utils
-- [x] `utils/mods/legacy_combat.lua` (refs: 7, parity: same)
 
 ### world
 - [ ] `world/clientlist.cpp` (refs: 12, parity: diff)
 - [ ] `world/worlddb.cpp` (refs: 11, parity: diff)
 - [ ] `world/client.cpp` (refs: 9, parity: diff)
 
-### zone
+### zone (HIGH PRIORITY)
 - [x] `zone/cli/tests/databuckets.cpp` (refs: 86, parity: same)
 - [ ] `zone/client.cpp` (refs: 70, parity: diff)
-- [ ] `zone/bot.cpp` (refs: 69, parity: diff)
 - [ ] `zone/client_packet.cpp` (refs: 61, parity: diff)
 - [ ] `zone/mob.cpp` (refs: 45, parity: diff)
 - [ ] `zone/spell_effects.cpp` (refs: 39, parity: diff)
@@ -134,26 +114,41 @@ Legend:
 - [ ] `zone/client_mods.cpp` (refs: 26, parity: diff)
 - [ ] `zone/client_process.cpp` (refs: 24, parity: diff)
 - [ ] `zone/special_attacks.cpp` (refs: 23, parity: diff)
-- [ ] `zone/heal_rotation.cpp` (refs: 22, parity: diff)
-- [ ] `zone/npc.cpp` (refs: 18, parity: diff)
 - [ ] `zone/effects.cpp` (refs: 17, parity: diff)
 - [ ] `zone/bonuses.cpp` (refs: 16, parity: diff)
 - [ ] `zone/entity.cpp` (refs: 16, parity: diff)
+- [ ] `zone/client.h` (refs: 7, parity: diff)
+- [ ] `zone/inventory.cpp` (refs: 4, parity: diff)
+- [ ] `zone/mob.h` (refs: 4, parity: diff)
+
+### zone (MEDIUM PRIORITY - Bots/Mercs)
+- [ ] `zone/bot.cpp` (refs: 69, parity: diff)
+- [ ] `zone/heal_rotation.cpp` (refs: 22, parity: diff)
+- [ ] `zone/npc.cpp` (refs: 18, parity: diff)
 - [x] `zone/bot_command.h` (refs: 12, parity: same)
 - [ ] `zone/merc.cpp` (refs: 12, parity: diff)
 - [ ] `zone/exp.cpp` (refs: 11, parity: diff)
 - [x] `zone/bot_commands/item_use.cpp` (refs: 10, parity: same)
 - [x] `zone/bot.h` (refs: 10, parity: same)
+- [x] `zone/client_bot.cpp` (refs: 7, parity: same)
+- [x] `zone/lua_bot.cpp` (refs: 7, parity: same)
+- [x] `zone/bot_commands/bot.cpp` (refs: 6, parity: same)
+- [ ] `zone/botspellsai.cpp` (refs: 3, parity: diff)
+- [x] `zone/lua_bot.h` (refs: 3, parity: same)
+- [ ] `zone/bot_database.cpp` (refs: 2, parity: diff)
+- [x] `zone/merc.h` (refs: 2, parity: same)
+- [x] `zone/bot_command.cpp` (refs: 1, parity: same)
+- [x] `zone/bot_commands/apply_potion.cpp` (refs: 1, parity: same)
+- [x] `zone/bot_commands/track.cpp` (refs: 1, parity: same)
+- [x] `zone/bot_commands/depart.cpp` (refs: 2, parity: same)
+- [x] `zone/bot_commands/pull.cpp` (refs: 2, parity: same)
+- [x] `zone/bot_commands/view_combos.cpp` (refs: 2, parity: same)
+
+### zone (LOWER PRIORITY - Scripting/Lua/Perl)
 - [ ] `zone/lua_client.cpp` (refs: 9, parity: diff)
 - [ ] `zone/lua_mob.cpp` (refs: 9, parity: diff)
 - [ ] `zone/perl_mob.cpp` (refs: 8, parity: diff)
-- [ ] `zone/thj_waypoints.h` (refs: 8, parity: THJ-only)
-- [x] `zone/client_bot.cpp` (refs: 7, parity: same)
-- [ ] `zone/client.h` (refs: 7, parity: diff)
 - [ ] `zone/embparser.cpp` (refs: 7, parity: diff)
-- [x] `zone/lua_bot.cpp` (refs: 7, parity: same)
-- [ ] `zone/thj_waypoints.cpp` (refs: 7, parity: THJ-only)
-- [x] `zone/bot_commands/bot.cpp` (refs: 6, parity: same)
 - [x] `zone/gm_commands/merchantshop.cpp` (refs: 6, parity: same)
 - [ ] `zone/lua_npc.cpp` (refs: 6, parity: diff)
 - [ ] `zone/lua_zone.cpp` (refs: 6, parity: diff)
@@ -161,37 +156,23 @@ Legend:
 - [ ] `zone/tradeskills.cpp` (refs: 6, parity: diff)
 - [ ] `zone/zonedb.cpp` (refs: 6, parity: diff)
 - [ ] `zone/aggro.cpp` (refs: 4, parity: diff)
-- [ ] `zone/inventory.cpp` (refs: 4, parity: diff)
 - [ ] `zone/lua_mob.h` (refs: 4, parity: diff)
-- [ ] `zone/mob.h` (refs: 4, parity: diff)
 - [ ] `zone/perl_client.cpp` (refs: 4, parity: diff)
-- [ ] `zone/botspellsai.cpp` (refs: 3, parity: diff)
 - [x] `zone/gm_commands/show/quest_globals.cpp` (refs: 3, parity: same)
 - [ ] `zone/guild_mgr.cpp` (refs: 3, parity: diff)
-- [x] `zone/lua_bot.h` (refs: 3, parity: same)
 - [ ] `zone/lua_client.h` (refs: 3, parity: diff)
 - [ ] `zone/lua_npc.h` (refs: 3, parity: diff)
 - [ ] `zone/lua_zone.h` (refs: 3, parity: diff)
 - [x] `zone/qglobals.cpp` (refs: 3, parity: same)
 - [ ] `zone/questmgr.cpp` (refs: 3, parity: diff)
 - [ ] `zone/tune.cpp` (refs: 3, parity: diff)
-- [x] `zone/bot_commands/depart.cpp` (refs: 2, parity: same)
-- [x] `zone/bot_commands/pull.cpp` (refs: 2, parity: same)
-- [x] `zone/bot_commands/view_combos.cpp` (refs: 2, parity: same)
-- [ ] `zone/bot_database.cpp` (refs: 2, parity: diff)
-- [x] `zone/cli/benchmark_databuckets.cpp` (refs: 2, parity: same)
 - [ ] `zone/corpse.cpp` (refs: 2, parity: diff)
 - [x] `zone/gm_commands/gearup.cpp` (refs: 2, parity: same)
-- [ ] `zone/gm_commands/toggleimprovedmodels.cpp` (refs: 2, parity: THJ-only)
-- [x] `zone/merc.h` (refs: 2, parity: same)
 - [ ] `zone/mob_ai.cpp` (refs: 2, parity: diff)
 - [ ] `zone/raids.cpp` (refs: 2, parity: diff)
 - [ ] `zone/zone.cpp` (refs: 2, parity: diff)
 - [ ] `zone/zone.h` (refs: 2, parity: diff)
 - [ ] `zone/api_service.cpp` (refs: 1, parity: diff)
-- [x] `zone/bot_command.cpp` (refs: 1, parity: same)
-- [x] `zone/bot_commands/apply_potion.cpp` (refs: 1, parity: same)
-- [x] `zone/bot_commands/track.cpp` (refs: 1, parity: same)
 - [x] `zone/global_loot_manager.cpp` (refs: 1, parity: same)
 - [x] `zone/gm_commands/databuckets.cpp` (refs: 1, parity: same)
 - [ ] `zone/lua_item.cpp` (refs: 1, parity: diff)
@@ -204,3 +185,10 @@ Legend:
 - [ ] `zone/perl_questitem_data.cpp` (refs: 1, parity: diff)
 - [x] `zone/perl_spell.cpp` (refs: 1, parity: same)
 - [x] `zone/qglobals.h` (refs: 1, parity: same)
+- [x] `zone/cli/benchmark_databuckets.cpp` (refs: 2, parity: same)
+
+### THJ-only files (evaluate for inclusion)
+- [ ] `zone/thj_waypoints.h` (refs: 8, parity: THJ-only)
+- [ ] `zone/thj_waypoints.cpp` (refs: 7, parity: THJ-only)
+- [ ] `zone/gm_commands/toggleimprovedmodels.cpp` (refs: 2, parity: THJ-only)
+- [ ] `common/database/database_schema.h` (refs: 2, parity: THJ-only)

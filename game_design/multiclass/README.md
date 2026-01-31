@@ -21,10 +21,12 @@ The multiclass system allows a single character to simultaneously hold multiple 
 
 | Document | Description |
 |----------|-------------|
-| [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) | **Master technical design document** |
-| [/TODO_MULTICLASS.md](/TODO_MULTICLASS.md) | Bug tracking and test checklist |
-| [/TODO_THJSERVER_MULTICLASS_PORT.md](/TODO_THJSERVER_MULTICLASS_PORT.md) | File-by-file THJ parity status |
-| [/MULTICLASS_SYSTEM_OVERVIEW.md](/MULTICLASS_SYSTEM_OVERVIEW.md) | High-level architecture overview |
+| [VISION.md](VISION.md) | **Design philosophy and guiding principles** |
+| [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) | Master technical design document |
+| [TEST_TRACKER.md](TEST_TRACKER.md) | Bug tracking and test checklist |
+| [PORT_CHECKLIST.md](PORT_CHECKLIST.md) | File-by-file THJ parity status |
+| [DLL_INTEGRATION.md](DLL_INTEGRATION.md) | Client DLL build and debug guide |
+| [QUICK_START.md](QUICK_START.md) | 15-minute setup guide |
 | [/extras/THJServer/docs/multiclass.md](/extras/THJServer/docs/multiclass.md) | THJ reference documentation |
 
 ---
@@ -99,20 +101,22 @@ Key DLL options (`_options.h`):
 ## Current Status
 
 See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for detailed phase status.
+See [TEST_TRACKER.md](TEST_TRACKER.md) for current bugs and test results.
 
 **Working:**
 - Class bitmask persistence and API
 - GM commands (#addclass, #removeclass, #multiclassdiag)
 - EdgeStatLabel integration
-- Basic DLL detours
+- DLL detours for equipment and spell filters
+- Spell merchant "Show usable items" filter (FIXED 2026-01-31)
+- Spell tooltips show correct class levels (FIXED 2026-01-31)
 
 **In Progress:**
-- Spell system integration
 - AA window completeness
 - Skills window visibility
 
 **Known Issues:**
-- Spell merchant filter not fully multiclass-aware
+- Spell vendor shows base-class labels for aggregated spells
 - Some AAs missing from window
 - Skills for added classes sometimes hidden
 

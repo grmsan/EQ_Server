@@ -1,7 +1,7 @@
 # Multiclass (Gestalt) System - Master Implementation Plan
 
-**Version:** 1.0
-**Last Updated:** 2026-01-28
+**Version:** 1.1
+**Last Updated:** 2026-01-31
 **Status:** Active Development
 
 This document serves as the authoritative technical design and implementation guide for the multiclass (gestalt) system. It consolidates requirements, architecture decisions, and work priorities into a single reference.
@@ -261,10 +261,11 @@ INSERT INTO data_buckets (`key`, `value`, `character_id`) VALUES
 - [x] Character creation seeds GestaltClasses bucket
 - [ ] Skills seeding on class add (partially working)
 
-### Phase 2: Spell System (~50% Complete)
+### Phase 2: Spell System (~70% Complete)
 - [ ] Memorize spell checks union-of-classes
 - [ ] Cast spell checks union-of-classes
-- [ ] Spell merchant "Show Usable Items" filter
+- [x] Spell merchant "Show Usable Items" filter (FIXED 2026-01-31)
+- [x] Spell tooltips show correct class levels (FIXED 2026-01-31)
 - [ ] Spellbook UI shows all usable spells
 - [ ] Spell scribe validates class ownership
 - [ ] Mana bar appears when any owned class is caster
@@ -338,9 +339,9 @@ INSERT INTO data_buckets (`key`, `value`, `character_id`) VALUES
 ## Known Issues & Solutions
 
 ### Issue: Spell merchant shows wizard spells for non-wizard
-**Cause:** Merchant filter uses item class mask, not spell class levels
-**Solution:** DLL `EQSpell_GetSpellLevelNeeded_Detour` returns -1 for unusable spells
-**Status:** Partially implemented, needs refinement
+**Cause:** DLL GetUsableClasses was returning multiclass mask for spell filter RVAs
+**Solution:** Removed spell filter RVAs from GetUsableClasses whitelist; spell filtering uses GetSpellLevelNeeded returning 255
+**Status:** FIXED 2026-01-31
 
 ### Issue: AA window missing AAs for added classes
 **Cause:** AA list built at zone-in, not refreshed on class change
@@ -388,12 +389,12 @@ INSERT INTO data_buckets (`key`, `value`, `character_id`) VALUES
 ### Documentation
 | File | Purpose |
 |------|---------|
-| game_design/multiclass/README.md | High-level exploration |
-| game_design/multiclass/IMPLEMENTATION_PLAN.md | This document |
-| TODO_MULTICLASS.md | Bug tracking and test checklist |
-| TODO_THJSERVER_MULTICLASS_PORT.md | File-by-file port status |
-| TODO_THJSERVER_MULTICLASS_TESTS.md | Test tracker |
-| MULTICLASS_SYSTEM_OVERVIEW.md | Technical overview |
+| game_design/multiclass/README.md | Overview and quick links |
+| game_design/multiclass/IMPLEMENTATION_PLAN.md | This document (master technical reference) |
+| game_design/multiclass/TEST_TRACKER.md | Bug tracking and test checklist |
+| game_design/multiclass/PORT_CHECKLIST.md | File-by-file THJ port status |
+| game_design/multiclass/DLL_INTEGRATION.md | Client DLL build and debug guide |
+| game_design/multiclass/QUICK_START.md | 15-minute setup guide |
 
 ---
 
@@ -464,5 +465,6 @@ INSERT INTO data_buckets (`key`, `value`, `character_id`) VALUES
 
 ---
 
-*Document maintained by: Copilot / Development Team*
-*See also: `/game_design/multiclass/`, `/TODO_MULTICLASS.md`, `/extras/THJServer/docs/`*
+*Document maintained by: Development Team*
+*Last Updated: 2026-01-31*
+*See also: [TEST_TRACKER.md](TEST_TRACKER.md), [PORT_CHECKLIST.md](PORT_CHECKLIST.md), `/extras/THJServer/docs/`*

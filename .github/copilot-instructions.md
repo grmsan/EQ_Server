@@ -20,12 +20,16 @@ Design documentation structure:
   \game_design\mechanics\      Combat, quests, NPC behavior
   \game_design\infinite_progression\  Scaling and progression systems
 
-Project tracking documents (root level):
-  TODO_MULTICLASS.md                    Multiclass bug tracking and test checklist
-  TODO_THJSERVER_MULTICLASS_PORT.md     File-by-file THJServer parity checklist
-  TODO_THJSERVER_MULTICLASS_TESTS.md    Multiclass test tracker
-  TODO_DEX_MIGRATION.md                 DEX stat migration tracking
-  MULTICLASS_SYSTEM_OVERVIEW.md         High-level multiclass architecture
+Multiclass tracking (in game_design/multiclass/):
+  README.md                 Overview and quick links
+  IMPLEMENTATION_PLAN.md    Master technical document
+  TEST_TRACKER.md           Bug tracking and test checklist
+  PORT_CHECKLIST.md         File-by-file THJServer parity checklist
+  DLL_INTEGRATION.md        Client DLL build and debug guide
+  QUICK_START.md            15-minute setup guide
+
+Other project tracking (root level):
+  TODO_DEX_MIGRATION.md     DEX stat migration tracking
 
 Before modifying or implementing any behavior, you must:
 
@@ -219,15 +223,12 @@ The multiclass (gestalt) system is under active development. Key documentation:
 Master technical document (START HERE for multiclass work):
   \game_design\multiclass\IMPLEMENTATION_PLAN.md
 
-Supporting documents:
-  \game_design\multiclass\DLL_INTEGRATION.md   Client DLL build and debug guide
-  \game_design\multiclass\QUICK_START.md       15-minute setup guide
-  \MULTICLASS_SYSTEM_OVERVIEW.md               High-level architecture
-
-Work tracking:
-  \TODO_THJSERVER_MULTICLASS_PORT.md           File-by-file port checklist (priority guide)
-  \TODO_THJSERVER_MULTICLASS_TESTS.md          Test tracker and known bugs
-  \TODO_MULTICLASS.md                          General bug tracking
+Supporting documents (all in game_design/multiclass/):
+  README.md                 Overview and quick links
+  TEST_TRACKER.md           Bug tracking and test checklist
+  PORT_CHECKLIST.md         File-by-file THJServer parity checklist
+  DLL_INTEGRATION.md        Client DLL build and debug guide
+  QUICK_START.md            15-minute setup guide
 
 Reference implementation:
   \extras\THJServer\                           Working multiclass server (read-only reference)
@@ -241,9 +242,9 @@ Key patterns:
 
 When modifying multiclass-related code:
   1. Read IMPLEMENTATION_PLAN.md first
-  2. Check TODO_THJSERVER_MULTICLASS_PORT.md for file-specific status
+  2. Check PORT_CHECKLIST.md for file-specific status
   3. Compare with THJServer reference when uncertain
-  4. Update test tracker after changes
+  4. Update TEST_TRACKER.md after changes
 
 ============================================================
 11. DLL Awareness (Client-Side Testing Tools)

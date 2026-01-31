@@ -219,16 +219,16 @@ python server_manager.py
 After basic setup works:
 
 1. **Read the full implementation plan:**
-   - [game_design/multiclass/IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
+   - [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
 
 2. **Understand the DLL:**
-   - [game_design/multiclass/DLL_INTEGRATION.md](DLL_INTEGRATION.md)
+   - [DLL_INTEGRATION.md](DLL_INTEGRATION.md)
 
 3. **Track known issues:**
-   - [TODO_MULTICLASS.md](../../TODO_MULTICLASS.md)
+   - [TEST_TRACKER.md](TEST_TRACKER.md)
 
 4. **Port more THJ features:**
-   - [TODO_THJSERVER_MULTICLASS_PORT.md](../../TODO_THJSERVER_MULTICLASS_PORT.md)
+   - [PORT_CHECKLIST.md](PORT_CHECKLIST.md)
 
 ---
 

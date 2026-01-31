@@ -54,6 +54,36 @@ static float DexCritDmgBonus(const Mob* mob, float overflow) {
 	return base + overflow;
 }
 
+// Multiclass helper: checks if a spell meets the level restriction for bonus damage/healing.
+// The original check was: spells[spell_id].classes[(GetClass() % 17) - 1] >= GetLevel() - 5
+// For multiclass, we check if ANY of the player's owned classes meet this criterion.
+static bool MeetsSpellLevelForBonusDamage(const Mob* mob, uint16 spell_id) {
+	if (!mob) return false;
+
+	int caster_level = mob->GetLevel();
+	int threshold = caster_level - 5;
+
+	// For multiclass clients, check if any owned class meets the level restriction
+	if (RuleB(Custom, MulticlassingEnabled) && mob->IsClient()) {
+		uint32 classes_bits = mob->CastToClient()->GetClassesBits();
+		for (int class_id = 1; class_id <= 16; ++class_id) {
+			if ((classes_bits & (1u << (class_id - 1))) == 0) {
+				continue;
+			}
+			int spell_level = spells[spell_id].classes[class_id - 1];
+			// 0 and 255 typically mean "not usable by this class"
+			if (spell_level > 0 && spell_level < 255 && spell_level >= threshold) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	// Non-multiclass: use original single-class check
+	int spell_level = spells[spell_id].classes[(mob->GetClass() % 17) - 1];
+	return spell_level >= threshold;
+}
+
 float Mob::GetActSpellRange(uint16 spell_id, float range)
 {
 	float extrange = 100;
@@ -181,7 +211,7 @@ int64 Mob::GetActSpellDamage(uint16 spell_id, int64 value, Mob* target) {
 			if (RuleB(Spells, IgnoreSpellDmgLvlRestriction) && !spells[spell_id].no_heal_damage_item_mod && itembonuses.SpellDmg) {
 				value -= GetExtraSpellAmt(spell_id, itembonuses.SpellDmg, base_value) * ratio / 100;
 
-			} else if (!spells[spell_id].no_heal_damage_item_mod && itembonuses.SpellDmg && spells[spell_id].classes[(GetClass() % 17) - 1] >= GetLevel() - 5) {
+			} else if (!spells[spell_id].no_heal_damage_item_mod && itembonuses.SpellDmg && MeetsSpellLevelForBonusDamage(this, spell_id)) {
 				value -= GetExtraSpellAmt(spell_id, itembonuses.SpellDmg, base_value) * ratio / 100;
 			}
 
@@ -235,7 +265,7 @@ int64 Mob::GetActSpellDamage(uint16 spell_id, int64 value, Mob* target) {
 	else if (
 		!spells[spell_id].no_heal_damage_item_mod &&
 		GetSpellDmg() &&
-		spells[spell_id].classes[(GetClass() % 17) - 1] >= GetLevel() - 5
+		MeetsSpellLevelForBonusDamage(this, spell_id)
 	) {
 		value -= GetExtraSpellAmt(spell_id, GetSpellDmg(), base_value);
 	}
@@ -346,7 +376,7 @@ int64 Mob::GetActDoTDamage(uint16 spell_id, int64 value, Mob* target, bool from_
 			else if (
 				!spells[spell_id].no_heal_damage_item_mod &&
 				GetSpellDmg() &&
-				spells[spell_id].classes[(GetClass() % 17) - 1] >= GetLevel() - 5
+				MeetsSpellLevelForBonusDamage(this, spell_id)
 			) {
 				extra_dmg += GetExtraSpellAmt(spell_id, GetSpellDmg(), base_value)*ratio/100;
 			}
@@ -392,7 +422,7 @@ int64 Mob::GetActDoTDamage(uint16 spell_id, int64 value, Mob* target, bool from_
 			else if (
 				!spells[spell_id].no_heal_damage_item_mod &&
 				GetSpellDmg() &&
-				spells[spell_id].classes[(GetClass() % 17) - 1] >= GetLevel() - 5
+				MeetsSpellLevelForBonusDamage(this, spell_id)
 			) {
 				extra_dmg += GetExtraSpellAmt(spell_id, GetSpellDmg(), base_value);
 			}
@@ -564,7 +594,7 @@ int64 Mob::GetActSpellHealing(uint16 spell_id, int64 value, Mob* target, bool fr
 		else if (
 			!spells[spell_id].no_heal_damage_item_mod &&
 			GetHealAmt() &&
-			spells[spell_id].classes[(GetClass() % 17) - 1] >= GetLevel() - 5
+			MeetsSpellLevelForBonusDamage(this, spell_id)
 		) {
 			value += GetExtraSpellAmt(spell_id, GetHealAmt(), base_value); //Item Heal Amt Add before critical
 		}
@@ -618,7 +648,7 @@ int64 Mob::GetActSpellHealing(uint16 spell_id, int64 value, Mob* target, bool fr
 			else if (
 				!spells[spell_id].no_heal_damage_item_mod &&
 				GetHealAmt() &&
-				spells[spell_id].classes[(GetClass() % 17) - 1] >= GetLevel() - 5
+				MeetsSpellLevelForBonusDamage(this, spell_id)
 			) {
 				extra_heal += GetExtraSpellAmt(spell_id, GetHealAmt(), base_value);
 			}
@@ -651,7 +681,7 @@ int32 Mob::GetActSpellCost(uint16 spell_id, int32 cost)
 		cost *= 2;
 
 	// Formula = Unknown exact, based off a random percent chance up to mana cost(after focuses) of the cast spell
-	if(itembonuses.Clairvoyance && spells[spell_id].classes[(GetClass()%17) - 1] >= GetLevel() - 5)
+	if(itembonuses.Clairvoyance && MeetsSpellLevelForBonusDamage(this, spell_id))
 	{
 		int mana_back = itembonuses.Clairvoyance * zone->random.Int(1, 100) / 100;
 		// Doesnt generate mana, so best case is a free spell
@@ -1037,7 +1067,25 @@ bool Client::UseDiscipline(uint32 spell_id, uint32 target) {
 
 	//can we use the spell?
 	const SPDat_Spell_Struct &spell = spells[spell_id];
-	uint8 level_to_use = spell.classes[GetClass() - 1];
+
+	// Multiclass support: find the best (lowest) level requirement across all owned classes
+	uint8 level_to_use = 255;
+	if (RuleB(Custom, MulticlassingEnabled)) {
+		uint32 classes_bits = GetClassesBits();
+		for (int class_id = 1; class_id <= 16; ++class_id) {
+			if ((classes_bits & (1u << (class_id - 1))) == 0) {
+				continue;
+			}
+			uint8 class_level = spell.classes[class_id - 1];
+			// 0 and 255 typically mean "not usable by this class"
+			if (class_level > 0 && class_level < level_to_use) {
+				level_to_use = class_level;
+			}
+		}
+	} else {
+		level_to_use = spell.classes[GetClass() - 1];
+	}
+
 	if(level_to_use == 255) {
 		Message(Chat::Red, "Your class cannot learn from this tome.");
 		//should summon them a new one...

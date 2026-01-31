@@ -33,6 +33,7 @@
 #include "water_map.h"
 #include "dialogue_window.h"
 #include "combat_balance_config.h"
+#include "client.h"
 
 #include <limits.h>
 #include <math.h>
@@ -55,6 +56,34 @@ static float DexCritChanceNew(const Mob* mob) {
 		step_term = static_cast<float>(dex) / CombatBalance::DEX_CRIT_STEP_PER_PERCENT;
 	}
 	return main + floor_term + step_term;
+}
+
+// Multiclass helper: get the best (lowest) spell level across all owned classes.
+// For non-multiclass, returns the single-class spell level.
+static int GetBestSpellLevelForMob(const Mob* mob, uint16 spell_id) {
+	if (!mob || !IsValidSpell(spell_id)) {
+		return 255;
+	}
+
+	// For multiclass clients, find the best (lowest) spell level across all owned classes
+	if (RuleB(Custom, MulticlassingEnabled) && mob->IsClient()) {
+		uint32 classes_bits = mob->CastToClient()->GetClassesBits();
+		int best_level = 255;
+		for (int class_id = 1; class_id <= 16; ++class_id) {
+			if ((classes_bits & (1u << (class_id - 1))) == 0) {
+				continue;
+			}
+			int spell_level = spells[spell_id].classes[class_id - 1];
+			// 0 and 255 typically mean "not usable by this class"
+			if (spell_level > 0 && spell_level < best_level) {
+				best_level = spell_level;
+			}
+		}
+		return best_level;
+	}
+
+	// Non-multiclass: use original single-class lookup
+	return spells[spell_id].classes[(mob->GetClass() % 17) - 1];
 }
 
 extern EntityList entity_list;
@@ -7477,7 +7506,8 @@ int8 Mob::GetDecayEffectValue(uint16 spell_id, uint16 spelleffect) {
 	if (!IsValidSpell(spell_id))
 		return false;
 
-	int spell_level = spells[spell_id].classes[(GetClass()%17) - 1];
+	// Use multiclass-aware spell level lookup
+	int spell_level = GetBestSpellLevelForMob(this, spell_id);
 	int effect_value = 0;
 	int lvlModifier = 100;
 

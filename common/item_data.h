@@ -541,7 +541,7 @@ namespace EQ
 		char	ScrollName[65] {};
 		//BardName
 
-		bool IsEquipable(uint16 Race, uint16 Class) const;
+		bool IsEquipable(uint16 race_id, uint16 class_bits) const; // class_bits is a bitmask (use GetPlayerClassBit or GetClassesBits)
 		bool IsClassEquipable(uint16 Class) const;
 		bool IsRaceEquipable(uint16 Race) const;
 		bool IsClassCommon() const;

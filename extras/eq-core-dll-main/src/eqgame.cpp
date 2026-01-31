@@ -2053,16 +2053,43 @@ int __fastcall EQCharacter_MaxEnd_Detour(void* This, void* edx, int a1)
 	return used;
 }
 
-// Override "usable classes" mask for client-side filters (AA window, item/spell usability).
+// Override "usable classes" mask for client-side filters (AA window, item/spell usability, equipment validation).
+// This is the key hook for multiclass equipment support - the client calls GetUsableClasses to check
+// if the player can equip an item.
+//
+// APPROACH: Whitelist specific RVAs that need multiclass bits for VALIDATION/USE.
+// All other call sites (tooltips, display) return NATIVE to preserve correct UI.
+//
+// Known RVAs (discovered via debug logging):
+//   0x0004C472 - Equipment slot validation (needs multiclass)
+//   0x002F0DA3 - Item use / right-click cast (needs multiclass)
+//   0x002F0E05 - Item use / right-click cast (needs multiclass)
+//   0x002A9736 - Tooltip class display (needs NATIVE - show item's real classes)
+//   0x002A6D16 - Display/filter (needs NATIVE)
+//
+// Whitelist = RVAs that should return multiclass bits instead of native.
+// NOTE: Spell filter RVAs (0x002F0DA3, 0x002F0E05) are NOT whitelisted here.
+// Spell filtering relies on GetSpellLevelNeeded returning 255, not GetUsableClasses.
+static const std::set<DWORD> s_multiclass_rvas = {
+	0x0004C472,  // Equipment validation - MUST have multiclass bits
+};
+
+// Verbose logging - set to true to log EVERY GetUsableClasses call (for debugging)
+// Set to false once RVAs are known to reduce log spam
+static bool s_verbose_usable_classes_logging = false;
+
+// Call counter for verbose logging
+static volatile LONG s_usable_classes_call_count = 0;
+
+// Deduplication: track unique (RVA, native, mask) combos we've already logged
+static std::set<uint64_t> s_logged_usable_classes_combos;
+
 DETOUR_TRAMPOLINE_EMPTY(int __fastcall EQCharacter_GetUsableClasses_Tramp(void*, void*, int, DWORD));
 int __fastcall EQCharacter_GetUsableClasses_Detour(void* This, void* edx, int a1, DWORD a2)
 {
 	g_last_hook_tag = Hook_GetUsableClasses;
 
-	void* ret_addr = _ReturnAddress();
-	DWORD ret_rva = (DWORD)((uintptr_t)ret_addr - (uintptr_t)baseAddress);
-
-	// Get native value first - we'll use this for most paths
+	// Get native value first - this is what the client would normally return
 	int nativeVal = -1;
 	__try {
 		nativeVal = EQCharacter_GetUsableClasses_Tramp(This, edx, a1, a2);
@@ -2071,60 +2098,69 @@ int __fastcall EQCharacter_GetUsableClasses_Detour(void* This, void* edx, int a1
 		nativeVal = -1;
 	}
 
-	// Known caller RVAs where we should apply multiclass filtering:
-	// - "Show Usable Items" checkbox filter on merchants
-	// For all other callers (tooltips, item info display), use native behavior
-	// to show the item's actual class restrictions.
-	//
-	// RVA 0x0028A6E7: Called from merchant "Show Usable Items" filter path
-	// RVA 0x0028B2BD: Another merchant filter path
-	// TODO: Add more filter RVAs as discovered via debug logging
-	constexpr DWORD kMerchantFilterRVA1 = 0x0028A6E7;
-	constexpr DWORD kMerchantFilterRVA2 = 0x0028B2BD;
-
-	// Debug logging to discover caller RVAs (enable temporarily to find new ones)
-	static bool logged_rvas = false;
-	if (isDebugLoggingEnabled && !logged_rvas && g_serverUsableClassesMask != 0) {
-		LogDebug("GetUsableClasses caller RVA=0x%08X native=%d", ret_rva, nativeVal);
-		// Don't spam - only log first few unique calls
-	}
-
-	// Only apply multiclass filtering for known filter contexts
-	bool isFilterContext = (ret_rva == kMerchantFilterRVA1 || ret_rva == kMerchantFilterRVA2);
-
-	if (!isFilterContext || !isMulticlassUsableClassesOverrideEnabled || g_serverUsableClassesMask == 0) {
-		// Not a filter context, or multiclass disabled - return native value
-		// This ensures tooltips show the item's actual class restrictions
+	// If multiclass is disabled or no server mask, always use native
+	if (!isMulticlassUsableClassesOverrideEnabled || g_serverUsableClassesMask == 0) {
 		return nativeVal;
 	}
 
-	// Filter context: check if ANY multiclass class can use this item
-	if (nativeVal > 0) {
-		int intersection = static_cast<int>(g_serverUsableClassesMask & nativeVal);
-		if (intersection != 0) {
-			// At least one multiclass class can use this item.
-			// Include base class bit so filter passes.
-			if (pLocalPlayer) {
-				const uint8_t baseClass = static_cast<uint8_t>(pLocalPlayer->Data.Class);
-				if (baseClass >= 1 && baseClass <= 16) {
-					return intersection | (1 << (baseClass - 1));
-				}
-			}
-			return intersection;
+	// Get calling RVA
+	void* ret_addr = _ReturnAddress();
+	DWORD ret_rva = (DWORD)((uintptr_t)ret_addr - (uintptr_t)baseAddress);
+
+	// Check if this RVA is in our whitelist (needs multiclass bits)
+	bool useMulticlass = (s_multiclass_rvas.find(ret_rva) != s_multiclass_rvas.end());
+
+	// Determine what we'll return
+	int returnVal = useMulticlass ? static_cast<int>(g_serverUsableClassesMask) : nativeVal;
+
+	// Debug logging - deduplicated to avoid spam
+	if (isDebugLoggingEnabled) {
+		InterlockedIncrement(&s_usable_classes_call_count);
+
+		if (s_verbose_usable_classes_logging) {
+			// VERBOSE MODE: Log every call (for RVA discovery only)
+			LogDebug("[USABLE_CLASSES] RVA=0x%08X a1=%d a2=%u native=%d mask=0x%04X whitelisted=%d returning=%d",
+				ret_rva, a1, a2, nativeVal, g_serverUsableClassesMask, useMulticlass ? 1 : 0, returnVal);
 		} else {
-			// No multiclass class can use this - filter it out
-			return 0;
+			// QUIET MODE: Only log first occurrence per unique (RVA, native, mask) combo
+			uint64_t combo = ((uint64_t)ret_rva << 32) | ((uint64_t)(nativeVal & 0xFFFF) << 16) | (g_serverUsableClassesMask & 0xFFFF);
+			if (s_logged_usable_classes_combos.find(combo) == s_logged_usable_classes_combos.end()) {
+				LogDebug("[USABLE_CLASSES] RVA=0x%08X native=%d mask=0x%04X whitelisted=%d returning=%d (first occurrence)",
+					ret_rva, nativeVal, g_serverUsableClassesMask, useMulticlass ? 1 : 0, returnVal);
+				s_logged_usable_classes_combos.insert(combo);
+			}
 		}
 	}
 
-	// Item has no class restriction (ALL/ALL) - usable
-	return nativeVal;
+	return returnVal;
 }
 
 // Override spell required-level lookups so client-side usability filters (merchant "Show Usable Items", spellbook, etc)
 // behave correctly for multiclass characters.
 //
 // RoF2 calls this as `EQ_Spell::GetSpellLevelNeeded(int classId)` where `this` is the spell object.
+//
+// KEY INSIGHT: This function is called for TWO different purposes:
+//   1. DISPLAY: Tooltips showing "Bard(2)" - should return native class levels
+//   2. FILTERING: "Show Usable Items" checkbox - should return 255 for spells player can't use
+//
+// We use RVA-based detection (like GetUsableClasses) to determine context:
+//   - Filter RVAs: Return 255 if player has no owned class that can use the spell
+//   - Display RVAs: Return native values for correct tooltip display
+//
+// Known filter RVAs (discovered via debug logging - enable s_verbose_spell_level_logging):
+static const std::set<DWORD> s_spell_level_filter_rvas = {
+	// These RVAs are called when filtering merchant spell lists ("Show Usable Items")
+	0x002F0DCD,  // Spell merchant "Show Usable Items" filter check
+};
+
+// Verbose logging for discovering new RVAs
+static bool s_verbose_spell_level_logging = false;
+static volatile LONG s_spell_level_call_count = 0;
+
+// Deduplication: track unique (RVA, spell_id, class, native, best) combos we've already logged
+static std::set<uint64_t> s_logged_spell_level_combos;
+
 DETOUR_TRAMPOLINE_EMPTY(int __fastcall EQSpell_GetSpellLevelNeeded_Tramp(void*, void*, int));
 int __fastcall EQSpell_GetSpellLevelNeeded_Detour(void* This, void* edx, int classId)
 {
@@ -2167,19 +2203,43 @@ int __fastcall EQSpell_GetSpellLevelNeeded_Detour(void* This, void* edx, int cla
 		nativeVal = static_cast<int>(levels[classId - 1]);
 	}
 
-	// ALWAYS log for spell ID 1 (Reclaim Energy) to debug memorization
-	if (isDebugLoggingEnabled && spell_id == 1) {
-		LogDebug(
-			"[SPELL_LEVEL_DEBUG] spell=%u '%s' class=%d native=%d have_levels=%d mask=0x%04X enabled=%d",
-			spell_id, spell_name, classId, nativeVal, have_levels ? 1 : 0,
-			g_serverUsableClassesMask, isMulticlassUsableClassesOverrideEnabled ? 1 : 0
-		);
-		if (have_levels) {
-			LogDebug(
-				"[SPELL_LEVEL_DEBUG] levels: WAR=%d CLR=%d PAL=%d RNG=%d SHD=%d DRU=%d MNK=%d BRD=%d ROG=%d SHM=%d NEC=%d WIZ=%d MAG=%d ENC=%d BST=%d BER=%d",
-				levels[0], levels[1], levels[2], levels[3], levels[4], levels[5], levels[6], levels[7],
-				levels[8], levels[9], levels[10], levels[11], levels[12], levels[13], levels[14], levels[15]
-			);
+	// Calculate best level among owned classes (needed for both filtering and override decisions)
+	int bestLevel = 255;
+	if (have_levels && isMulticlassUsableClassesOverrideEnabled && g_serverUsableClassesMask != 0) {
+		for (int i = 0; i < 16; ++i) {
+			uint16_t classBit = (1u << i);
+			if ((g_serverUsableClassesMask & classBit) != 0) {
+				int lvl = static_cast<int>(levels[i]);
+				if (lvl > 0 && lvl < 255 && lvl < bestLevel) {
+					bestLevel = lvl;
+				}
+			}
+		}
+	}
+
+	// Get calling RVA for context detection
+	void* ret_addr = _ReturnAddress();
+	DWORD ret_rva = (DWORD)((uintptr_t)ret_addr - (uintptr_t)baseAddress);
+
+	// Check if this is a filter context (needs strict multiclass filtering)
+	bool isFilterContext = (s_spell_level_filter_rvas.find(ret_rva) != s_spell_level_filter_rvas.end());
+
+	// Debug logging for RVA discovery - deduplicated
+	if (isDebugLoggingEnabled) {
+		InterlockedIncrement(&s_spell_level_call_count);
+
+		if (s_verbose_spell_level_logging) {
+			// VERBOSE MODE: Log every call (for RVA discovery only)
+			LogDebug("[SPELL_LEVEL] RVA=0x%08X spell=%u '%s' class=%d native=%d best=%d mask=0x%04X",
+				ret_rva, spell_id, spell_name, classId, nativeVal, bestLevel, g_serverUsableClassesMask);
+		} else {
+			// QUIET MODE: Only log first occurrence per unique (RVA, spell_id, classId, bestLevel) combo
+			uint64_t combo = ((uint64_t)ret_rva << 32) | ((uint64_t)spell_id << 16) | ((uint64_t)classId << 8) | (bestLevel & 0xFF);
+			if (s_logged_spell_level_combos.find(combo) == s_logged_spell_level_combos.end()) {
+				LogDebug("[SPELL_LEVEL] RVA=0x%08X spell=%u '%s' class=%d native=%d best=%d mask=0x%04X (first)",
+					ret_rva, spell_id, spell_name, classId, nativeVal, bestLevel, g_serverUsableClassesMask);
+				s_logged_spell_level_combos.insert(combo);
+			}
 		}
 	}
 
@@ -2187,32 +2247,26 @@ int __fastcall EQSpell_GetSpellLevelNeeded_Detour(void* This, void* edx, int cla
 		return nativeVal;
 	}
 
+	// MULTICLASS FILTERING LOGIC:
+	// Only apply filtering in filter contexts (spell merchant "Show Usable Items" checkbox).
+	// In display contexts (tooltips), always return native values to show correct class/level info.
+	if (isFilterContext && bestLevel == 255) {
+		// Filter context AND player cannot use this spell with any of their classes
+		// Return 255 to hide it from the "Show Usable Items" filter
+		return 255;
+	}
+
 	// For multiclass: if the queried classId's native level is 255 (can't use), but we have spell levels
 	// and one of our owned classes CAN use this spell, return the best (lowest) level among owned classes.
 	// This fixes memorization time calculation which uses the queried class's level - if it's 255, mem time is huge.
-	if (have_levels && g_serverUsableClassesMask != 0) {
-		int bestLevel = 255;
-		for (int i = 0; i < 16; ++i) {
-			uint16_t classBit = (1u << i);
-			if ((g_serverUsableClassesMask & classBit) != 0) {
-				// This class is in our multiclass mask
-				int lvl = static_cast<int>(levels[i]);
-				if (lvl > 0 && lvl < 255 && lvl < bestLevel) {
-					bestLevel = lvl;
-				}
-			}
+	if (bestLevel < 255 && bestLevel < nativeVal) {
+		if (isDebugLoggingEnabled && spell_id == 1) {
+			LogDebug(
+				"[SPELL_LEVEL_OVERRIDE] spell=%u class=%d native=%d -> bestLevel=%d",
+				spell_id, classId, nativeVal, bestLevel
+			);
 		}
-
-		// If we found a usable level from any owned class, and it's better than native, use it
-		if (bestLevel < 255 && bestLevel < nativeVal) {
-			if (isDebugLoggingEnabled && spell_id == 1) {
-				LogDebug(
-					"[SPELL_LEVEL_OVERRIDE] spell=%u class=%d native=%d -> bestLevel=%d",
-					spell_id, classId, nativeVal, bestLevel
-				);
-			}
-			return bestLevel;
-		}
+		return bestLevel;
 	}
 
 	return nativeVal;
@@ -2254,7 +2308,11 @@ int __fastcall PcZoneClient_GetPcSkillLimit_Detour(void* This, void* edx, int sk
 		const int skillVal = static_cast<int>(ci2->Skill[skillId]);
 		if (skillVal > 0) {
 			if (isDebugLoggingEnabled) {
-				LogDebug("CLIENT_DETOUR stat=PcSkillLimit skill=%d native=0 used=%d mask=0x%04X", skillId, skillVal, (unsigned)(g_serverUsableClassesMask & 0xFFFF));
+				static std::set<int> s_logged_skills;
+				if (s_logged_skills.find(skillId) == s_logged_skills.end()) {
+					LogDebug("CLIENT_DETOUR stat=PcSkillLimit skill=%d native=0 used=%d mask=0x%04X (first)", skillId, skillVal, (unsigned)(g_serverUsableClassesMask & 0xFFFF));
+					s_logged_skills.insert(skillId);
+				}
 			}
 			return skillVal;
 		}
@@ -2562,9 +2620,13 @@ int __fastcall CSpellBookWnd_CanStartMemming_Detour(void* This, void* edx, int s
 	}
 
 	if (isDebugLoggingEnabled) {
-		LogDebug("[CAN_START_MEMMING] spellId=%d nativeVal=%d serverMask=0x%04X hasSpellcaster=%d",
-			spellId, nativeVal, g_serverUsableClassesMask,
-			MulticlassHasSpellcastingClass(g_serverUsableClassesMask) ? 1 : 0);
+		static std::set<int> s_logged_memming_spells;
+		if (s_logged_memming_spells.find(spellId) == s_logged_memming_spells.end()) {
+			LogDebug("[CAN_START_MEMMING] spellId=%d nativeVal=%d serverMask=0x%04X hasSpellcaster=%d (first)",
+				spellId, nativeVal, g_serverUsableClassesMask,
+				MulticlassHasSpellcastingClass(g_serverUsableClassesMask) ? 1 : 0);
+			s_logged_memming_spells.insert(spellId);
+		}
 	}
 
 	if (!isMulticlassSpellUiOverrideEnabled || g_serverUsableClassesMask == 0) {

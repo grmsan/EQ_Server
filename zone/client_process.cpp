@@ -1322,7 +1322,7 @@ void Client::OPMemorizeSpell(const EQApplicationPacket* app)
 							if (!HasClass(class_id)) {
 								continue;
 							}
-							if (item->IsEquipable(GetRace(), class_id)) {
+							if (item->IsEquipable(GetRace(), GetPlayerClassBit(class_id))) {
 								return false;
 							}
 						}

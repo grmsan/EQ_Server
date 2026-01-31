@@ -167,13 +167,15 @@ uint8 EQ::item::ConvertAugTypeBitToAugType(uint32 aug_type_bit)
 	}
 }
 
-bool EQ::ItemData::IsEquipable(uint16 race_id, uint16 class_id) const
+bool EQ::ItemData::IsEquipable(uint16 race_id, uint16 class_bits) const
 {
-	if (!(Races & GetPlayerRaceBit(race_id))) {
+	uint32 race_bit = GetPlayerRaceBit(race_id);
+	if (!(Races & race_bit)) {
 		return false;
 	}
 
-	if (!(Classes & GetPlayerClassBit(GetPlayerClassValue(class_id)))) {
+	// THJServer parity: class_bits is now a bitmask directly, not a class ID
+	if (!(Classes & class_bits)) {
 		return false;
 	}
 

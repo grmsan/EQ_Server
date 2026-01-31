@@ -1232,7 +1232,7 @@ bool Client::TryStacking(EQ::ItemInstance* item, uint8 type, bool try_worn, bool
 bool Client::AutoPutLootInInventory(EQ::ItemInstance& inst, bool try_worn, bool try_cursor, LootItem** bag_item_data)
 {
 	// #1: Try to auto equip
-	if (try_worn && inst.IsEquipable(GetBaseRace(), GetClass()) && inst.GetItem()->ReqLevel <= level && (!inst.GetItem()->Attuneable || inst.IsAttuned()) && inst.GetItem()->ItemType != EQ::item::ItemTypeAugmentation) {
+	if (try_worn && inst.IsEquipable(GetBaseRace(), GetClassesBits()) && inst.GetItem()->ReqLevel <= level && (!inst.GetItem()->Attuneable || inst.IsAttuned()) && inst.GetItem()->ItemType != EQ::item::ItemTypeAugmentation) {
 		for (int16 i = EQ::invslot::EQUIPMENT_BEGIN; i <= EQ::invslot::EQUIPMENT_END; i++) {
 			if ((((uint64)1 << i) & GetInv().GetLookup()->PossessionsBitmask) == 0)
 				continue;
@@ -2096,7 +2096,7 @@ bool Client::SwapItem(MoveItem_Struct* move_in) {
 			if ((int16)move_in->number_in_stack >= src_inst->GetCharges()) {
 				// Move entire stack
 				EQ::InventoryProfile::SwapItemFailState fail_state = EQ::InventoryProfile::swapInvalid;
-				if (!m_inv.SwapItem(src_slot_id, dst_slot_id, fail_state)) { return false; }
+				if (!m_inv.SwapItem(src_slot_id, dst_slot_id, fail_state, GetBaseRace(), GetBaseClass(), GetDeity(), GetLevel(), GetClassesBits())) { return false; }
 				LogInventory("Move entire stack from [{}] to [{}] with stack size [{}]. Dest empty", src_slot_id, dst_slot_id, move_in->number_in_stack);
 			}
 			else {
@@ -2128,10 +2128,20 @@ bool Client::SwapItem(MoveItem_Struct* move_in) {
 		}
 
 		EQ::InventoryProfile::SwapItemFailState fail_state = EQ::InventoryProfile::swapInvalid;
-		if (!m_inv.SwapItem(src_slot_id, dst_slot_id, fail_state, GetBaseRace(), GetBaseClass(), GetDeity(), GetLevel())) {
+		uint16 classes_bits_debug = GetClassesBits();
+		LogInventory("DEBUG EQUIP: src_slot=[{}] dst_slot=[{}] race=[{}] class=[{}] classes_bits=[{}] item_classes=[{}] item_name=[{}]",
+			src_slot_id, dst_slot_id, GetBaseRace(), GetBaseClass(), classes_bits_debug,
+			src_inst ? src_inst->GetItem()->Classes : 0,
+			src_inst ? src_inst->GetItem()->Name : "null");
+		if (!m_inv.SwapItem(src_slot_id, dst_slot_id, fail_state, GetBaseRace(), GetBaseClass(), GetDeity(), GetLevel(), classes_bits_debug)) {
 			const char* fail_message = "The selected slot was invalid.";
-			if (fail_state == EQ::InventoryProfile::swapRaceClass || fail_state == EQ::InventoryProfile::swapDeity)
+			if (fail_state == EQ::InventoryProfile::swapRaceClass || fail_state == EQ::InventoryProfile::swapDeity) {
 				fail_message = "Your class, deity and/or race may not equip that item.";
+				LogInventory("DEBUG EQUIP FAILED: fail_state=[{}] (swapRaceClass={}, swapDeity={})",
+					static_cast<int>(fail_state),
+					static_cast<int>(EQ::InventoryProfile::swapRaceClass),
+					static_cast<int>(EQ::InventoryProfile::swapDeity));
+			}
 			else if (fail_state == EQ::InventoryProfile::swapLevel)
 				fail_message = "You are not sufficient level to use this item.";
 

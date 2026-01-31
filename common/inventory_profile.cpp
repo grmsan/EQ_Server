@@ -273,9 +273,13 @@ bool EQ::InventoryProfile::SwapItem(
 	uint16 race_id,
 	uint8 class_id,
 	uint32 deity_id,
-	uint8 level
+	uint8 level,
+	uint16 classes_bits
 ) {
 	fail_state = swapInvalid;
+
+	// THJServer parity: if classes_bits provided, use it; otherwise fall back to single class
+	uint16 effective_class_bits = classes_bits ? classes_bits : GetPlayerClassBit(class_id);
 
 	if (EQ::ValueWithin(source_slot, EQ::invslot::POSSESSIONS_BEGIN, EQ::invslot::POSSESSIONS_END)) {
 		if ((((uint64)1 << source_slot) & m_lookup->PossessionsBitmask) == 0) {
@@ -344,7 +348,10 @@ bool EQ::InventoryProfile::SwapItem(
 				return false;
 			}
 
-			if (race_id && class_id && !source_item->IsEquipable(race_id, class_id)) {
+			LogInventory("DEBUG SwapItem: race_id=[{}] effective_class_bits=[{}] item->Classes=[{}] item->Races=[{}]",
+				race_id, effective_class_bits, source_item->Classes, source_item->Races);
+			if (race_id && effective_class_bits && !source_item->IsEquipable(race_id, effective_class_bits)) {
+				LogInventory("DEBUG SwapItem: IsEquipable FAILED - returning swapRaceClass");
 				fail_state = swapRaceClass;
 				return false;
 			}
@@ -378,7 +385,7 @@ bool EQ::InventoryProfile::SwapItem(
 				return false;
 			}
 
-			if (race_id && class_id && !destination_item->IsEquipable(race_id, class_id)) {
+			if (race_id && effective_class_bits && !destination_item->IsEquipable(race_id, effective_class_bits)) {
 				fail_state = swapRaceClass;
 				return false;
 			}

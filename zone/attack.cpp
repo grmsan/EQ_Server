@@ -1339,7 +1339,12 @@ int64 Mob::GetWeaponDamage(Mob *against, const EQ::ItemInstance *weapon_item, in
 			return 0;
 		}
 
-		if (!weapon_item->IsClassEquipable(GetClass()) &&
+		// For clients, check if ANY multiclass can equip the weapon
+		const bool can_class_equip = IsClient()
+			? weapon_item->IsEquipable(CastToClient()->GetBaseRace(), CastToClient()->GetClassesBits())
+			: weapon_item->IsClassEquipable(GetClass());
+
+		if (!can_class_equip &&
 			(
 				!IsBot() ||
 				(IsBot() && !RuleB(Bots, AllowBotEquipAnyClassGear))

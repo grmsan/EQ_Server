@@ -32,6 +32,7 @@
 #include "string_ids.h"
 #include "worldserver.h"
 #include "combat_balance_config.h"
+#include "client.h"
 
 #include <math.h>
 #include <unordered_map>
@@ -45,6 +46,39 @@
 extern Zone* zone;
 extern volatile bool is_zone_loaded;
 extern WorldServer worldserver;
+
+// Multiclass helper: get the best (lowest) spell level across all owned classes.
+// For non-multiclass or NPCs, returns the single-class spell level.
+static int GetBestSpellLevelForFocus(const Mob* mob, const SPDat_Spell_Struct& spell) {
+	if (!mob) {
+		return 255;
+	}
+
+	// NPCs don't use multiclass
+	if (mob->IsNPC()) {
+		return spell.classes[(mob->GetClass() % 17) - 1];
+	}
+
+	// For multiclass clients, find the best (lowest) spell level across all owned classes
+	if (RuleB(Custom, MulticlassingEnabled) && mob->IsClient()) {
+		uint32 classes_bits = mob->CastToClient()->GetClassesBits();
+		int best_level = 255;
+		for (int class_id = 1; class_id <= 16; ++class_id) {
+			if ((classes_bits & (1u << (class_id - 1))) == 0) {
+				continue;
+			}
+			int spell_level = spell.classes[class_id - 1];
+			// 0 and 255 typically mean "not usable by this class"
+			if (spell_level > 0 && spell_level < best_level) {
+				best_level = spell_level;
+			}
+		}
+		return best_level;
+	}
+
+	// Non-multiclass: use original single-class lookup
+	return spell.classes[(mob->GetClass() % 17) - 1];
+}
 
 // -----------------------------------------------------------------------------
 // Special Attack Scaling (reusable for AA/spells that should mimic weapon+stat)
@@ -5004,7 +5038,7 @@ int64 Mob::CalcAAFocus(focusType type, const AA::Rank &rank, uint16 spell_id)
 				break;
 
 			case SpellEffect::LimitMaxLevel:
-				spell_level = spell.classes[(GetClass() % 17) - 1];
+				spell_level = GetBestSpellLevelForFocus(this, spell);
 				lvldiff     = spell_level - base_value;
 				// every level over cap reduces the effect by base2 percent unless from a clicky when
 				// ItemCastsUseFocus is true
@@ -5022,7 +5056,7 @@ int64 Mob::CalcAAFocus(focusType type, const AA::Rank &rank, uint16 spell_id)
 				break;
 
 			case SpellEffect::LimitMinLevel:
-				if ((spell.classes[(GetClass() % 17) - 1]) < base_value) {
+				if (GetBestSpellLevelForFocus(this, spell) < base_value) {
 					LimitFailure = true;
 				}
 				break;
@@ -5730,7 +5764,7 @@ int64 Mob::CalcFocusEffect(focusType type, uint16 focus_id, uint16 spell_id, boo
 				if (IsNPC()) {
 					break;
 				}
-				spell_level = spell.classes[(GetClass() % 17) - 1];
+				spell_level = GetBestSpellLevelForFocus(this, spell);
 				lvldiff     = spell_level - focus_spell.base_value[i];
 				// every level over cap reduces the effect by focus_spell.base2[i] percent unless from a clicky
 				// when ItemCastsUseFocus is true
@@ -5752,7 +5786,7 @@ int64 Mob::CalcFocusEffect(focusType type, uint16 focus_id, uint16 spell_id, boo
 				if (IsNPC()) {
 					break;
 				}
-				if (spell.classes[(GetClass() % 17) - 1] < focus_spell.base_value[i]) {
+				if (GetBestSpellLevelForFocus(this, spell) < focus_spell.base_value[i]) {
 					return (0);
 				}
 				break;

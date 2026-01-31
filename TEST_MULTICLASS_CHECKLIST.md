@@ -29,81 +29,9 @@ This file tracks multiclass features as they are implemented. Remove items when 
 
 ## Active Bugs to Fix
 
-### 1. Spell Vendor "Show Usable Items" Not Filtering (CLIENT-SIDE BUG)
 
-**Status:** FAIL - Needs Investigation
-
-**Symptoms:**
-- "Show Usable Items" checkbox doesn't filter anything - ALL spells shown
-- When inspecting a spell item, it shows ALL player's classes with their levels
-- Example: Warrior/Mage/Druid with a level 3 Druid spell shows:
-  - Warrior: level 3 (WRONG - should be 255)
-  - Druid: level 3 (correct)
-  - Mage: level 255 (correct)
-- The base class (Warrior) is incorrectly getting assigned the same level as an added class
-
-**Root Cause Analysis:**
-This appears to be in how the server populates the item's class level data when sending to client. The item struct has per-class level requirements that the client uses for filtering.
-
-**Files to Investigate:**
-- `zone/inventory.cpp` - Item packet construction
-- `zone/tradeskills.cpp` - May have similar item handling
-- Search for where `classes` array is populated in item packets
-
-**Debug Steps:**
-1. Check `dinput8_debug.log` for GetSpellLevelNeeded calls
-2. Run `#multiclassdiag refresh` to ensure EdgeStatLabel was sent
-3. Look for item packet construction code
-
----
-
-### 2. Merchant Class Filtering (SERVER-SIDE - PARTIAL FIX)
-
-**Status:** FAIL - Related to Bug #1
-
-**What We Changed:**
-- `zone/client_process.cpp` ~line 929: Changed merchant class filtering to use `GetClassesBits()` instead of single class
-
-**Current Issue:**
-The server-side filtering now correctly allows items for all classes, but the item's per-class level data being sent to the client is wrong (see Bug #1). The client shows level 255 for unusable classes but also incorrectly shows non-255 for the base class on spells it can't use.
-
----
 
 ## Tests Still Pending
-
-### Spell Scribe Button (NEEDS TEST)
-
-**Issue:** Scribe button may be greyed out for spells of added classes.
-
-**How to Test:**
-1. As Warrior/Mage multiclass
-2. Put a Magician spell scroll on cursor
-3. Open spellbook
-4. **Expected:** Scribe button should be clickable
-5. **Possible Bug:** Button greyed out, cannot scribe
-
----
-
-### Skill Training for Added Classes (NEEDS TEST)
-
-**How to Test:**
-1. As Warrior/Mage multiclass
-2. Visit a Magician guildmaster
-3. Try to train Magician skills (Conjuration, etc.)
-4. **Expected:** Should be able to train skills
-5. **Possible Bug:** Guildmaster says "I cannot teach you"
-
----
-
-### AA Eligibility for Added Classes (NEEDS TEST)
-
-**How to Test:**
-1. As Warrior/Mage multiclass with AA points
-2. Open AA window
-3. Look for Magician-only AAs
-4. **Expected:** Should see and be able to purchase Magician AAs
-
----
 
 ### Equipment Usability (NEEDS TEST)
 

@@ -926,24 +926,37 @@ void Client::SendAlternateAdvancementRank(int aa_id, int level) {
 		return;
 	}
 
-	uint32 class_mask = 0;
-	for (uint8 class_id = 1; class_id <= Class::PLAYER_CLASS_COUNT; ++class_id) {
-		if (HasClass(class_id)) {
-			class_mask |= GetPlayerClassBit(class_id);
-		}
-	}
-
-	if (!(ability->classes & class_mask)) {
-		return;
-	}
-
-	if(!CanUseAlternateAdvancementRank(rank)) {
-		return;
-	}
-
 	int size = sizeof(AARankInfo_Struct) + (sizeof(AARankEffect_Struct) * rank->effects.size()) + (sizeof(AARankPrereq_Struct) * rank->prereqs.size());
 	auto outapp = new EQApplicationPacket(OP_SendAATable, size);
 	AARankInfo_Struct *aai = (AARankInfo_Struct*)outapp->pBuffer;
+
+	// THJServer parity: Server does class filtering, then tells client "all classes can use"
+	// to prevent client-side double-filtering based on base class.
+	// AA classes are left-shifted by 1 from DB (see LoadAlternateAdvancementAbilities).
+	// GetClassesBits() uses standard format, so we right-shift to compare.
+	if (RuleB(Custom, MulticlassingEnabled)) {
+		const uint32 aa_classes_normalized = ability->classes >> 1;
+		if (aa_classes_normalized & GetClassesBits()) {
+			// Multiclass can use this AA - tell client "all classes" to bypass client filtering
+			aai->classes = 0xFFFFFFFF;
+		} else {
+			// No multiclass match - skip this AA
+			safe_delete(outapp);
+			return;
+		}
+	} else {
+		// Non-multiclass: use original single-class check
+		if (!(ability->classes & (1 << GetClass()))) {
+			safe_delete(outapp);
+			return;
+		}
+		aai->classes = ability->classes;
+	}
+
+	if(!CanUseAlternateAdvancementRank(rank)) {
+		safe_delete(outapp);
+		return;
+	}
 
 	aai->id = rank->id;
 	aai->upper_hotkey_sid = rank->upper_hotkey_sid;
@@ -956,7 +969,7 @@ void Client::SendAlternateAdvancementRank(int aa_id, int level) {
 	aai->spell = rank->spell;
 	aai->spell_type = rank->spell_type;
 	aai->spell_refresh = rank->recast_time;
-	aai->classes = ability->classes;
+	// aai->classes already set above
 	aai->level_req = rank->level_req;
 	aai->current_level = level;
 	aai->max_level = ability->GetMaxLevel(this);
@@ -1696,19 +1709,21 @@ bool Mob::CanUseAlternateAdvancementRank(AA::Rank *rank)
 		return false;
 	}
 
-	uint32 class_mask = GetPlayerClassBit(GetClass());
-	if (IsClient()) {
-		class_mask = 0;
-		auto *c = CastToClient();
-		for (uint8 class_id = 1; class_id <= Class::PLAYER_CLASS_COUNT; ++class_id) {
-			if (c->HasClass(class_id)) {
-				class_mask |= GetPlayerClassBit(class_id);
+	// THJServer parity: AA classes are left-shifted by 1 from DB.
+	// When multiclassing, right-shift and compare against GetClassesBits().
+	// When not multiclassing, use original single-class check.
+	if (RuleB(Custom, MulticlassingEnabled)) {
+		if (IsClient()) {
+			const uint32 aa_classes_normalized = a->classes >> 1;
+			if (!(aa_classes_normalized & CastToClient()->GetClassesBits())) {
+				return false;
 			}
 		}
-	}
-
-	if (!(a->classes & class_mask)) {
-		return false;
+		// NPCs/Bots: fall through to other checks (they don't multiclass)
+	} else {
+		if (!(a->classes & (1 << GetClass()))) {
+			return false;
+		}
 	}
 
 	// Passive and Active Shroud AAs, skip for now

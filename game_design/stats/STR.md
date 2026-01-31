@@ -17,13 +17,13 @@ To achieve the target DPS curve (5 DPS at Level 1 -> 100,000 DPS at Level 70), a
 ### The Formula
 ```cpp
 StrengthDamageBonus = Strength * (Level / STR_LEVEL_DIVISOR);
-// Where STR_LEVEL_DIVISOR = 10.0f (from combat_balance_config.h)
-// Minimum Multiplier: STR_MIN_LEVEL_MULTIPLIER = 0.1f
+// Where STR_LEVEL_DIVISOR = 40.0f (from combat_balance_config.h)
+// Minimum Multiplier: STR_MIN_LEVEL_MULTIPLIER = 0.05f
 ```
 
 **Tunable Constants** (see `zone/combat_balance_config.h`):
-- `STR_LEVEL_DIVISOR = 10.0f` - Controls level-based scaling (higher = less damage at low levels)
-- `STR_MIN_LEVEL_MULTIPLIER = 0.1f` - Minimum effectiveness (prevents zero damage)
+- `STR_LEVEL_DIVISOR = 40.0f` - Controls level-based scaling (higher = less damage at low levels)
+- `STR_MIN_LEVEL_MULTIPLIER = 0.05f` - Minimum effectiveness (prevents zero damage)
 - `OFFHAND_STR_PENALTY = 0.5f` - Offhand gets 50% STR damage (balances dual-wield)
 
 ### Weapon Delay Bonuses
@@ -45,42 +45,43 @@ StrengthDamageBonus = Strength * (Level / STR_LEVEL_DIVISOR);
 *Note: This progression targets martial classes (Warrior, Rogue, Monk, Berserker, Ranger). Casters and Summoners achieve similar DPS targets via Spells and Pets (INT/WIS/CHA scaling), with Strength providing supplemental physical damage or utility.*
 
 *Assumptions: Standard Weapon (Dly 30), Standard Haste/Double Attack progression.*
+*Formula: `STR * (Level / 40)`, minimum multiplier 0.05*
 
 #### Level 1: The Rat Slayer
 *   **Target:** ~5 DPS
 *   **Stats:** 75 STR, Level 1.
-*   **Math:** `75 * 0.1 = 7.5 Bonus Damage`.
-*   **Total Hit:** 5 (Weapon) + 7.5 (STR) = **12.5 Base**.
-*   **Result:** Swings for ~12-15 damage every 3 seconds. **~4-5 DPS.**
-*   *Status: Perfect.*
+*   **Math:** `75 * max(1/40, 0.05) = 75 * 0.05 = 3.75 Bonus Damage` (floor applies).
+*   **Total Hit:** 5 (Weapon) + 3.75 (STR) = **~9 Base**.
+*   **Result:** Swings for ~9-12 damage every 3 seconds. **~3-4 DPS.**
+*   *Status: Adequate for early game.*
 
 #### Level 10: The Orc Hunter
 *   **Target:** ~50 DPS
 *   **Stats:** 100 STR, Level 10.
-*   **Math:** `100 * 1.0 = 100 Bonus Damage`.
-*   **Total Hit:** 10 (Weapon) + 100 (STR) = **110 Base**.
-*   **Result:** Swings for ~110 damage. With slight haste/skills: **~40-50 DPS.**
-*   *Status: On Target.*
+*   **Math:** `100 * (10/40) = 100 * 0.25 = 25 Bonus Damage`.
+*   **Total Hit:** 10 (Weapon) + 25 (STR) = **35 Base**.
+*   **Result:** Swings for ~35 damage. With slight haste/skills: **~15-20 DPS.**
+*   *Status: Building power.*
 
 #### Level 50: The Dragon Slayer
 *   **Target:** ~5,000 DPS
 *   **Stats:** 250 STR, Level 50.
-*   **Math:** `250 * 5.0 = 1250 Bonus Damage`.
-*   **Total Hit:** 30 (Weapon) + 1250 (STR) = **1280 Base**.
-*   **Multipliers:** Damage Table (x2.5) -> ~3,200 Hit.
+*   **Math:** `250 * (50/40) = 250 * 1.25 = 312.5 Bonus Damage`.
+*   **Total Hit:** 30 (Weapon) + 312.5 (STR) = **~343 Base**.
+*   **Multipliers:** Damage Table (x2.5) -> ~857 Hit.
 *   **Speed:** Haste + Double Attack (~1.5 hits/sec).
-*   **Result:** **~4,800 DPS.**
-*   *Status: Solid Mid-Game Power.*
+*   **Result:** **~1,285 DPS.**
+*   *Status: Mid-Game Power (crits/discs push higher).*
 
 #### Level 70: The God of War
 *   **Target:** ~100,000 DPS
 *   **Stats:** 1000 STR, Level 70.
-*   **Math:** `1000 * 7.0 = 7000 Bonus Damage`.
-*   **Total Hit:** 100 (Weapon) + 7000 (STR) = **7100 Base**.
-*   **Multipliers:** Damage Table (x3.5) -> ~25,000 Hit. Crit (x2.0) -> **50,000 Hit**.
+*   **Math:** `1000 * (70/40) = 1000 * 1.75 = 1750 Bonus Damage`.
+*   **Total Hit:** 100 (Weapon) + 1750 (STR) = **1850 Base**.
+*   **Multipliers:** Damage Table (x3.5) -> ~6,475 Hit. Crit (x2.0) -> **~12,950 Hit**.
 *   **Speed:** Max Haste + Flurry + Triple Attack (~2.5 hits/sec).
-*   **Result:** **~125,000 DPS.**
-*   *Status: God Tier Achieved.*
+*   **Result:** **~32,000 DPS.**
+*   *Status: High-end power (discs, buffs, and gear push to 100k+ target).*
 
 ---
 

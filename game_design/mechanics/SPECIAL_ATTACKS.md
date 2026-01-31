@@ -1,88 +1,332 @@
 # Special Attacks Mechanics
 
+Current special attack mechanics with accurate code references.
+
 ## Overview
-This document details the damage calculation logic for Special Attacks (Frenzy, Backstab, Kick, etc.) based on the current codebase analysis.
+
+Special attacks use the `GetBaseSkillDamage()` function at [zone/special_attacks.cpp#L33](../../../zone/special_attacks.cpp) to calculate base damage. This server has **already implemented** weapon scaling for most special attacks.
+
+## Code Flow
+
+```
+Player activates ability (button/hotkey)
+       ↓
+Client sends OP_CombatAbility packet
+       ↓
+zone/client_packet.cpp handles packet
+       ↓
+DoMeleeSkillAttackDmg() called [zone/special_attacks.cpp#L2589]
+       ↓
+GetBaseSkillDamage() calculates base [zone/special_attacks.cpp#L33]
+       ↓
+MeleeMitigation() applied [zone/attack.cpp#L1163]
+       ↓
+ApplyDamageTable() applied [zone/attack.cpp#L6265]
+       ↓
+TryCriticalHit() checked [zone/attack.cpp#L5654]
+       ↓
+Final damage dealt
+```
+
+---
 
 ## 1. Frenzy (Berserker)
 
-**File:** `zone/special_attacks.cpp` & `zone/attack.cpp`
+**Location:** [zone/special_attacks.cpp](../../../zone/special_attacks.cpp) lines 63-97
 
-### The Formula
-1.  **Base Damage Calculation:**
-    *   Defined in `Mob::GetBaseSkillDamage`.
-    *   **Formula:** `Base = Level - 15`.
-    *   **Hard Cap:** `if (base > 23) base = 23;`
-    *   **Level Bonuses:** Small flat adds for levels > 50, 54, 59.
-    *   **Result:** A Level 60 Berserker has a **Base Damage of ~23**.
+### Current Implementation (Weapon Scaling ENABLED)
 
-2.  **Mitigation & Randomization:**
-    *   Defined in `Mob::MeleeMitigation`.
-    *   The server rolls a multiplier between **0.1** and **2.0** based on Attack Rating vs AC.
-    *   **Max Result:** `23 * 2.0 = 46`.
+```cpp
+case EQ::skills::SkillFrenzy:
+    if (IsClient()) {
+        auto primary = CastToClient()->GetInv().GetItem(EQ::invslot::slotPrimary);
+        if (primary && primary->GetItem()) {
+            // Uses weapon damage as base
+            base = primary->GetItem()->Damage;
+            base += (GetLevel() / 10);  // Small level bonus
+        } else {
+            // Fallback for unarmed
+            if (GetLevel() > 15) base += GetLevel() - 15;
+            if (base > 23) base = 23;
+        }
+    }
+    return base;
+```
 
-3.  **Damage Tables (The Multiplier):**
-    *   Defined in `Mob::ApplyDamageTable`.
-    *   If the hit lands, a "Damage Table" multiplier is applied.
-    *   For Level 60+, this multiplier is approximately **285%** (Factor 2.85).
-    *   **Max Result:** `46 * 2.85 = ~131`.
+### Formula
 
-4.  **Critical Hits:**
-    *   Defined in `Mob::TryCriticalHit`.
-    *   If a crit occurs, the damage is multiplied by the Crit Modifier (default ~2.0, higher with AAs).
-    *   **Max Result:** `131 * 2.0 = ~262`.
+```
+With Weapon:  Base = Weapon_Damage + (Level / 10)
+Without:      Base = min(23, Level - 15)  [original formula]
+```
 
-5.  **Minimum Damage Floor:**
-    *   Defined in `Mob::CommonOutgoingHitSuccess`.
-    *   Berserkers > Level 50 get a minimum damage floor: `4 * Level / 5`.
-    *   **Level 60 Floor:** 48 Damage.
+### Example Calculation
 
-6.  **Bonus Damage (SPA 170):**
-    *   `hit.min_damage += GetSkillDmgAmt(hit.skill)`.
-    *   This adds flat damage from Items/AAs/Spells.
-    *   **Important:** This is added *after* the Critical Hit multiplier.
+| Weapon Dmg | Level | Base | After Mitigation (x1.5) | After Table (x2.85) | After Crit (x2) |
+|------------|-------|------|-------------------------|---------------------|-----------------|
+| 50 | 65 | 56 | 84 | 240 | 480 |
+| 100 | 65 | 106 | 159 | 453 | 906 |
+| 150 | 65 | 156 | 234 | 667 | 1334 |
 
-### Summary
-*   **Theoretical Max Hit (No Gear):** ~262.
-*   **Scaling:** Completely static. Strength does **not** increase this damage.
-*   **Conclusion:** While higher than the initially stated "46", it is mathematically impossible for this skill to hit for "thousands" in the current code without massive `SkillDamageAmount` bonuses on gear.
+### Related Rules
+
+```cpp
+// common/ruletypes.h#L681
+RULE_INT(Combat, FrenzyBaseDamage, 10, "Frenzy base damage, default is 10")
+```
 
 ---
 
 ## 2. Backstab (Rogue)
 
-**File:** `zone/special_attacks.cpp`
+**Location:** [zone/special_attacks.cpp](../../../zone/special_attacks.cpp) lines 219-256
 
-### The Formula
-1.  **Base Damage:**
-    *   `Base = WeaponDamage * BackstabMultiplier`.
-    *   *Note:* This scales with the weapon, unlike Frenzy.
-2.  **Mitigation:** Standard 0.1 - 2.0 roll.
-3.  **Damage Table:** Standard multiplier (~3.0).
-4.  **Crit:** Standard multiplier (~2.0).
+### Current Implementation
 
-### Why Backstab Hits Harder
-Because `Base` uses `WeaponDamage`, a 40dmg dagger results in a much higher starting point than Frenzy's fixed "23".
-*   `40 * 2.0 (Mitigation) * 3.0 (Table) * 2.0 (Crit) = ~480` (plus skill multipliers).
+```cpp
+case EQ::skills::SkillBackstab: {
+    // Multiplier based on skill level
+    float multiplier = GetSkill(EQ::skills::SkillBackstab) * 0.02f + 2.0f;
+
+    if (IsClient()) {
+        auto primary = CastToClient()->GetInv().GetItem(EQ::invslot::slotPrimary);
+        if (primary && primary->GetItem()) {
+            base = static_cast<int>(primary->GetItem()->Damage * multiplier);
+        }
+    }
+    return base;
+}
+```
+
+### Formula
+
+```
+Base = Weapon_Damage × (Skill × 0.02 + 2.0)
+
+At 300 skill: multiplier = 300 × 0.02 + 2.0 = 8.0×
+```
+
+### Example Calculation
+
+| Weapon Dmg | Skill | Multiplier | Base | After Full Pipeline |
+|------------|-------|------------|------|---------------------|
+| 20 | 300 | 8.0 | 160 | ~900 |
+| 50 | 300 | 8.0 | 400 | ~2300 |
+| 100 | 300 | 8.0 | 800 | ~4500 |
+
+### Related Rules
+
+```cpp
+// common/ruletypes.h#L676
+RULE_INT(Combat, BackstabBaseDamage, 0, "Backstab base damage, default is 0")
+
+// common/ruletypes.h#L640-642
+RULE_BOOL(Combat, BackstabIgnoresElemental, false, "Elemental damage affecting backstab")
+RULE_BOOL(Combat, BackstabIgnoresBane, false, "Bane damage affecting backstab")
+RULE_INT(Combat, DoubleBackstabLevelRequirement, 55, "Level requirement for double backstab")
+```
 
 ---
 
-## 3. Monk Skills (Flying Kick, etc.)
+## 3. Flying Kick (Monk)
 
-**File:** `zone/special_attacks.cpp`
+**Location:** [zone/special_attacks.cpp](../../../zone/special_attacks.cpp) lines 99-130
 
-### The Formula
-1.  **Base Damage:**
-    *   `Base = SkillLevel / X + BootAC / Y`.
-    *   Example (Flying Kick): `Skill/9 + BootAC/25`.
-2.  **Scaling:** Scales with Skill Level and Boot AC, but not Strength.
+### Current Implementation (Weapon Scaling ENABLED)
+
+```cpp
+case EQ::skills::SkillFlyingKick: {
+    float skill_bonus = skill_level / 9.0f;
+
+    if (IsClient()) {
+        auto primary = CastToClient()->GetInv().GetItem(EQ::invslot::slotPrimary);
+        if (primary && primary->GetItem()) {
+            base = primary->GetItem()->Damage;
+        } else {
+            base = GetHandToHandDamage();
+        }
+
+        base += (int)skill_bonus;
+
+        // Boot AC bonus
+        auto inst = CastToClient()->GetInv().GetItem(EQ::invslot::slotFeet);
+        if (inst) {
+            base += (int)(inst->GetItemArmorClass(true) / 25.0f);
+        }
+    }
+    return base;
+}
+```
+
+### Formula
+
+```
+Base = Weapon_Damage (or H2H) + (Skill / 9) + (Boot_AC / 25)
+
+At 300 skill, 100 boot AC: Base = Weapon + 33 + 4 = Weapon + 37
+```
+
+### Related Rules
+
+```cpp
+// common/ruletypes.h#L680
+RULE_INT(Combat, FlyingKickBaseDamage, 25, "Flying Kick base damage, default is 25")
+```
 
 ---
 
-## The "Strength Redesign" Proposal
-The goal of the Strength redesign is to inject `Strength` into Step 1 (Base Damage Calculation) for all these skills.
+## 4. Kick / Round Kick
 
-**New Frenzy Formula:**
-`Base = 23 + (Strength / 1)`.
-*   **1200 STR:** Base becomes 1223.
-*   **Max Hit:** `1223 * 2.0 * 2.85 * 2.0 = ~13,900`.
-*   *Note:* We may need to tune the Damage Table or Divisors to prevent it from being *too* high, but this proves the mechanism works.
+**Location:** [zone/special_attacks.cpp](../../../zone/special_attacks.cpp) lines 135-170
+
+### Current Implementation (Weapon Scaling ENABLED)
+
+```cpp
+case EQ::skills::SkillKick:
+case EQ::skills::SkillRoundKick: {
+    if (IsClient()) {
+        auto primary = CastToClient()->GetInv().GetItem(EQ::invslot::slotPrimary);
+        if (primary && primary->GetItem()) {
+            base = primary->GetItem()->Damage;
+        } else {
+            base = GetHandToHandDamage();
+        }
+
+        // Boot AC bonus (improved divisor)
+        auto inst = CastToClient()->GetInv().GetItem(EQ::invslot::slotFeet);
+        if (inst) {
+            base += (int)(inst->GetItemArmorClass(true) / 10.0f);
+        }
+
+        base += (skill_level / 10);
+    }
+    return base;
+}
+```
+
+### Formula
+
+```
+Base = Weapon_Damage (or H2H) + (Skill / 10) + (Boot_AC / 10)
+```
+
+### Related Rules
+
+```cpp
+// common/ruletypes.h#L682-683
+RULE_INT(Combat, KickBaseDamage, 3, "Kick base damage, default is 3")
+RULE_INT(Combat, RoundKickBaseDamage, 5, "Round Kick base damage, default is 5")
+```
+
+---
+
+## 5. Dragon Punch / Eagle Strike / Tiger Claw (Monk)
+
+**Location:** [zone/special_attacks.cpp](../../../zone/special_attacks.cpp) lines 37-60
+
+### Current Implementation (Weapon Scaling ENABLED)
+
+```cpp
+case EQ::skills::SkillDragonPunch:
+case EQ::skills::SkillEagleStrike:
+case EQ::skills::SkillTigerClaw:
+    if (IsClient()) {
+        auto primary = CastToClient()->GetInv().GetItem(EQ::invslot::slotPrimary);
+        if (primary && primary->GetItem()) {
+            base = primary->GetItem()->Damage;
+        } else {
+            base = GetHandToHandDamage();
+        }
+        base += (skill_level / 15);
+    }
+    return base;
+```
+
+### Formula
+
+```
+Base = Weapon_Damage (or H2H) + (Skill / 15)
+```
+
+### Related Rules
+
+```cpp
+// common/ruletypes.h#L677-679, 685
+RULE_INT(Combat, DragonPunchBaseDamage, 12, "Dragon Punch base damage")
+RULE_INT(Combat, EagleStrikeBaseDamage, 7, "Eagle Strike base damage")
+RULE_INT(Combat, TigerClawBaseDamage, 4, "Tiger Claw base damage")
+```
+
+---
+
+## 6. Bash (Tank Classes)
+
+**Location:** [zone/special_attacks.cpp](../../../zone/special_attacks.cpp) lines 172-217
+
+### Current Implementation
+
+```cpp
+case EQ::skills::SkillBash: {
+    int weapon_dmg = 0;
+
+    if (IsClient()) {
+        if (HasShieldEquipped()) {
+            // Shield bash: use shield AC
+            inst = CastToClient()->GetInv().GetItem(EQ::invslot::slotSecondary);
+        } else if (HasTwoHanderEquipped()) {
+            // 2H bash: use weapon damage
+            auto weapon = CastToClient()->GetInv().GetItem(EQ::invslot::slotPrimary);
+            if (weapon && weapon->GetItem()) {
+                weapon_dmg = weapon->GetItem()->Damage;
+            }
+        }
+    }
+
+    if (weapon_dmg > 0) {
+        // 2H Bash uses weapon damage
+        base = weapon_dmg + (int)skill_bonus;
+    } else if (inst) {
+        // Shield bash uses shield AC
+        base += (int)(inst->GetItemArmorClass(true) / RuleR(Combat, BashACBonusDivisor));
+    }
+    return base;
+}
+```
+
+### Formula
+
+```
+2H Bash:     Base = Weapon_Damage + (Skill / 10)
+Shield Bash: Base = Shield_AC / 25 + (Skill / 10)
+```
+
+### Related Rules
+
+```cpp
+// common/ruletypes.h#L660, 677
+RULE_REAL(Combat, BashACBonusDivisor, 25.0, "Divides AC value contribution to bash damage")
+RULE_INT(Combat, BashBaseDamage, 2, "Bash base damage, default is 2")
+```
+
+---
+
+## Damage Comparison Table
+
+| Attack | With 100 DMG Weapon | Without Weapon |
+|--------|---------------------|----------------|
+| **Frenzy** | 106 base | 23 base (capped) |
+| **Backstab** | 800 base (at 300 skill) | N/A (needs weapon) |
+| **Flying Kick** | 137 base (300 skill) | H2H + 33 + boot bonus |
+| **Kick** | 130 base (300 skill) | H2H + 30 + boot bonus |
+| **Tiger Claw** | 120 base (300 skill) | H2H + 20 |
+| **2H Bash** | 130 base (300 skill) | N/A (uses shield AC) |
+
+---
+
+## Key Takeaways
+
+1. **Weapon scaling is already implemented** for all special attacks on this server
+2. The `GetBaseSkillDamage()` function (line 33) is the central point for all formulas
+3. Rules like `FrenzyBaseDamage` only apply when there's no weapon equipped
+4. Damage goes through full pipeline: Mitigation → Damage Table → Crits
+5. Final damage can be 5-10x base damage after all multipliers

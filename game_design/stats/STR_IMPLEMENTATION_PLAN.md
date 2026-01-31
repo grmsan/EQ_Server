@@ -125,8 +125,8 @@ The design targets three goals:
 All constants live in `zone/combat_balance_config.h`. Here's a quick guide to what each does:
 
 ### Core Scaling
-- **`STR_LEVEL_DIVISOR`** (10.0f): PRIMARY TUNING KNOB - raise to reduce all STR damage, lower to increase
-- **`STR_MIN_LEVEL_MULTIPLIER`** (0.1f): Minimum effectiveness at low levels (prevents zero damage)
+- **`STR_LEVEL_DIVISOR`** (40.0f): PRIMARY TUNING KNOB - raise to reduce all STR damage, lower to increase
+- **`STR_MIN_LEVEL_MULTIPLIER`** (0.05f): Minimum effectiveness at low levels (prevents zero damage)
 
 ### Optional Advanced Tuning
 - **`ENABLE_STR_DIMINISHING_RETURNS`** (false): Enable curved scaling for ultra-high STR values
@@ -882,8 +882,8 @@ bool Mob::CheckSongInterruptImmunity(int damage)
 ```cpp
 namespace CombatBalance {
     // STR Scaling
-    constexpr float STR_LEVEL_DIVISOR = 10.0f;         // Level/10 multiplier
-    constexpr float STR_MIN_LEVEL_MULTIPLIER = 0.1f;   // Min 10% effectiveness
+    constexpr float STR_LEVEL_DIVISOR = 40.0f;         // Level/40 multiplier
+    constexpr float STR_MIN_LEVEL_MULTIPLIER = 0.05f;  // Min 5% effectiveness
     constexpr float OFFHAND_STR_PENALTY = 0.5f;        // Offhand gets 50%
 
     // Weapon Delay Bonuses

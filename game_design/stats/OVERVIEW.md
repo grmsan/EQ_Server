@@ -46,13 +46,13 @@ To achieve "drastic improvement" and "meaningful upgrades," we propose a system 
 
 **Proposed (Additive Base Damage):**
 *   **Architecture:** STR bonus is added to base damage alongside weapon delay bonus, then all percent modifiers scale the total.
-*   **Formula:** `StrengthDamageBonus = STR * (Level / STR_LEVEL_DIVISOR)` where `STR_LEVEL_DIVISOR = 10.0f`
+*   **Formula:** `StrengthDamageBonus = STR * (Level / STR_LEVEL_DIVISOR)` where `STR_LEVEL_DIVISOR = 40.0f`
 *   **Total Base Damage:** `BaseDamage = WeaponDamage + DelayBonus + StrengthBonus`
 *   **Impact:**
-    *   **Level 1, 100 STR:** 10 bonus damage (100 * 0.1)
-    *   **Level 10, 100 STR:** 100 bonus damage (100 * 1.0)
-    *   **Level 60, 100 STR:** 600 bonus damage (100 * 6.0)
-    *   **Level 60, 500 STR:** 3000 bonus damage (500 * 6.0)
+    *   **Level 1, 100 STR:** 5 bonus damage (100 * 0.025, or min 0.05 floor)
+    *   **Level 10, 100 STR:** 25 bonus damage (100 * 0.25)
+    *   **Level 60, 100 STR:** 150 bonus damage (100 * 1.5)
+    *   **Level 60, 500 STR:** 750 bonus damage (500 * 1.5)
     *   *Result:* Strength becomes a primary driver of damage at high levels. The large base damage (weapon + delay + STR) then multiplies through existing crit/disc/buff systems for massive end-game DPS.
 
 **Why Additive vs Percent Modifier?**

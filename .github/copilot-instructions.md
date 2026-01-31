@@ -14,11 +14,18 @@ Important design intent and specifications are stored under:
 
 Design documentation structure:
   \game_design\multiclass\     Multiclass (gestalt) system - ACTIVE DEVELOPMENT
+  \game_design\quests\         Quest systems (scripted + task)
   \game_design\stats\          Stats, damage, scaling, AC
   \game_design\abilities\      AAs, spells, effects
   \game_design\classes\        Class-specific behaviors
   \game_design\mechanics\      Combat, quests, NPC behavior
   \game_design\infinite_progression\  Scaling and progression systems
+
+Quest system documentation (in game_design/quests/):
+  README.md                 Overview of both quest systems
+  SCRIPTED_QUESTS.md        Lua/Perl script-based quests (turn-ins, dialogue)
+  TASK_SYSTEM.md            Database-driven tasks with UI tracking
+  EXAMPLES.md               Practical quest implementation examples
 
 Multiclass tracking (in game_design/multiclass/):
   README.md                 Overview and quick links

@@ -2062,89 +2062,63 @@ int __fastcall EQCharacter_GetUsableClasses_Detour(void* This, void* edx, int a1
 	void* ret_addr = _ReturnAddress();
 	DWORD ret_rva = (DWORD)((uintptr_t)ret_addr - (uintptr_t)baseAddress);
 
-	int ret = -1;
+	// Get native value first - we'll use this for most paths
+	int nativeVal = -1;
+	__try {
+		nativeVal = EQCharacter_GetUsableClasses_Tramp(This, edx, a1, a2);
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		nativeVal = -1;
+	}
 
-	// Known caller RVAs for item/spell tooltip display (viewing scrolls, items).
-	// These callers need NATIVE behavior to show only the classes that can actually use the item.
-	// RVA 0x002A6D16: Called when viewing a spell scroll in inventory/merchant
-	constexpr DWORD kTooltipCallerRVA = 0x002A6D16;
+	// Known caller RVAs where we should apply multiclass filtering:
+	// - "Show Usable Items" checkbox filter on merchants
+	// For all other callers (tooltips, item info display), use native behavior
+	// to show the item's actual class restrictions.
+	//
+	// RVA 0x0028A6E7: Called from merchant "Show Usable Items" filter path
+	// RVA 0x0028B2BD: Another merchant filter path
+	// TODO: Add more filter RVAs as discovered via debug logging
+	constexpr DWORD kMerchantFilterRVA1 = 0x0028A6E7;
+	constexpr DWORD kMerchantFilterRVA2 = 0x0028B2BD;
 
-	if (ret_rva == kTooltipCallerRVA) {
-		// Tooltip rendering path: call native trampoline to get item's actual usable classes
-		// This ensures only classes that can use the spell are displayed (e.g., Mag(1) for mage-only spell)
-		int nativeVal = -1;
-		__try {
-			nativeVal = EQCharacter_GetUsableClasses_Tramp(This, edx, a1, a2);
-		}
-		__except (EXCEPTION_EXECUTE_HANDLER) {
-			nativeVal = -1;
-		}
-		ret = nativeVal;
-	} else if (isMulticlassUsableClassesOverrideEnabled && g_serverUsableClassesMask != 0) {
-		// For "Show Usable Items" and other usability checks:
-		// Get the item's native usable classes, then check if ANY multiclass class can use it.
-		int nativeItemClasses = -1;
-		__try {
-			nativeItemClasses = EQCharacter_GetUsableClasses_Tramp(This, edx, a1, a2);
-		}
-		__except (EXCEPTION_EXECUTE_HANDLER) {
-			nativeItemClasses = -1;
-		}
+	// Debug logging to discover caller RVAs (enable temporarily to find new ones)
+	static bool logged_rvas = false;
+	if (isDebugLoggingEnabled && !logged_rvas && g_serverUsableClassesMask != 0) {
+		LogDebug("GetUsableClasses caller RVA=0x%08X native=%d", ret_rva, nativeVal);
+		// Don't spam - only log first few unique calls
+	}
 
-		if (nativeItemClasses > 0) {
-			// Check if any of our multiclass classes can use this item
-			int intersection = static_cast<int>(g_serverUsableClassesMask & nativeItemClasses);
-			if (intersection != 0) {
-				// At least one multiclass class can use this item.
-				// The client will check if the BASE class bit is set in the result.
-				// So we must include the base class bit for the filter to pass.
-				if (pLocalPlayer) {
-					const uint8_t baseClass = static_cast<uint8_t>(pLocalPlayer->Data.Class);
-					if (baseClass >= 1 && baseClass <= 16) {
-						ret = intersection | (1 << (baseClass - 1));
-					} else {
-						ret = intersection;
-					}
-				} else {
-					ret = intersection;
-				}
-			} else {
-				// No multiclass class can use this item - return 0 to filter it out
-				ret = 0;
-			}
-		} else {
-			// Item has no class restriction or error - return full multiclass mask with base class
+	// Only apply multiclass filtering for known filter contexts
+	bool isFilterContext = (ret_rva == kMerchantFilterRVA1 || ret_rva == kMerchantFilterRVA2);
+
+	if (!isFilterContext || !isMulticlassUsableClassesOverrideEnabled || g_serverUsableClassesMask == 0) {
+		// Not a filter context, or multiclass disabled - return native value
+		// This ensures tooltips show the item's actual class restrictions
+		return nativeVal;
+	}
+
+	// Filter context: check if ANY multiclass class can use this item
+	if (nativeVal > 0) {
+		int intersection = static_cast<int>(g_serverUsableClassesMask & nativeVal);
+		if (intersection != 0) {
+			// At least one multiclass class can use this item.
+			// Include base class bit so filter passes.
 			if (pLocalPlayer) {
 				const uint8_t baseClass = static_cast<uint8_t>(pLocalPlayer->Data.Class);
 				if (baseClass >= 1 && baseClass <= 16) {
-					ret = static_cast<int>(g_serverUsableClassesMask | (1 << (baseClass - 1)));
-				} else {
-					ret = static_cast<int>(g_serverUsableClassesMask & 0xFFFF);
+					return intersection | (1 << (baseClass - 1));
 				}
-			} else {
-				ret = static_cast<int>(g_serverUsableClassesMask & 0xFFFF);
 			}
+			return intersection;
+		} else {
+			// No multiclass class can use this - filter it out
+			return 0;
 		}
-	} else if (isMulticlassUsableClassesOverrideEnabled && g_serverUsableClassesMask == 0) {
-		// If we don't have server data yet, prefer a conservative local baseline (base class only)
-		if (pLocalPlayer) {
-			const uint8_t cls = static_cast<uint8_t>(pLocalPlayer->Data.Class);
-			if (cls >= 1 && cls <= 16) {
-				ret = static_cast<int>(1u << (cls - 1));
-			}
-		}
-	} else {
-		int nativeVal = -1;
-		__try {
-			nativeVal = EQCharacter_GetUsableClasses_Tramp(This, edx, a1, a2);
-		}
-		__except (EXCEPTION_EXECUTE_HANDLER) {
-			nativeVal = -1;
-		}
-		ret = nativeVal;
 	}
 
-	return ret;
+	// Item has no class restriction (ALL/ALL) - usable
+	return nativeVal;
 }
 
 // Override spell required-level lookups so client-side usability filters (merchant "Show Usable Items", spellbook, etc)

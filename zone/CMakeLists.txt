@@ -319,6 +319,7 @@ set_target_properties(perl_zone PROPERTIES UNITY_BUILD ON UNITY_BUILD_BATCH_SIZE
 # gm commands
 set(gm_command_sources
     command.cpp
+    command_autoskill.cpp
     bot_command.cpp
     gm_commands/acceptrules.cpp
     gm_commands/addclass.cpp
@@ -520,3 +521,13 @@ endif()
 target_link_libraries(zone PRIVATE lua_zone perl_zone gm_commands_zone ${ZONE_LIBS})
 
 SET(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)
+
+# Copy zlib-ng DLL next to zone.exe (zone links against shared zlib-ng)
+if(WIN32 AND TARGET zlib)
+	add_custom_command(TARGET zone POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different
+			$<TARGET_FILE:zlib>
+			$<TARGET_FILE_DIR:zone>
+		COMMENT "Copying zlib-ng DLL to output directory"
+	)
+endif()

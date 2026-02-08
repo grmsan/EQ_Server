@@ -6,7 +6,6 @@ import sys
 import time
 import threading
 import glob
-import queue
 from datetime import datetime
 import shutil
 import json
@@ -17,11 +16,9 @@ class ServerManagerApp(tk.Tk):
         super().__init__()
 
         self.title("EQEmu Server Manager")
-        self.geometry("1200x800")
+        self.geometry("1100x850")
 
         self.processes = {}
-        self.output_queues = {}  # For capturing process output
-        self.reader_threads = {}  # Threads reading process output
 
         # Define the standard server processes
         self.process_info = [
@@ -38,6 +35,7 @@ class ServerManagerApp(tk.Tk):
         # DLL search path (only care about this one build output)
         self.extra_dll_dir = os.path.join("extras", "eq-core-dll-main", "bin")
         self.vcpkg_bin_dir = os.path.join(os.getcwd(), "vcpkg", "vcpkg-export-x64", "installed", "x64-windows", "bin")
+        self.perl_bin_dir = os.path.join(os.getcwd(), "perl", "x64", "perl", "bin")
         # Default EQ client directory for exports/copies
         self.eq_dir_var = tk.StringVar(value=r"D:\Rof2")
         self.build_target_var = tk.StringVar(value="all")
@@ -62,26 +60,16 @@ class ServerManagerApp(tk.Tk):
         tab_control = ttk.Notebook(self)
 
         self.main_tab = ttk.Frame(tab_control)
-        self.consoles_tab = ttk.Frame(tab_control)
-        self.logs_tab = ttk.Frame(tab_control)
         self.database_tab = ttk.Frame(tab_control)
         self.tools_tab = ttk.Frame(tab_control)
 
         tab_control.add(self.main_tab, text="Server Control")
-        tab_control.add(self.consoles_tab, text="Console Output")
-        tab_control.add(self.logs_tab, text="Log Files")
         tab_control.add(self.database_tab, text="Database Tools")
-        tab_control.add(self.tools_tab, text="Scripts")
+        tab_control.add(self.tools_tab, text="Quick Actions & Scripts")
         tab_control.pack(expand=1, fill="both")
 
         # --- Main Tab ---
         self.create_main_tab()
-
-        # --- Console Outputs Tab ---
-        self.create_consoles_tab()
-
-        # --- Logs Tab ---
-        self.create_logs_tab()
 
         # --- Database Tab ---
         self.create_database_tab()
@@ -203,7 +191,7 @@ class ServerManagerApp(tk.Tk):
             stop_btn = ttk.Button(btn_frame, text="Stop", state="disabled", command=lambda n=name: self.stop_process(n))
             stop_btn.pack(side="left", padx=2)
 
-            console_var = tk.BooleanVar(value=True)
+            console_var = tk.BooleanVar(value=False)
             ttk.Checkbutton(btn_frame, text="Console", variable=console_var).pack(side="left", padx=5)
 
             self.proc_widgets[name] = {
@@ -219,73 +207,6 @@ class ServerManagerApp(tk.Tk):
         log_frame.pack(fill="both", expand=True, padx=10, pady=5)
         self.log_text = scrolledtext.ScrolledText(log_frame, height=8, state="disabled")
         self.log_text.pack(fill="both", expand=True, padx=5, pady=5)
-
-    def create_consoles_tab(self):
-        """Create embedded console outputs for each process"""
-        console_notebook = ttk.Notebook(self.consoles_tab)
-        console_notebook.pack(fill="both", expand=True, padx=5, pady=5)
-
-        self.console_widgets = {}
-
-        for info in self.process_info:
-            name = info["name"]
-            frame = ttk.Frame(console_notebook)
-            console_notebook.add(frame, text=info["display"])
-
-            # Console output
-            console_text = scrolledtext.ScrolledText(frame, height=30, bg="black", fg="lightgreen",
-                                                     font=("Consolas", 9))
-            console_text.pack(fill="both", expand=True, padx=5, pady=5)
-
-            # Control buttons
-            btn_frame = ttk.Frame(frame)
-            btn_frame.pack(fill="x", padx=5, pady=5)
-
-            ttk.Button(btn_frame, text="Clear",
-                      command=lambda ct=console_text: self.clear_console(ct)).pack(side="left", padx=2)
-            ttk.Button(btn_frame, text="Copy All",
-                      command=lambda ct=console_text: self.copy_console(ct)).pack(side="left", padx=2)
-            ttk.Button(btn_frame, text="Save to File",
-                      command=lambda ct=console_text: self.save_console(ct)).pack(side="left", padx=2)
-
-            self.console_widgets[name] = console_text
-            self.output_queues[name] = queue.Queue()
-
-        # Start queue processors
-        self.process_output_queues()
-
-    def create_logs_tab(self):
-        """Create log file viewer with auto-refresh"""
-        log_frame = ttk.Frame(self.logs_tab)
-        log_frame.pack(fill="both", expand=True, padx=10, pady=10)
-
-        # Log file selector
-        selector_frame = ttk.Frame(log_frame)
-        selector_frame.pack(fill="x", pady=5)
-
-        ttk.Label(selector_frame, text="Log File:").pack(side="left", padx=5)
-
-        self.log_file_var = tk.StringVar()
-        self.log_file_combo = ttk.Combobox(selector_frame, textvariable=self.log_file_var, width=50)
-        self.log_file_combo.pack(side="left", padx=5, fill="x", expand=True)
-
-        ttk.Button(selector_frame, text="Refresh List",
-                  command=self.refresh_log_files).pack(side="left", padx=2)
-        ttk.Button(selector_frame, text="Load",
-                  command=self.load_log_file).pack(side="left", padx=2)
-
-        self.auto_refresh_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(selector_frame, text="Auto-refresh (tail)",
-                       variable=self.auto_refresh_var,
-                       command=self.toggle_auto_refresh).pack(side="left", padx=5)
-
-        # Log viewer
-        self.log_viewer = scrolledtext.ScrolledText(log_frame, height=30, bg="white",
-                                                     font=("Consolas", 9))
-        self.log_viewer.pack(fill="both", expand=True, pady=5)
-
-        # Populate log files
-        self.refresh_log_files()
 
     def create_database_tab(self):
         """Create database management tools"""
@@ -394,13 +315,34 @@ class ServerManagerApp(tk.Tk):
         self.db_output.pack(fill="both", expand=True, pady=5)
 
     def create_tools_tab(self):
+        """Create tools and script runner tab"""
         tools_frame = ttk.Frame(self.tools_tab)
         tools_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
-        ttk.Label(tools_frame, text="Available Python Scripts:").pack(anchor="w")
+        # Quick Actions for testing workflow
+        quick_frame = ttk.LabelFrame(tools_frame, text="Common Workflows (Quick Actions)")
+        quick_frame.pack(fill="x", pady=5, padx=2)
+        ttk.Button(quick_frame, text="Build Zone Only",
+                  command=lambda: self.quick_build("zone")).grid(row=0, column=0, padx=5, pady=5, sticky="ew")
+        ttk.Button(quick_frame, text="Restart Zones",
+                  command=self.restart_zones).grid(row=0, column=1, padx=5, pady=5, sticky="ew")
+        ttk.Button(quick_frame, text="Launch Client",
+                  command=self.launch_eqgame).grid(row=0, column=2, padx=5, pady=5, sticky="ew")
+        ttk.Button(quick_frame, text="Build + Copy DLL",
+                  command=self.run_build_eqcore_thread).grid(row=1, column=0, padx=5, pady=5, sticky="ew")
+        ttk.Button(quick_frame, text="Export Client Files",
+                  command=self.export_all_client_files).grid(row=1, column=1, padx=5, pady=5, sticky="ew")
+        ttk.Button(quick_frame, text="Full Rebuild & Restart",
+                  command=self.full_rebuild_and_restart).grid(row=1, column=2, padx=5, pady=5, sticky="ew")
 
-        self.scripts_listbox = tk.Listbox(tools_frame, selectmode="single")
-        self.scripts_listbox.pack(fill="both", expand=True, pady=5)
+        # Python Script Runner
+        script_frame = ttk.LabelFrame(tools_frame, text="Python Script Runner")
+        script_frame.pack(fill="both", expand=True, pady=10)
+
+        ttk.Label(script_frame, text="Select a script to launch in a new console window:").pack(anchor="w", padx=5, pady=5)
+
+        self.scripts_listbox = tk.Listbox(script_frame, selectmode="single", font=("Consolas", 10))
+        self.scripts_listbox.pack(fill="both", expand=True, pady=5, padx=5)
 
         scrollbar = ttk.Scrollbar(self.scripts_listbox, orient="vertical", command=self.scripts_listbox.yview)
         scrollbar.pack(side="right", fill="y")
@@ -409,143 +351,11 @@ class ServerManagerApp(tk.Tk):
         # Populate scripts
         self.refresh_scripts()
 
-        btn_frame = ttk.Frame(tools_frame)
-        btn_frame.pack(fill="x", pady=5)
+        btn_row = ttk.Frame(script_frame)
+        btn_row.pack(fill="x", pady=5)
 
-        ttk.Button(btn_frame, text="Refresh List", command=self.refresh_scripts).pack(side="left", padx=5)
-        ttk.Button(btn_frame, text="Run Selected Script", command=self.run_selected_script).pack(side="left", padx=5)
-
-        # Quick Actions for testing workflow
-        quick_frame = ttk.LabelFrame(tools_frame, text="Quick Actions (Testing Workflow)")
-        quick_frame.pack(fill="x", pady=10, padx=2)
-        ttk.Button(quick_frame, text="1. Build Zone",
-                  command=lambda: self.quick_build("zone")).grid(row=0, column=0, padx=5, pady=5, sticky="ew")
-        ttk.Button(quick_frame, text="2. Restart Zones",
-                  command=self.restart_zones).grid(row=0, column=1, padx=5, pady=5, sticky="ew")
-        ttk.Button(quick_frame, text="3. Launch EQ Client",
-                  command=self.launch_eqgame).grid(row=0, column=2, padx=5, pady=5, sticky="ew")
-        ttk.Button(quick_frame, text="Build + Copy DLL",
-                  command=self.run_build_eqcore_thread).grid(row=1, column=0, padx=5, pady=5, sticky="ew")
-        ttk.Button(quick_frame, text="Export Client Files",
-                  command=self.export_all_client_files).grid(row=1, column=1, padx=5, pady=5, sticky="ew")
-        ttk.Button(quick_frame, text="Full Rebuild + Restart",
-                  command=self.full_rebuild_and_restart).grid(row=1, column=2, padx=5, pady=5, sticky="ew")
-
-    # ==================== Console Output Methods ====================
-
-    def clear_console(self, console_text):
-        """Clear console output"""
-        console_text.delete(1.0, "end")
-
-    def copy_console(self, console_text):
-        """Copy console content to clipboard"""
-        self.clipboard_clear()
-        self.clipboard_append(console_text.get(1.0, "end"))
-        self.log("Console content copied to clipboard")
-
-    def save_console(self, console_text):
-        """Save console content to file"""
-        filename = filedialog.asksaveasfilename(
-            defaultextension=".log",
-            filetypes=[("Log files", "*.log"), ("Text files", "*.txt"), ("All files", "*.*")]
-        )
-        if filename:
-            with open(filename, 'w') as f:
-                f.write(console_text.get(1.0, "end"))
-            self.log(f"Console saved to {filename}")
-
-    def append_to_console(self, name, text):
-        """Append text to a process console (thread-safe via queue)"""
-        if name in self.output_queues:
-            self.output_queues[name].put(text)
-
-    def process_output_queues(self):
-        """Process all output queues and update console widgets"""
-        for name, q in self.output_queues.items():
-            if name in self.console_widgets:
-                console = self.console_widgets[name]
-                try:
-                    while True:
-                        text = q.get_nowait()
-                        console.insert("end", text)
-                        console.see("end")
-                except queue.Empty:
-                    pass
-
-        # Schedule next update
-        self.after(100, self.process_output_queues)
-
-    def read_process_output(self, name, process):
-        """Read output from process in background thread"""
-        try:
-            for line in iter(process.stdout.readline, ''):
-                if not line:
-                    break
-                self.append_to_console(name, line)
-        except:
-            pass
-
-    # ==================== Log File Methods ====================
-
-    def refresh_log_files(self):
-        """Refresh the list of available log files"""
-        log_files = []
-
-        # Check logs directory
-        if os.path.exists("logs"):
-            for root, dirs, files in os.walk("logs"):
-                for file in files:
-                    if file.endswith(".log"):
-                        log_files.append(os.path.join(root, file))
-
-        self.log_file_combo['values'] = sorted(log_files)
-        if log_files and not self.log_file_var.get():
-            self.log_file_var.set(log_files[0])
-
-    def load_log_file(self):
-        """Load selected log file"""
-        log_file = self.log_file_var.get()
-        if not log_file or not os.path.exists(log_file):
-            messagebox.showerror("Error", "Log file not found")
-            return
-
-        try:
-            with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
-                content = f.read()
-
-            self.log_viewer.delete(1.0, "end")
-            self.log_viewer.insert("end", content)
-            self.log_viewer.see("end")
-            self.log(f"Loaded log: {log_file}")
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to load log: {e}")
-
-    def toggle_auto_refresh(self):
-        """Toggle auto-refresh for log file"""
-        if self.auto_refresh_var.get():
-            self.auto_refresh_log()
-
-    def auto_refresh_log(self):
-        """Auto-refresh log file (tail mode)"""
-        if not self.auto_refresh_var.get():
-            return
-
-        log_file = self.log_file_var.get()
-        if log_file and os.path.exists(log_file):
-            try:
-                with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
-                    # Get last 1000 lines
-                    lines = f.readlines()[-1000:]
-                    content = ''.join(lines)
-
-                self.log_viewer.delete(1.0, "end")
-                self.log_viewer.insert("end", content)
-                self.log_viewer.see("end")
-            except:
-                pass
-
-        # Schedule next refresh
-        self.after(2000, self.auto_refresh_log)
+        ttk.Button(btn_row, text="Refresh List", command=self.refresh_scripts).pack(side="left", padx=5)
+        ttk.Button(btn_row, text="Run Selected Script", command=self.run_selected_script).pack(side="left", padx=5)
 
     # ==================== Database Methods ====================
 
@@ -1306,10 +1116,16 @@ class ServerManagerApp(tk.Tk):
             subprocess.Popen(["python", script_name])
 
     def log(self, message):
-        self.log_text.config(state="normal")
-        self.log_text.insert("end", f"{message}\n")
-        self.log_text.see("end")
-        self.log_text.config(state="disabled")
+        def _do_log():
+            self.log_text.config(state="normal")
+            self.log_text.insert("end", f"{message}\n")
+            self.log_text.see("end")
+            self.log_text.config(state="disabled")
+        # Thread-safe: always dispatch to main thread
+        try:
+            self.after(0, _do_log)
+        except Exception:
+            pass
 
     def set_status_label(self, key, ok, msg):
         if key not in self.status_labels:
@@ -1359,6 +1175,27 @@ class ServerManagerApp(tk.Tk):
         self.clean_btn.config(state="disabled")
         build_target = (self.build_target_var.get() or "all").strip()
         self.build_status_lbl.config(text=f"Building ({build_target})...")
+
+        # Automatically stop all server processes to release file locks
+        self.log("Pre-build maintenance: Stopping all server processes...")
+        self._kill_all_server_processes()
+        time.sleep(2)
+
+        # Automatically clean up corrupted PDBs before buildup to prevent LNK1318/C2471 errors
+        if os.name == 'nt':
+            self.log("Pre-build maintenance: Checking for corrupted PDB files...")
+            pdb_patterns = [
+                "build/**/*.pdb",
+                "build/**/*.idb"
+            ]
+            for pattern in pdb_patterns:
+                for pdb_file in glob.glob(os.path.join(os.getcwd(), pattern), recursive=True):
+                    try:
+                        # Attempting to delete PDBs. If they are locked by a running server,
+                        # this will fail safely, but it clears the 'Unexpected PDB error' corruption.
+                        os.remove(pdb_file)
+                    except Exception:
+                        pass
 
         try:
             if not os.path.exists(self.build_dir):
@@ -1418,50 +1255,106 @@ class ServerManagerApp(tk.Tk):
 
     def run_shared_memory(self):
         self.log("Updating Shared Memory...")
-        exe_path = os.path.join(self.bin_dir, "shared_memory.exe")
-        if not os.path.exists(exe_path):
-            self.log(f"Error: {exe_path} not found.")
-            return
-
-        env = os.environ.copy()
-        env["PATH"] = self.bin_dir + os.pathsep + self.vcpkg_bin_dir + os.pathsep + env["PATH"]
-
         try:
-            proc = subprocess.run([exe_path], cwd=os.getcwd(), env=env, capture_output=True, text=True)
+            exe_path = os.path.join(self.bin_dir, "shared_memory.exe")
+            if not os.path.exists(exe_path):
+                self.log(f"shared_memory.exe not found at {exe_path}")
+                return
+
+            self.log(f"Executing: {exe_path}")
+
+            env = os.environ.copy()
+            env["PATH"] = self.bin_dir + os.pathsep + self.vcpkg_bin_dir + os.pathsep + self.perl_bin_dir + os.pathsep + env["PATH"]
+
+            # Run shared memory and wait for it to complete
+            proc = subprocess.Popen(
+                [exe_path],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                cwd=os.getcwd(),
+                env=env
+            )
+
+            while True:
+                line = proc.stdout.readline()
+                if not line: break
+                self.log(f"[SharedMemory] {line.strip()}")
+            proc.wait()
+
             if proc.returncode == 0:
-                self.log("Shared Memory updated successfully.")
+                self.log("Shared memory updated successfully.")
             else:
-                self.log(f"Shared Memory failed: {proc.stderr}")
+                self.log(f"Shared memory failed with code {proc.returncode}")
+
         except Exception as e:
-            self.log(f"Error running shared_memory: {e}")
+            self.log(f"Shared memory error: {e}")
 
     def start_all_sequence_thread(self):
         threading.Thread(target=self.start_all_sequence, daemon=True).start()
 
     def start_all_sequence(self):
-        self.start_all_btn.config(state="disabled")
+        self.after(0, lambda: self.start_all_btn.config(state="disabled"))
 
         # 1. Shared Memory
         self.run_shared_memory()
 
-        # 2. Start processes in order
+        # 2. Start processes in order, calling start_process directly
+        #    from the bg thread so sleeps actually gate each launch.
         start_order = ["loginserver", "world", "ucs", "queryserv", "eqlaunch"]
 
         for name in start_order:
             self.log(f"Starting {name}...")
-            # We need to call start_process on the main thread because it updates UI
-            self.after(0, lambda n=name: self.start_process(n))
+            self._launch_process(name)
 
-            # Wait a bit
+            # Wait for process to initialize
             if name == "world":
                 time.sleep(5)
+            elif name == "loginserver":
+                time.sleep(2)
             else:
                 time.sleep(1)
 
         self.log("All start commands issued.")
-        self.start_all_btn.config(state="normal")
+        self.after(0, lambda: self.start_all_btn.config(state="normal"))
+
+    def _launch_process(self, name):
+        """Launch a process (thread-safe). Can be called from any thread.
+        Performs the actual Popen and dispatches UI updates to the main thread."""
+        if name in self.processes and self.processes[name].poll() is None:
+            self.log(f"{name} is already running.")
+            return
+
+        exe_name = f"{name}.exe" if sys.platform == "win32" else name
+        exe_path = os.path.join(self.bin_dir, exe_name)
+
+        if not os.path.exists(exe_path):
+            self.log(f"Executable not found: {exe_path}")
+            return
+
+        args = self.proc_widgets[name]["args_var"].get().split()
+
+        try:
+            cwd = os.getcwd()
+            env = os.environ.copy()
+            # Important: Add bin_dir to PATH so DLLs are found
+            env["PATH"] = self.bin_dir + os.pathsep + self.vcpkg_bin_dir + os.pathsep + self.perl_bin_dir + os.pathsep + env["PATH"]
+
+            proc = subprocess.Popen(
+                [exe_path] + args,
+                cwd=cwd,
+                env=env,
+                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+            )
+
+            self.processes[name] = proc
+            self.after(0, lambda: self.update_ui_state(name, True))
+            self.log(f"Started {name} (PID {proc.pid})")
+        except Exception as e:
+            self.log(f"Failed to start {name}: {e}")
 
     def start_process(self, name):
+        """Start a process from the UI (main thread). Supports console mode."""
         if name in self.processes and self.processes[name].poll() is None:
             self.log(f"{name} is already running.")
             return
@@ -1479,38 +1372,26 @@ class ServerManagerApp(tk.Tk):
         try:
             cwd = os.getcwd()
             env = os.environ.copy()
-            # Important: Add bin_dir to PATH so DLLs are found
-            env["PATH"] = self.bin_dir + os.pathsep + self.vcpkg_bin_dir + os.pathsep + env["PATH"]
+            env["PATH"] = self.bin_dir + os.pathsep + self.vcpkg_bin_dir + os.pathsep + self.perl_bin_dir + os.pathsep + env["PATH"]
 
             if new_console:
-                # Start with new console window
                 creationflags = subprocess.CREATE_NEW_CONSOLE if sys.platform == "win32" else 0
-
                 if sys.platform == "win32":
                     cmd_str = f'cmd /c ""{exe_path}" {" ".join(args)} & pause"'
                     proc = subprocess.Popen(cmd_str, cwd=cwd, creationflags=creationflags, env=env)
                 else:
-                    proc = subprocess.Popen([exe_path] + args, cwd=cwd, creationflags=creationflags, env=env)
+                    proc = subprocess.Popen([exe_path] + args, cwd=cwd, env=env)
             else:
-                # Capture output for embedded console
                 proc = subprocess.Popen(
                     [exe_path] + args,
                     cwd=cwd,
                     env=env,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    bufsize=1
+                    creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
                 )
-
-                # Start thread to read output
-                reader = threading.Thread(target=self.read_process_output, args=(name, proc), daemon=True)
-                reader.start()
-                self.reader_threads[name] = reader
 
             self.processes[name] = proc
             self.update_ui_state(name, True)
-            self.log(f"Started {name}")
+            self.log(f"Started {name} (PID {proc.pid})")
         except Exception as e:
             self.log(f"Failed to start {name}: {e}")
 
@@ -1565,19 +1446,17 @@ class ServerManagerApp(tk.Tk):
                 pass
 
             # Update UI state
-            if "zone" in self.proc_widgets:
-                self.after(0, lambda: self.update_ui_state("zone", False))
-            if "eqlaunch" in self.proc_widgets:
-                self.after(0, lambda: self.update_ui_state("eqlaunch", False))
             if "eqlaunch" in self.processes:
                 del self.processes["eqlaunch"]
             if "zone" in self.processes:
                 del self.processes["zone"]
+            self.after(0, lambda: self.update_ui_state("zone", False) if "zone" in self.proc_widgets else None)
+            self.after(0, lambda: self.update_ui_state("eqlaunch", False) if "eqlaunch" in self.proc_widgets else None)
 
-            time.sleep(1)
+            time.sleep(2)
 
             # Restart eqlaunch
-            self.after(0, lambda: self.start_process("eqlaunch"))
+            self._launch_process("eqlaunch")
             self.log("Zones restarting via eqlaunch...")
 
         threading.Thread(target=do_restart, daemon=True).start()

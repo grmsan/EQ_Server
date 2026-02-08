@@ -973,6 +973,7 @@ bool SharedDatabase::LoadItems(const std::string &prefix) {
 		std::string file_name = fmt::format("{}/{}{}", PathManager::Instance()->GetSharedMemoryPath(), prefix, std::string("items"));
 		items_mmf = std::make_unique<EQ::MemoryMappedFile>(file_name);
 		items_hash = std::make_unique<EQ::FixedMemoryHashSet<EQ::ItemData>>(static_cast<uint8*>(items_mmf->Get()), items_mmf->Size());
+		m_shared_items_count = (uint32)items_hash->size();
 		mutex.Unlock();
 
 		LogInfo("Loaded [{}] items via shared memory", Strings::Commify(m_shared_items_count));
@@ -1729,6 +1730,7 @@ bool SharedDatabase::LoadSpells(const std::string &prefix, int32 *records, const
 		LogInfo("Loading [{}]", file_name);
 		*records = *static_cast<uint32*>(spells_mmf->Get());
 		*sp = reinterpret_cast<const SPDat_Spell_Struct*>(static_cast<char*>(spells_mmf->Get()) + 4);
+		m_shared_spells_count = (uint32)*records;
 		mutex.Unlock();
 
 		LogInfo("Loaded [{}] spells via shared memory", Strings::Commify(m_shared_spells_count));

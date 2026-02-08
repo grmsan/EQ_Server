@@ -127,6 +127,7 @@ void LauncherList::LoadList() {
 	cur = launchers.begin();
 	end = launchers.end();
 	for (; cur != end; ++cur) {
+		LogInfo("Registering launcher [{}]", cur->c_str());
 		m_configs[*cur] = new EQLConfig(cur->c_str());
 	}
 }

@@ -28,12 +28,18 @@ def start_process(executable, args=[], cwd='.', env=None, log_name=None):
 def main():
     # Paths - using absolute paths or relative with ./
     # Assuming we are in the root of the repo
-    bin_dir = os.path.join(os.getcwd(), "build", "bin", "RelWithDebInfo")
+    cwd = os.getcwd()
+    bin_dir = os.path.join(cwd, "build", "bin", "RelWithDebInfo")
+    perl_dir = os.path.join(cwd, "perl", "x64", "perl", "bin")
 
-    # Update PATH to include bin_dir
+    # Update PATH to include bin_dir and perl_dir
     env = os.environ.copy()
-    env["PATH"] = bin_dir + os.pathsep + env["PATH"]
-    print(f"DEBUG: PATH set to: {env['PATH']}")
+    
+    # Prepend paths to ensure our vendored versions take precedence
+    env["PATH"] = bin_dir + os.pathsep + perl_dir + os.pathsep + env["PATH"]
+    
+    print(f"DEBUG: PATH set to include build bin and perl bin")
+    # print(f"DEBUG: PATH: {env['PATH']}") # Verbose
 
     # Helper to get full path
     def get_bin(name):
@@ -68,7 +74,7 @@ def main():
     launcher_name = "node_1"
 
     # Use PowerShell to ensure environment and execution match manual success
-    ps_command = f'$env:PATH = "{bin_dir};$env:PATH"; & "{get_bin("eqlaunch.exe")}" "{launcher_name}"'
+    ps_command = f'$env:PATH = "{bin_dir};{perl_dir};$env:PATH"; & "{get_bin("eqlaunch.exe")}" "{launcher_name}"'
     print(f"Executing PowerShell: {ps_command}")
 
     # Log eqlaunch output as well

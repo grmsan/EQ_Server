@@ -532,6 +532,14 @@ bool Client::Process() {
 			}
 		}
 
+		if (auto_attack && auto_attack_target != nullptr && may_use_attacks && attack_autoskill_timer.Check() && !auto_attack_target->IsClient()) {
+			for (const auto& skill : GetAutoSkillsList()) {
+				if (GetAutoSkillStatus(skill)) {
+					DoClassAttacks(auto_attack_target, skill, false);
+				}
+			}
+		}
+
 		if (viral_timer.Check() && !dead) {
 			VirusEffectProcess();
 		}

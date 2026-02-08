@@ -1768,6 +1768,11 @@ public:
 	void JoinGroupXTargets(Group *g);
 	void LeaveGroupXTargets(Group *g);
 	void LeaveRaidXTargets(Raid *r);
+	const bool GetAutoSkillStatus(EQ::skills::SkillType skill_id);
+	void SetAutoSkillStatus(EQ::skills::SkillType skill_id, bool enabled);
+	const std::vector<EQ::skills::SkillType> GetAutoSkillsList() const;
+	const std::vector<EQ::skills::SkillType> GetAvailableAutoSkills() const;
+
 	void ClearXTargets();
 	bool GroupFollow(Client* inviter);
 	inline bool  GetRunMode() const { return runmode; }
@@ -2359,6 +2364,8 @@ private:
 
 	Timer ItemQuestTimer;
 	std::map<std::string,std::string> accountflags;
+
+	std::map<EQ::skills::SkillType, bool> m_autoskill;
 
 	uint8 initial_respawn_selection;
 

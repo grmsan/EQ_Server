@@ -100,7 +100,15 @@ public:
 		{ app_opcode_size = GetExecutablePlatform() == ExePlatformUCS ? 1 : 2; }
 	EQApplicationPacket(const EmuOpcode op, const uint32 len) : EQPacket(op, nullptr, len), opcode_bypass(0)
 		{ app_opcode_size = GetExecutablePlatform() == ExePlatformUCS ? 1 : 2; }
+	EQApplicationPacket(const EmuOpcode op, int len) : EQPacket(op, nullptr, static_cast<uint32>(len)), opcode_bypass(0)
+		{ app_opcode_size = GetExecutablePlatform() == ExePlatformUCS ? 1 : 2; }
+	EQApplicationPacket(const EmuOpcode op, size_t len) : EQPacket(op, nullptr, static_cast<uint32>(len)), opcode_bypass(0)
+		{ app_opcode_size = GetExecutablePlatform() == ExePlatformUCS ? 1 : 2; }
 	EQApplicationPacket(const EmuOpcode op, const unsigned char *buf, const uint32 len) : EQPacket(op, buf, len), opcode_bypass(0)
+		{ app_opcode_size = GetExecutablePlatform() == ExePlatformUCS ? 1 : 2; }
+	EQApplicationPacket(const EmuOpcode op, const unsigned char *buf, int len) : EQPacket(op, buf, static_cast<uint32>(len)), opcode_bypass(0)
+		{ app_opcode_size = GetExecutablePlatform() == ExePlatformUCS ? 1 : 2; }
+	EQApplicationPacket(const EmuOpcode op, const unsigned char *buf, size_t len) : EQPacket(op, buf, static_cast<uint32>(len)), opcode_bypass(0)
 		{ app_opcode_size = GetExecutablePlatform() == ExePlatformUCS ? 1 : 2; }
 	EQApplicationPacket(const EmuOpcode op, SerializeBuffer &buf) : EQPacket(op, buf), opcode_bypass(0)
 		{ app_opcode_size = GetExecutablePlatform() == ExePlatformUCS ? 1 : 2; }

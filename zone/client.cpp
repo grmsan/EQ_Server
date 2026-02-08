@@ -12681,6 +12681,60 @@ std::string GetZoneModeString(ZoneMode mode)
 	}
 }
 
+const bool Client::GetAutoSkillStatus(EQ::skills::SkillType skill_id)
+{
+	auto it = m_autoskill.find(skill_id);
+	if (it != m_autoskill.end()) {
+		return it->second;
+	}
+
+	std::string bucket_name = fmt::format("autoskill.{}", skill_id);
+	bool status = Strings::ToBool(GetBucket(bucket_name));
+
+	m_autoskill[skill_id] = status;
+
+	return status;
+}
+
+void Client::SetAutoSkillStatus(EQ::skills::SkillType skill_id, bool enabled)
+{
+	// Update the cache
+	m_autoskill[skill_id] = enabled;
+
+	// Persist to bucket
+	std::string bucket_name = fmt::format("autoskill.{}", skill_id);
+	SetBucket(bucket_name, enabled ? "1" : "0");
+}
+
+const std::vector<EQ::skills::SkillType> Client::GetAvailableAutoSkills() const
+{
+	return {
+		EQ::skills::SkillBackstab,
+		EQ::skills::SkillBash,
+		EQ::skills::SkillTigerClaw,
+		EQ::skills::SkillEagleStrike,
+		EQ::skills::SkillDragonPunch,
+		EQ::skills::SkillFlyingKick,
+		EQ::skills::SkillRoundKick,
+		EQ::skills::SkillKick,
+		EQ::skills::SkillFrenzy,
+		EQ::skills::SkillTaunt
+	};
+}
+
+const std::vector<EQ::skills::SkillType> Client::GetAutoSkillsList() const
+{
+	std::vector<EQ::skills::SkillType> client_skills;
+
+	for (const auto& skill : GetAvailableAutoSkills()) {
+		if (HasSkill(skill)) {
+			client_skills.push_back(skill);
+		}
+	}
+
+	return client_skills;
+}
+
 void Client::ClearXTargets()
 {
 	if (!XTargettingAvailable()) {

@@ -259,9 +259,21 @@ int64 Client::CalcHPRegen(bool bCombat)
 	item_regen += aabonuses.HPRegen;
 
 	int64 base = 0;
-	auto base_data = zone->GetBaseData(GetLevel(), GetClass());
-	if (base_data.level == GetLevel()) {
-		base = static_cast<int>(base_data.hp_regen);
+	if (RuleB(Custom, MulticlassingEnabled)) {
+		for (uint8 cid = 1; cid <= 16; ++cid) {
+			if (HasClass(cid)) {
+				auto base_data = zone->GetBaseData(GetLevel(), cid);
+				if (base_data.level == GetLevel()) {
+					if (base_data.hp_regen > base)
+						base = static_cast<int>(base_data.hp_regen);
+				}
+			}
+		}
+	} else {
+		auto base_data = zone->GetBaseData(GetLevel(), GetClass());
+		if (base_data.level == GetLevel()) {
+			base = static_cast<int>(base_data.hp_regen);
+		}
 	}
 
 	auto level = GetLevel();
@@ -813,15 +825,13 @@ int64 Client::CalcManaRegen(bool bCombat)
 		if (IsSitting() || CanMedOnHorse()) {
 			// kind of weird to do it here w/e
 			// client does some base medding regen for shrouds here
-			if (GetClass() != Class::Bard) {
-				auto skill = GetSkill(EQ::skills::SkillMeditate);
-				if (skill > 0) {
+			auto skill = GetSkill(EQ::skills::SkillMeditate);
+			if (skill > 0) {
+				regen++;
+				if (skill > 1)
 					regen++;
-					if (skill > 1)
-						regen++;
-					if (skill >= 15)
-						regen += skill / 15;
-				}
+				if (skill >= 15)
+					regen += skill / 15;
 			}
 			if (old)
 				regen = std::max(regen, static_cast<int64>(2));
@@ -1222,7 +1232,7 @@ int32	Client::CalcMR()
 			MR = 20;
 	}
 	MR += itembonuses.MR + spellbonuses.MR + aabonuses.MR;
-	if (GetClass() == Class::Warrior || GetClass() == Class::Berserker) {
+	if (HasClass(Class::Warrior) || HasClass(Class::Berserker)) {
 		MR += GetLevel() / 2;
 	}
 	if (MR < 1) {
@@ -1821,12 +1831,25 @@ int64 Client::CalcEnduranceRegen(bool bCombat)
 {
 	int64 base = 0;
 	if (!IsStarved()) {
-		auto base_data = zone->GetBaseData(GetLevel(), GetClass());
-		if (base_data.level == GetLevel()) {
-			base = static_cast<int>(base_data.end_regen);
-			if (!auto_attack && base > 0)
-				base += base / 2;
+		if (RuleB(Custom, MulticlassingEnabled)) {
+			for (uint8 cid = 1; cid <= 16; ++cid) {
+				if (HasClass(cid)) {
+					auto base_data = zone->GetBaseData(GetLevel(), cid);
+					if (base_data.level == GetLevel()) {
+						if (base_data.end_regen > base)
+							base = static_cast<int>(base_data.end_regen);
+					}
+				}
+			}
+		} else {
+			auto base_data = zone->GetBaseData(GetLevel(), GetClass());
+			if (base_data.level == GetLevel()) {
+				base = static_cast<int>(base_data.end_regen);
+			}
 		}
+
+		if (!auto_attack && base > 0)
+			base += base / 2;
 	}
 
 	// so when we are mounted, our local client SpeedRun is always 0, so this is always false, but the packets we process it to our own shit :P
@@ -1834,7 +1857,7 @@ int64 Client::CalcEnduranceRegen(bool bCombat)
 
 	int weight_limit = GetSTR();
 	auto level = GetLevel();
-	if (GetClass() == Class::Monk) {
+	if (HasClass(Class::Monk)) {
 		if (level > 99)
 			weight_limit = 58;
 		else if (level > 94)

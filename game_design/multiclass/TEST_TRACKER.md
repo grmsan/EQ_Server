@@ -40,10 +40,19 @@
 ## Current Bugs / Observations
 
 ### Fixed
+- [x] Melee Progression: Berserker Frenzy and Monk special attacks (Flying Kick, etc) use bitmask logic ([special_attacks.cpp](special_attacks.cpp)).
+- [x] Defense Scaling: Any character with Warrior/Knight bits receives native AC softcaps and return scalars ([attack.cpp](attack.cpp)).
+- [x] Spell Casting: Bard song scaling/casting level logic uses bitmask ([spells.cpp](spells.cpp)).
+- [x] Tradeskills: Alchemy and Poison making unlocked for any character with Shaman/Rogue bits ([tradeskills.cpp](tradeskills.cpp)).
+- [x] Base Stats: HP/Endurance regeneration now uses the "Best of Class" union logic ([client_mods.cpp](client_mods.cpp)).
+- [x] Mixed-Class Procs: ShadowKnight "Vampiric Embrace" and similar procs now trigger for multiclass SKs ([spell_effects.cpp](spell_effects.cpp)).
+- [x] Item Click/Bard UI: Casting logic for item clicks respects Bard rules for multiclass Bards ([client_packet.cpp](client_packet.cpp)).
+- [x] Skill Caps/Training: Skills learn at the earliest level and cap at the highest value among all owned classes ([skill_manager.cpp](skill_manager.cpp)).
 - [x] ~~Spell merchant "Show usable items": spells for non-owned classes visible~~ **FIXED 2026-01-31** - DLL GetUsableClasses whitelist corrected
 - [x] ~~Spell tooltips showing L255 for all classes~~ **FIXED 2026-01-31** - Now shows correct native levels
 
 ### Open
+- [ ] DEX Twincast Scaling: Verify if high DEX grants twincast chance for any multiclass bit (Refactor pending in [mob.cpp](mob.cpp)).
 - [ ] Spell vendor details: shows base-class label for aggregated spells (e.g., `RNG(2)` instead of `MAG(2)`), plus `255` entries for unrelated classes.
 - [ ] AA window: missing AAs for added classes (and sometimes missing even base-class AAs).
 - [ ] Skills window: added-class skills (e.g., Mend/Tracking) inconsistent / missing.
@@ -84,6 +93,60 @@
 
 ---
 
+## Detailed User Verification Procedures
+
+Use these procedures to verify the core multiclass logic. Replace `<id>` with your character ID or use on yourself.
+
+### 1. Verification: Best-of-Class Melee Special
+**Goal**: Verify a Monk/Warrior uses Flying Kick instead of regular Kick.
+1.  `#level 60`
+2.  `#addclass 1` (Warrior)
+3.  `#addclass 7` (Monk)
+4.  `#setskill 38 400` (Skill: Flying Kick)
+5.  `#setskill 30 400` (Skill: Kick)
+6.  `#spawn 10` (Any mob)
+7.  Turn on auto-attack.
+8.  **Expected**: You should see "You try to flying kick..." in the combat log. If you remove the Monk bit (`#removeclass 7`), you should revert to "You try to kick...".
+
+### 2. Verification: Defensive Parity (AC Returns)
+**Goal**: Verify a Wizard/Warrior gains Warrior-tier AC scaling.
+1.  `#level 60`
+2.  `#addclass 12` (Wizard)
+3.  `#addclass 1` (Warrior)
+4.  Equip high-AC plate armor.
+5.  Note your "Total AC" in inventory.
+6.  `#removeclass 1` (Warrior bit gone)
+7.  **Expected**: Total AC should drop significantly (Wizards have a 0.20 return scalar, Warriors have 0.35). Restoring the bit (`#addclass 1`) should bring the AC back up.
+
+### 3. Verification: Skill Training Union
+**Goal**: Verify a Ranger can learn Kick at Level 1 (via Warrior bit).
+1.  Create a fresh Level 1 character (e.g. Ranger).
+2.  `#addclass 4` (Confirm Ranger)
+3.  `#addclass 1` (Add Warrior)
+4.  `#setskill 30 1` (Try to set Kick)
+5.  **Expected**: The skill should successfully be set to 1. Without the Warrior bit, a Level 1 Ranger cannot train Kick (requires Level 5 natively).
+
+### 4. Verification: Tradeskill Unlocking
+**Goal**: Verify a Cleric/Rogue can create poisons.
+1.  `#level 60`
+2.  `#addclass 2` (Cleric)
+3.  `#addclass 9` (Rogue)
+4.  `#setskill 56 200` (Skill: Make Poison)
+5.  Obtain poison components and a Mortar & Pestle.
+6.  Attempt a combine.
+7.  **Expected**: The combine should proceed. Without the Rogue bit, the character would be blocked from the "Make Poison" skill.
+
+### 5. Verification: Bard Song Scaling
+**Goal**: Verify a Paladin/Bard scales songs correctly.
+1.  `#level 60`
+2.  `#addclass 3` (Paladin)
+3.  `#addclass 8` (Bard)
+4.  Memorize a low-level Bard song (e.g. *Selo's Accelerando*).
+5.  Cast the song.
+6.  **Expected**: The buff duration and movement speed should scale for Level 60. Without the multiclass logic, the Bard level would default to 1, resulting in a 1-tick duration.
+
+---
+
 ## Diagnostics to Capture When Something Breaks
 - [ ] Client `dinput8_debug.log` around the action (vendor list open, trainer list open, AA window open).
 - [ ] Zone console around add/remove class and any packet sends.
@@ -94,8 +157,16 @@
 ## Equipment & Item Use Tests
 
 ### G) Item Equipping (multiclass)
-- [ ] Equip a Cleric-only item on a Ranger/Warrior multiclass → should fail.
-- [ ] Equip a Magician-only item on a Warrior/Mage multiclass → should succeed.
+- [ ] Equip a Cleric-only item on a Ranger/Warrior multiclass → should fail immediately in UI (red text/icon).
+- [ ] Equip a Magician-only item on a Warrior/Mage multiclass → should succeed and show valid in UI.
+- [ ] Item Tooltip: Verify that a Cleric-only item shows "Classes: CLR" but indicates "(Can Equip)" status correctly based on multiclass bits.
+
+### H) Combat Effectiveness (Best-of-Class)
+- [ ] Equip Warrior/Wizard; confirm AC Softcap is high (Warrior tier) vs low (Wizard tier).
+- [ ] Equip Monk/Warrior; confirm Flying Kick triggers during auto-attack if leveled.
+- [ ] Equip Rogue/Mage; confirm "Hide" result uses Rogue level evasion logic.
+- [ ] Check Shaman/Rogue; confirm Alchemy and Poison combines are successful at low level.
+- [ ] Check Bard/Warrior; confirm songs scale with player level/instruments correctly.
 
 ---
 

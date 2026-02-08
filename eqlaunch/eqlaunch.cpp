@@ -33,7 +33,7 @@
 #include <signal.h>
 #include <time.h>
 
-bool RunLoops = false;
+bool RunLoops = true;
 
 void CatchSignal(int sig_num);
 

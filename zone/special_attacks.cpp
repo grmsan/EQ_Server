@@ -512,7 +512,7 @@ void Client::OPCombatAbility(const CombatAbility_Struct *ca_atk)
 		CheckIncreaseSkill(EQ::skills::SkillFrenzy, GetTarget(), 10);
 		DoAnim(anim1HWeapon, 0, false);
 
-		if (GetClass() == Class::Berserker) {
+		if (HasClass(Class::Berserker)) {
 			int chance = GetLevel() * 2 + GetSkill(EQ::skills::SkillFrenzy);
 
 			if (zone->random.Roll0(450) < chance) {
@@ -2109,20 +2109,10 @@ void Client::DoClassAttacks(Mob *ca_target, uint16 skill, bool IsRiposte)
 	uint16 skill_to_use = -1;
 
 	if (skill == -1){
-		switch(GetClass()){
-		case Class::Warrior:
-		case Class::Ranger:
-		case Class::Beastlord:
-			skill_to_use = EQ::skills::SkillKick;
-			break;
-		case Class::Berserker:
-			skill_to_use = EQ::skills::SkillFrenzy;
-			break;
-		case Class::ShadowKnight:
-		case Class::Paladin:
-			skill_to_use = EQ::skills::SkillBash;
-			break;
-		case Class::Monk:
+		if (HasClass(Class::Rogue)) {
+			skill_to_use = EQ::skills::SkillBackstab;
+		}
+		else if (HasClass(Class::Monk)) {
 			if(GetLevel() >= 30)
 			{
 				skill_to_use = EQ::skills::SkillFlyingKick;
@@ -2147,10 +2137,15 @@ void Client::DoClassAttacks(Mob *ca_target, uint16 skill, bool IsRiposte)
 			{
 				skill_to_use = EQ::skills::SkillKick;
 			}
-			break;
-		case Class::Rogue:
-			skill_to_use = EQ::skills::SkillBackstab;
-			break;
+		}
+		else if (HasClass(Class::Berserker)) {
+			skill_to_use = EQ::skills::SkillFrenzy;
+		}
+		else if (HasClass(Class::Warrior) || HasClass(Class::Ranger) || HasClass(Class::Beastlord)) {
+			skill_to_use = EQ::skills::SkillKick;
+		}
+		else if (HasClass(Class::ShadowKnight) || HasClass(Class::Paladin)) {
+			skill_to_use = EQ::skills::SkillBash;
 		}
 	}
 
@@ -2188,7 +2183,7 @@ void Client::DoClassAttacks(Mob *ca_target, uint16 skill, bool IsRiposte)
 		ReuseTime = (FrenzyReuseTime - 1) / HasteMod;
 
 		// bards can do riposte frenzy for some reason
-		if (!IsRiposte && GetClass() == Class::Berserker) {
+		if (!IsRiposte && HasClass(Class::Berserker)) {
 			int chance = GetLevel() * 2 + GetSkill(EQ::skills::SkillFrenzy);
 			if (zone->random.Roll0(450) < chance)
 				AtkRounds++;

@@ -1382,7 +1382,15 @@ class ServerManagerApp(tk.Tk):
             cmd_build = ["cmake", "--build", "build"]
             if build_target and build_target != "all":
                 cmd_build += ["--target", build_target]
-            cmd_build += ["--config", "RelWithDebInfo", "--parallel"]
+            cmd_build += ["--config", "RelWithDebInfo"]
+            # Optimization: Use sequential build to avoid PDB locking errors (C2471)
+            # cmd_build += ["--parallel"]
+
+            # Pass MSBuild-specific anti-lock flags via the native tool switch
+            # Check if we are on Windows/MSVC
+            if os.name == 'nt':
+                cmd_build += ["--", "/p:BuildInParallel=false", "/p:TrackFileAccess=false"]
+
             proc = subprocess.Popen(cmd_build, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
             while True:
                 line = proc.stdout.readline()

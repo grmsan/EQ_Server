@@ -68,9 +68,12 @@ void ProcLauncher::Process() {
 				continue;
 			}
 			//else, it died, handle properly
+			printf("[eqlaunch] Process %s (PID %u) terminated with exit code %u (0x%08X)\n",
+				cur->second->program.c_str(), cur->first, res, res);
 		} else {
 			//not sure the right thing to do here... why would this fail?
-			//GetLastError();
+			printf("[eqlaunch] GetExitCodeProcess failed for PID %u, error=%u. Force terminating.\n",
+				cur->first, GetLastError());
 			TerminateProcess(cur->second->proc_info.hProcess, 1);
 		}
 
@@ -155,7 +158,7 @@ ProcLauncher::ProcRef ProcLauncher::Launch(Spec *&to_launch) {
 			FILE_SHARE_READ,		//dwShareMode
 			&saAttr,				//lpSecurityAttributes
 			CREATE_ALWAYS,			//dwCreationDisposition
-			FILE_FLAG_NO_BUFFERING,	//dwFlagsAndAttributes
+			FILE_ATTRIBUTE_NORMAL,	//dwFlagsAndAttributes (was FILE_FLAG_NO_BUFFERING which breaks C runtime writes)
 			nullptr );					//hTemplateFile
 
 		//configure the startup info to redirect output appropriately.
@@ -165,7 +168,8 @@ ProcLauncher::ProcRef ProcLauncher::Launch(Spec *&to_launch) {
 		siStartInfo.dwFlags |= STARTF_USESTDHANDLES;
 	}
 
-	siStartInfo.dwFlags |= CREATE_NEW_CONSOLE;
+	// Use CREATE_NO_WINDOW so zone processes don't pop up console windows.
+	// Output is already redirected to log files when configured.
 
 	// Create the child process.
 
@@ -183,8 +187,8 @@ ProcLauncher::ProcRef ProcLauncher::Launch(Spec *&to_launch) {
 		const_cast<char *>(args.c_str()), // command line
 		nullptr, // process security attributes
 		nullptr, // primary thread security attributes
-		inherit_handles, // handles are not inherited
-		0, // creation flags (CREATE_NEW_PROCESS_GROUP maybe)
+		inherit_handles, // handles are inherited
+		CREATE_NO_WINDOW, // creation flags: no console window, output goes to log files
 		nullptr, // use parent's environment
 		nullptr, // use parent's current directory
 		&siStartInfo, // STARTUPINFO pointer

@@ -595,6 +595,8 @@ public:
 	inline void ChangeDrakkinDetails(uint8 in) { drakkin_details = in; }
 	inline uint32 GetArmorTint(uint8 i) const { return armor_tint.Slot[(i < EQ::textures::materialCount) ? i : 0].Color; }
 	inline uint8 GetClass() const { return class_; }
+	virtual uint32 GetClassesBits() const { return (1 << (class_ - 1)); }
+	virtual bool HasClass(uint8 class_id) const { return class_ == class_id; }
 	inline uint8 GetLevel() const { return level; }
 	inline uint8 GetOrigLevel() const { return orig_level; }
 	inline const char* GetName() const { return name; }

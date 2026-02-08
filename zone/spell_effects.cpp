@@ -607,8 +607,8 @@ bool Mob::SpellEffect(Mob* caster, uint16 spell_id, float partial, int level_ove
 
 			case SpellEffect::CurrentMana:
 			{
-				// Bards don't get mana from effects, good or bad.
-				if(GetClass() == Class::Bard)
+				// Bards don't get mana from effects, good or bad, unless they have another mana-using class.
+				if(HasClass(Class::Bard) && GetMaxMana() <= 0)
 					break;
 				if(IsManaTapSpell(spell_id)) {
 					if (!IsPureMeleeClass()) {
@@ -644,8 +644,8 @@ bool Mob::SpellEffect(Mob* caster, uint16 spell_id, float partial, int level_ove
 
 			case SpellEffect::CurrentManaOnce:
 			{
-				// Bards don't get mana from effects, good or bad.
-				if(GetClass() == Class::Bard)
+				// Bards don't get mana from effects, good or bad, unless they have another mana-using class.
+				if(HasClass(Class::Bard) && GetMaxMana() <= 0)
 					break;
 #ifdef SPELL_EFFECT_SPAM
 				snprintf(effect_desc, _EDLEN, "Current Mana Once: %+i", effect_value);
@@ -2077,7 +2077,7 @@ bool Mob::SpellEffect(Mob* caster, uint16 spell_id, float partial, int level_ove
 				snprintf(effect_desc, _EDLEN, "Weapon Proc: %s (id %d)", spells[effect_value].name, procid);
 #endif
 				// Special case for Vampiric Embrace. If this is a Shadow Knight, the proc is different.
-				if (proc_id == SPELL_VAMPIRIC_EMBRACE && GetClass() == Class::ShadowKnight) {
+				if (proc_id == SPELL_VAMPIRIC_EMBRACE && HasClass(Class::ShadowKnight)) {
 					proc_id = SPELL_VAMPIRIC_EMBRACE_OF_SHADOW;
 				}
 
@@ -4529,7 +4529,7 @@ void Mob::BuffFadeBySlot(int slot, bool iRecalcBonuses)
 				uint16 proc_id = GetProcID(buffs[slot].spellid, i);
 
 				// Special case for Vampiric Embrace. If this is a Shadow Knight, the proc is different.
-				if (proc_id == SPELL_VAMPIRIC_EMBRACE && GetClass() == Class::ShadowKnight) {
+				if (proc_id == SPELL_VAMPIRIC_EMBRACE && HasClass(Class::ShadowKnight)) {
 					proc_id = SPELL_VAMPIRIC_EMBRACE_OF_SHADOW;
 				}
 
@@ -7921,7 +7921,7 @@ bool Mob::PassCastRestriction(int value)
 
 		case IS_CLASS_WIZARD:
 		case IS_WIZARD_USED_ON_MAGE_FIRE_PET:
-			if (GetClass() == Class::Wizard)
+			if (HasClass(Class::Wizard))
 				return true;
 			break;
 
@@ -7966,12 +7966,13 @@ bool Mob::PassCastRestriction(int value)
 			break;
 
 		case IS_CLASS_PURE_MELEE:
-			if (GetClass() == Class::Rogue || GetClass() == Class::Warrior || GetClass() == Class::Berserker || GetClass() == Class::Monk)
+			if (HasClass(Class::Rogue) || HasClass(Class::Warrior) || HasClass(Class::Berserker) || HasClass(Class::Monk))
 				return true;
 			break;
 
 		case IS_CLASS_PURE_CASTER:
-			if (IsINTCasterClass(GetClass()))
+			if (IsINTCasterClass(GetClass()) || (RuleB(Custom, MulticlassingEnabled) &&
+				(HasClass(Class::Wizard) || HasClass(Class::Magician) || HasClass(Class::Enchanter) || HasClass(Class::Necromancer))))
 				return true;
 			break;
 
@@ -7981,78 +7982,78 @@ bool Mob::PassCastRestriction(int value)
 			break;
 
 		case IS_CLASS_WARRIOR:
-			if (GetClass() == Class::Warrior)
+			if (HasClass(Class::Warrior))
 				return true;
 			break;
 
 		case IS_CLASS_CLERIC:
-			if (GetClass() == Class::Cleric)
+			if (HasClass(Class::Cleric))
 				return true;
 			break;
 
 		case IS_CLASS_PALADIN:
-			if (GetClass() == Class::Paladin)
+			if (HasClass(Class::Paladin))
 				return true;
 			break;
 
 		case IS_CLASS_RANGER:
-			if (GetClass() == Class::Ranger)
+			if (HasClass(Class::Ranger))
 				return true;
 			break;
 
 		case IS_CLASS_SHADOWKNIGHT:
-			if (GetClass() == Class::ShadowKnight)
+			if (HasClass(Class::ShadowKnight))
 				return true;
 			break;
 
 		case IS_CLASS_DRUID:
-			if (GetClass() == Class::Druid)
+			if (HasClass(Class::Druid))
 				return true;
 			break;
 
 		case IS_CLASS_MONK:
-			if (GetClass() == Class::Monk)
+			if (HasClass(Class::Monk))
 				return true;
 			break;
 
 		case IS_CLASS_BARD2:
 		case IS_CLASS_BARD:
-			if (GetClass() == Class::Bard)
+			if (HasClass(Class::Bard))
 				return true;
 			break;
 
 		case IS_CLASS_ROGUE:
-			if (GetClass() == Class::Rogue)
+			if (HasClass(Class::Rogue))
 				return true;
 			break;
 
 		case IS_CLASS_SHAMAN:
-			if (GetClass() == Class::Shaman)
+			if (HasClass(Class::Shaman))
 				return true;
 			break;
 
 		case IS_CLASS_NECRO:
-			if (GetClass() == Class::Necromancer)
+			if (HasClass(Class::Necromancer))
 				return true;
 			break;
 
 		case IS_CLASS_MAGE:
-			if (GetClass() == Class::Magician)
+			if (HasClass(Class::Magician))
 				return true;
 			break;
 
 		case IS_CLASS_ENCHANTER:
-			if (GetClass() == Class::Enchanter)
+			if (HasClass(Class::Enchanter))
 				return true;
 			break;
 
 		case IS_CLASS_BEASTLORD:
-			if (GetClass() == Class::Beastlord)
+			if (HasClass(Class::Beastlord))
 				return true;
 			break;
 
 		case IS_CLASS_BERSERKER:
-			if (GetClass() == Class::Berserker)
+			if (HasClass(Class::Berserker))
 				return true;
 			break;
 
@@ -8162,8 +8163,8 @@ bool Mob::PassCastRestriction(int value)
 		}
 
 		case IS_CLASS_CHAIN_OR_PLATE:
-			if ((GetClass() == Class::Warrior) || (GetClass() == Class::Bard) || (GetClass() == Class::ShadowKnight) || (GetClass() == Class::Paladin) || (GetClass() == Class::Cleric)
-				|| (GetClass() == Class::Ranger) || (GetClass() == Class::Shaman) || (GetClass() == Class::Rogue) || (GetClass() == Class::Berserker)) {
+			if (HasClass(Class::Warrior) || HasClass(Class::Bard) || HasClass(Class::ShadowKnight) || HasClass(Class::Paladin) || HasClass(Class::Cleric)
+				|| HasClass(Class::Ranger) || HasClass(Class::Shaman) || HasClass(Class::Rogue) || HasClass(Class::Berserker)) {
 				return true;
 			}
 			break;

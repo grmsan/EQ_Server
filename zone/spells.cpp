@@ -1168,7 +1168,7 @@ bool Client::CheckFizzle(uint16 spell_id)
 		}
 
 		// BARDS ARE SPECIAL - they add both CHA and DEX mods to get casting rates similar to full casters without spec skill
-		if (GetClass() == Class::Bard) {
+		if (HasClass(Class::Bard)) {
 			prime_stat_reduction = (GetCHA() - 75 + GetDEX() - 75) / 10.0;
 		}
 
@@ -1529,7 +1529,7 @@ void Mob::CastedSpellFinished(uint16 spell_id, uint32 target_id, CastingSlot slo
 	Mob *spell_target = entity_list.GetMob(target_id);
 	// here we do different things if this is a bard casting a bard song from
 	// a spell bar slot
-	if(GetClass() == Class::Bard) // bard's can move when casting any spell...
+	if(HasClass(Class::Bard)) // bard's can move when casting any spell...
 	{
 		if (IsBardSong(spell_id) && slot < CastingSlot::MaxGems) {
 			if (spells[spell_id].buff_duration == 0xFFFF) {
@@ -2868,7 +2868,7 @@ bool Mob::SpellFinished(uint16 spell_id, Mob *spell_target, CastingSlot slot, in
 			}
 		}
 		//handle bard AA and Discipline recast timers when singing
-		if (GetClass() == Class::Bard && spell_id != casting_spell_id && timer != 0xFFFFFFFF) {
+		if (HasClass(Class::Bard) && spell_id != casting_spell_id && timer != 0xFFFFFFFF) {
 			CastToClient()->GetPTimers().Start(timer, timer_duration);
 			LogSpells("Spell [{}]: Setting BARD custom reuse timer [{}] to [{}]", spell_id, casting_spell_timer, casting_spell_timer_duration);
 		}
@@ -3880,7 +3880,7 @@ int Mob::CanBuffStack(uint16 spellid, uint8 caster_level, bool iFailIfOverwrite)
 
 		if (
 			IsBot() &&
-			GetClass() == Class::Bard &&
+			HasClass(Class::Bard) &&
 			curbuf.spellid == spellid &&
 			curbuf.ticsremaining == 0 &&
 			curbuf.casterid == GetID()
@@ -6439,7 +6439,7 @@ bool Mob::AddProcToWeapon(uint16 spell_id, bool bPerma, uint16 iChance, uint16 b
 	}
 
 	// Special case for Vampiric Embrace. If this is a Shadow Knight, the proc is different.
-	if (spell_id == SPELL_VAMPIRIC_EMBRACE && GetClass() == Class::ShadowKnight) {
+	if (spell_id == SPELL_VAMPIRIC_EMBRACE && HasClass(Class::ShadowKnight)) {
 		spell_id = SPELL_VAMPIRIC_EMBRACE_OF_SHADOW;
 	}
 
@@ -6495,7 +6495,7 @@ bool Mob::AddProcToWeapon(uint16 spell_id, bool bPerma, uint16 iChance, uint16 b
 
 bool Mob::RemoveProcFromWeapon(uint16 spell_id, bool bAll) {
 	// Special case for Vampiric Embrace. If this is a Shadow Knight, the proc is different.
-	if (spell_id == SPELL_VAMPIRIC_EMBRACE && GetClass() == Class::ShadowKnight) {
+	if (spell_id == SPELL_VAMPIRIC_EMBRACE && HasClass(Class::ShadowKnight)) {
 		spell_id = SPELL_VAMPIRIC_EMBRACE_OF_SHADOW;
 	}
 
@@ -6595,7 +6595,7 @@ bool Mob::UseBardSpellLogic(uint16 spell_id, int slot)
 	(
 		IsValidSpell(spell_id) &&
 		slot != -1 &&
-		GetClass() == Class::Bard &&
+		HasClass(Class::Bard) &&
 		slot <= EQ::spells::SPELL_GEM_COUNT &&
 		IsBardSong(spell_id)
 	);
@@ -6603,7 +6603,7 @@ bool Mob::UseBardSpellLogic(uint16 spell_id, int slot)
 
 int Mob::GetCasterLevel(uint16 spell_id) {
 	int level = GetLevel();
-	if (GetClass() == Class::Bard) {
+	if (IsBardSong(spell_id)) {
 		// Bards receive effective casting level increases to resists/effect. They don't receive benefit from spells like intellectual superiority, however.
 		level += itembonuses.effective_casting_level + aabonuses.effective_casting_level;
 	} else {

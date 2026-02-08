@@ -4815,7 +4815,7 @@ bool Mob::CanThisClassDualWield(void) const {
 
 		// Dual-Wielding Empty Fists
 		if(!pinst && !sinst)
-			if(class_ != Class::Monk && class_ != Class::MonkGM && class_ != Class::Beastlord && class_ != Class::BeastlordGM)
+			if(!HasClass(Class::Monk) && !HasClass(Class::Beastlord))
 				return false;
 
 		return true;
@@ -4843,10 +4843,10 @@ bool Mob::CanThisClassTripleAttack() const {
 
 	if (RuleB(Combat, ClassicTripleAttack)) {
 		return GetLevel() >= 60 && (
-			GetClass() == Class::Warrior ||
-			GetClass() == Class::Ranger ||
-			GetClass() == Class::Monk ||
-			GetClass() == Class::Berserker
+			HasClass(Class::Warrior) ||
+			HasClass(Class::Ranger) ||
+			HasClass(Class::Monk) ||
+			HasClass(Class::Berserker)
 		);
 	}
 
@@ -6114,19 +6114,29 @@ void Mob::TryTwincast(Mob *caster, Mob *target, uint32 spell_id)
 			dexChance = (dex_for_twincast * static_cast<float>(level)) / CombatBalance::DEX_TWINCAST_DIVISOR;
 
 			// Non-primary casters get half the DEX-based twincast chance
-			switch (GetClass()) {
-			case Class::Enchanter:
-			case Class::Magician:
-			case Class::Necromancer:
-			case Class::Wizard:
-			case Class::Cleric:
-			case Class::Shaman:
-			case Class::Druid:
-				// full chance
-				break;
-			default:
+			bool is_primary_caster = false;
+			if (RuleB(Custom, MulticlassingEnabled) && IsClient()) {
+				auto c = CastToClient();
+				is_primary_caster = c->HasClass(Class::Enchanter) || c->HasClass(Class::Magician) ||
+					c->HasClass(Class::Necromancer) || c->HasClass(Class::Wizard) ||
+					c->HasClass(Class::Cleric) || c->HasClass(Class::Shaman) || c->HasClass(Class::Druid);
+			}
+			else {
+				switch (GetClass()) {
+				case Class::Enchanter:
+				case Class::Magician:
+				case Class::Necromancer:
+				case Class::Wizard:
+				case Class::Cleric:
+				case Class::Shaman:
+				case Class::Druid:
+					is_primary_caster = true;
+					break;
+				}
+			}
+
+			if (!is_primary_caster) {
 				dexChance *= 0.5f;
-				break;
 			}
 
 			if (dexChance > 100.0f) {
@@ -6138,7 +6148,17 @@ void Mob::TryTwincast(Mob *caster, Mob *target, uint32 spell_id)
 			// Use an explicit roll so we can see the RNG in logs
 			float roll = zone->random.Real(0.0f, 100.0f);
 
-			if (IsClient() && GetClass() == Class::Warrior) {
+			bool log_twincast = false;
+			if (IsClient()) {
+				if (RuleB(Custom, MulticlassingEnabled)) {
+					log_twincast = CastToClient()->HasClass(Class::Warrior);
+				}
+				else {
+					log_twincast = (GetClass() == Class::Warrior);
+				}
+			}
+
+			if (log_twincast) {
 				LogInfo(
 					"TW_DEBUG: DEX twincast check caster [{}] class [{}] lvl [{}] DEX [{}] spell [{}:{}] dexChance [{:.2f}] roll [{:.2f}]",
 					GetCleanName(),

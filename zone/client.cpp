@@ -3266,16 +3266,23 @@ uint8 Client::GetSkillTrainLevel(EQ::skills::SkillType skill_id)
 		return GetSkillTrainLevel(skill_id, GetClass());
 	}
 
-	uint8 best = 0;
+	uint8 best = 255;
+	bool found = false;
 	for (uint8 class_id = 1; class_id <= Class::PLAYER_CLASS_COUNT; ++class_id) {
 		if (!HasClass(class_id)) {
 			continue;
 		}
 
-		best = std::max<uint8>(best, GetSkillTrainLevel(skill_id, class_id));
+		uint8 train_lvl = GetSkillTrainLevel(skill_id, class_id);
+		if (train_lvl > 0) {
+			found = true;
+			if (train_lvl < best) {
+				best = train_lvl;
+			}
+		}
 	}
 
-	return best;
+	return found ? best : 0;
 }
 
 uint16 Client::GetMaxSkillAfterSpecializationRules(EQ::skills::SkillType skillid, uint16 maxSkill)
@@ -3608,7 +3615,7 @@ bool Client::BindWound(Mob *bindmob, bool start, bool fail)
 
 						int max_percent = 50 + maxHPBonus;
 
-						if (GetClass() == Class::Monk && GetSkill(EQ::skills::SkillBindWound) > 200) {
+						if (HasClass(Class::Monk) && GetSkill(EQ::skills::SkillBindWound) > 200) {
 							max_percent = 70 + maxHPBonus;
 						}
 
@@ -3657,9 +3664,9 @@ bool Client::BindWound(Mob *bindmob, bool start, bool fail)
 					else {
 						int percent_base = 50;
 						if (GetRawSkill(EQ::skills::SkillBindWound) > 200) {
-							if ((GetClass() == Class::Monk) || (GetClass() == Class::Beastlord))
+							if (HasClass(Class::Monk) || HasClass(Class::Beastlord))
 								percent_base = 70;
-							else if ((GetLevel() > 50) && ((GetClass() == Class::Warrior) || (GetClass() == Class::Rogue) || (GetClass() == Class::Cleric)))
+							else if ((GetLevel() > 50) && (HasClass(Class::Warrior) || HasClass(Class::Rogue) || HasClass(Class::Cleric)))
 								percent_base = 70;
 						}
 
@@ -13609,6 +13616,11 @@ void Client::SendEdgeStats()
 	// patch_*.conf mapping and does not go through struct encoding.
 	if (ClientVersion() != EQ::versions::ClientVersion::RoF2) {
 		return;
+	}
+
+	if (RuleB(Custom, MulticlassDebug)) {
+		Log(Logs::General, Logs::Info, "SendEdgeStats: sending for [{}] name=[{}] mask=0x{:04X}", 
+			GetCleanName(), GetCleanName(), GetClassesBitmask());
 	}
 
 	// Keep IDs aligned with extras/classless-dll-main/eqgame_dll/MQ2Labels.cpp (eStatEntry).

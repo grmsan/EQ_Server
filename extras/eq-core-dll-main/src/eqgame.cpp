@@ -2068,10 +2068,15 @@ int __fastcall EQCharacter_MaxEnd_Detour(void* This, void* edx, int a1)
 //   0x002A6D16 - Display/filter (needs NATIVE)
 //
 // Whitelist = RVAs that should return multiclass bits instead of native.
-// NOTE: Spell filter RVAs (0x002F0DA3, 0x002F0E05) are NOT whitelisted here.
-// Spell filtering relies on GetSpellLevelNeeded returning 255, not GetUsableClasses.
 static const std::set<DWORD> s_multiclass_rvas = {
 	0x0004C472,  // Equipment validation - MUST have multiclass bits
+	0x001716A2,  // CItemDisplayBase::CanEquip - Item Tooltip "Can Equip" status
+	0x00171784,  // CItemDisplayBase::CanEquip - Item Tooltip "Can Equip" status (secondary)
+	0x002F0DA3,  // Item use / right-click cast (tomes/scrolls)
+	0x002F0E05,  // Item use / right-click cast (secondary)
+	0x002A6D16,  // Merchant/Trade list visibility filter
+	0x002A6D26,  // Merchant/Trade list visibility filter (spells/tomes)
+	0x002F113C,  // CMerchantWnd item list usability check
 };
 
 // Verbose logging - set to true to log EVERY GetUsableClasses call (for debugging)
@@ -2152,6 +2157,7 @@ int __fastcall EQCharacter_GetUsableClasses_Detour(void* This, void* edx, int a1
 static const std::set<DWORD> s_spell_level_filter_rvas = {
 	// These RVAs are called when filtering merchant spell lists ("Show Usable Items")
 	0x002F0DCD,  // Spell merchant "Show Usable Items" filter check
+	0x002A6D26,  // Merchant window item usability check (tomes/disciplines)
 };
 
 // Verbose logging for discovering new RVAs

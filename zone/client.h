@@ -294,7 +294,7 @@ public:
 	bool AddExtraClass(uint8 class_id);
 	bool RemoveExtraClass(uint8 class_id);
 	uint8 GetClassesCount();
-	bool HasClass(uint8 class_id) const;
+	virtual bool HasClass(uint8 class_id) const override;
 
 	void SendChatLineBreak(uint16 color = Chat::White);
 

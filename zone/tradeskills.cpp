@@ -627,7 +627,7 @@ void Object::HandleAutoCombine(Client* user, const RecipeAutoCombine_Struct* rac
 	}
 
 	if (spec.tradeskill == EQ::skills::SkillAlchemy) {
-		if (!user->GetClass() == Class::Shaman) {
+		if (!user->HasClass(Class::Shaman)) {
 			user->Message(Chat::Red, "This tradeskill can only be performed by a shaman.");
 			auto outapp = new EQApplicationPacket(OP_TradeSkillCombine, 0);
 			user->QueuePacket(outapp);
@@ -652,7 +652,7 @@ void Object::HandleAutoCombine(Client* user, const RecipeAutoCombine_Struct* rac
 		}
 	}
 	else if (spec.tradeskill == EQ::skills::SkillMakePoison) {
-		if (!user->GetClass() == Class::Rogue) {
+		if (!user->HasClass(Class::Rogue)) {
 			user->Message(Chat::Red, "Only rogues can mix poisons.");
 			auto outapp = new EQApplicationPacket(OP_TradeSkillCombine, 0);
 			user->QueuePacket(outapp);

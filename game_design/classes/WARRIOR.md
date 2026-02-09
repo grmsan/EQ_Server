@@ -76,3 +76,33 @@ Warriors take the hit. They don't rely on RNG (Avoidance) or Magic (Runes).
 
 ## 6. Summary
 The Warrior is the **Low Risk, High Consistency** solo class. You will rarely die, but you won't kill as fast as a Rogue. You solve problems by hitting them until they stop moving, and you can take a beating that would kill a god.
+
+---
+
+## 7. The Big Three: Core Abilities
+
+These abilities are designed to be high-impact active "clicks" that define the Warrior's combat rhythm.
+
+### I. [Offensive] Colossal Smash
+*   **Description:** A crushing overhead blow that deals massive physical damage and shatters the target's armor.
+*   **Stats:** Scales with **STR** and **Level**.
+*   **Scaling:** $Damage = (\text{Level}^{2.1} \times 1.0) + (\text{STR} \times 10)$
+*   **Cooldown:** 30 Seconds.
+*   **Duration:** 12 Seconds (Armor Debuff).
+*   **Synergy:** **Armor Shatter**. Reduces Target AC by 20%. This benefits all physical attackers (Rogue, Monk, Ranger, Pets).
+
+### II. [Utility] Heroic Throw
+*   **Description:** A powerful ranged toss that deals physical damage and generates massive aggro.
+*   **Stats:** Scales with **STR** and **Level**.
+*   **Scaling:** $Damage = (\text{Level}^{2.0} \times 0.8) + (\text{STR} \times 5)$
+*   **Cooldown:** 45 Seconds.
+*   **Duration:** 6 Seconds (Aggro Lock/Snare).
+*   **Synergy:** **Target Isolation**. Snares the target and forces it to focus on the Warrior, protecting squishier allies.
+
+### III. [Defensive] Ignore Pain
+*   **Description:** The Warrior enters a trance of pure endurance, ignoring a portion of all incoming damage.
+*   **Stats:** Scales with **STA** and **Level**.
+*   **Scaling:** $Absorb = (\text{Level}^{2.0} \times 1.5) + (\text{STA} \times 10)$
+*   **Cooldown:** 90 Seconds.
+*   **Duration:** 12 Seconds.
+*   **Synergy:** None (Pure Survival). Allows the Warrior to survive high-damage phases without burdening healers.

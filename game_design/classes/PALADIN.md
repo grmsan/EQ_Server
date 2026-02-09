@@ -73,3 +73,35 @@ Paladins are the masters of the Shield.
 
 ## 6. Summary
 The Paladin is the **Specialist Tank**. Against Undead, you are a god. Against the living, you are an unmovable object that interrupts every spell and attack the enemy tries to make.
+
+---
+
+## 7. The Big Three: Core Abilities
+
+These abilities define the Paladin's role as a hybrid protector and holy warrior, scaling with level and faith.
+
+### I. [Offensive] Divine Retribution
+*   **Description:** A powerful blast of holy energy that deals damage and stuns the target. Deals triple damage to Undead.
+*   **Scaling:** $Damage = (\text{Level}^{2.0} \times 1.2) + (\text{WIS} \times 10)$.
+*   **Cooldown:** 45 Seconds.
+*   **Duration:** 6 Seconds (Stun).
+*   **Solo Use:** Burst damage for undead hunting or interrupting dangerous boss spells.
+*   **Group/Synergy:** High Threat.
+
+### II. [Defensive] Radiant Bulwark
+*   **Description:** A massive enhancement to the Paladin's shield, increasing AC and reflecting damage back to attackers.
+*   **Scaling:** $AC = (\text{Level} \times 5) + (\text{WIS} \times 0.5)$. $Reflect = (\text{Level}^{1.5} \times 0.5)$.
+*   **Cooldown:** 120 Seconds.
+*   **Duration:** 12 Seconds.
+*   **Solo Use:** Essential for face-tanking hard-hitting bosses.
+*   **Group/Synergy:** Provides a small portion of the AC bonus to nearby group members.
+
+### III. [Utility/Synergy] Sanctified Ground
+*   **Description:** The Paladin blesses the area around them. All allies within the aura gain increased **Healing Received**.
+*   **Scaling:** $Bonus = (\text{Level} \times 0.5) + (\text{WIS} \times 0.05)\%$ increased healing received.
+*   **Cooldown:** 90 Seconds.
+*   **Duration:** 12 Seconds.
+*   **Solo Use:** Makes your self-heals and Lay on Hands much more powerful.
+*   **Synergy:** **Sustainability Multiplier**. This makes Clerics, Druids, and Shamans significantly more mana-efficient when healing the group. Also boosts the self-healing of Shadowknights and Berserkers.
+*   **Stats:** Scales with **WIS** (Divine Connection).
+*   **Synergy Value:** High. Foundational for surviving high-damage raid encounters in a group.

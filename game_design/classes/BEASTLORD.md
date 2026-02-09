@@ -72,3 +72,40 @@ The Warder is the tank. The Beastlord is the off-tank.
 
 ## 6. Summary
 The Beastlord is the **Self-Contained Group**. You have a Tank (Warder), a Healer (You), a Slower (You), and DPS (Both). You don't need anyone else.
+
+---
+
+## 6. Summary
+The Beastlord is the **Self-Contained Group**. You have a Tank (Warder), a Healer (You), a Slower (You), and DPS (Both). You don't need anyone else.
+
+---
+
+## 7. The Big Three: Core Abilities
+
+These abilities harness the primal bond between beast and master, scaling with wisdom and level.
+
+### I. [Offensive] Bestial Frenzy
+*   **Description:** The Beastlord and their Warder enter a state of shared bloodlust. Both the Master and the Pet gain massive **Attack Speed** and **Critical Hit Chance**.
+*   **Scaling:** $Haste = (\text{Level} \times 0.5) + (\text{WIS} \times 0.2)\%$. $CritChance = (\text{Level} \times 0.2) + (\text{DEX} \times 0.1)\%$.
+*   **Cooldown:** 60 Seconds.
+*   **Duration:** 12 Seconds.
+*   **Solo Use:** Massive burst for taking down hard targets.
+*   **Synergy:** **Pet/Master Multiplier**. While this is primarily a self-buff, it ensures the Beastlord's pet is a top-tier damage dealer in any group.
+*   **Stats:** Scales with **WIS** (Primal Connection).
+
+### II. [Defensive] Protector's Symbiosis
+*   **Description:** Forges a deep defensive link between the Beastlord and the Warder. A portion of damage taken is shared, and both receive a continuous **Heal Over Time**.
+*   **Scaling:** $DamageShare = 50\%$. $Heal = (\text{Level}^{1.5} \times 1.0) + (\text{WIS} \times 5)$.
+*   **Cooldown:** 90 Seconds.
+*   **Duration:** 10 Seconds.
+*   **Solo Use:** Essential for surviving dual-tanking situations or heavy AOE damage.
+*   **Group/Synergy:** None (Survival focus).
+
+### III. [Utility/Synergy] Primal Essence
+*   **Description:** The Beastlord releases a wave of primal energy. All allies gain increased **Stat Caps** and **Health/Mana Regeneration**.
+*   **Scaling:** $Regen = (\text{Level} \times 0.5) + (\text{WIS} \times 0.1)$. $StatBase = (\text{Level} \times 1)$.
+*   **Cooldown:** 120 Seconds.
+*   **Duration:** 12 Seconds.
+*   **Solo Use:** Sustains your own resources during long, difficult encounters.
+*   **Synergy:** **Resource Multiplier**. This is a powerful "recovery" buff for a group, helping everyone stay topped off while also raising their potential peak power by increasing stat caps.
+*   **Stats:** Scales with **WIS** (Survival Instinct).

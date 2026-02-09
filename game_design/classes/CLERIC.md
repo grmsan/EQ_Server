@@ -73,3 +73,35 @@ Clerics wear Plate Armor, giving them high AC.
 
 ## 6. Summary
 The Cleric is the **Indestructible Caster**. You wear the heaviest armor and wield the strongest magic. You don't kite; you stand your ground, stun your enemies, and blast them with holy light.
+
+---
+
+## 7. The Big Three: Core Abilities
+
+These abilities represent the zenith of divine power, scaling with wisdom and holiness.
+
+### I. [Offensive] Celestial Wrath
+*   **Description:** A blinding beam of pure celestial light that strikes the target for massive Holy damage and applies a short-duration Blind effect.
+*   **Scaling:** $Damage = (\text{Level}^{2.1} \times 1.25) + (\text{WIS} \times 15)$.
+*   **Cooldown:** 45 Seconds.
+*   **Duration:** Instant / 8 Seconds (Blind).
+*   **Solo Use:** Massive burst damage and crowd control for dangerous mobs.
+*   **Group/Synergy:** None (Pure DPS).
+
+### II. [Defensive] Divine Aegis
+*   **Description:** The Cleric focuses their healing energy inward, creating an shimmering barrier of light that absorbs incoming damage.
+*   **Scaling:** $Absorb = (\text{Level}^{2.0} \times 2.0) + (\text{WIS} \times 20)$.
+*   **Cooldown:** 120 Seconds.
+*   **Duration:** 10 Seconds.
+*   **Solo Use:** Essentially doubles the Cleric's HP pool, allowing them to tank multiple enemies.
+*   **Group/Synergy:** Can be cast on others, but has reduced efficiency.
+
+### III. [Utility/Synergy] Aura of Purity
+*   **Description:** A cleansing light emanates from the Cleric. All allies within the aura have a chance to automatically **Cure** negative status effects every 6 seconds and gain increased **Mana Regeneration**.
+*   **Scaling:** $ManaRegen = (\text{Level} \times 0.5) + (\text{WIS} \times 0.1)$. $CureChance = (\text{Level} \times 0.5)\%$.
+*   **Cooldown:** 90 Seconds.
+*   **Duration:** 12 Seconds.
+*   **Solo Use:** Essential for maintaining mana during long fights and staying free of debuffs.
+*   **Synergy:** **Resource & Survival Multiplier**. This is the ultimate "comfort" aura for a group. It allows casters (Wizards, Magicians) to stay high on mana and protects tanks from being crippled by slows or dots.
+*   **Stats:** Scales with **WIS** (Divine Favor).
+*   **Synergy Value:** High. Makes any group significantly more resilient and reduces downtime to near zero.

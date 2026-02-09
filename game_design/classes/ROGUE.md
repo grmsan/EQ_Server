@@ -75,3 +75,35 @@ Rogues wear Chain/Leather and rely on not getting hit.
 
 ## 6. Summary
 The Rogue is the **Dungeon Crawler**. You don't kill every mob in the zone; you sneak past them to kill the boss. You rely on burst damage to end fights before your health runs out.
+
+---
+
+## 7. The Big Three: Core Abilities
+
+These abilities define the Rogue as a precision striker who creates opportunities for themselves and their allies, scaling with dexterity and level.
+
+### I. [Offensive] Assassin's Mark
+*   **Description:** The Rogue marks a target for death, exposing its vitals. All physical attacks against the target have a massive increase to **Critical Hit Damage**.
+*   **Scaling:** $CritMultiplier = (\text{Level} \times 1.0) + (\text{DEX} \times 0.2)\%$ increase.
+*   **Cooldown:** 45 Seconds.
+*   **Duration:** 12 Seconds.
+*   **Solo Use:** Use this before your biggest backstabs/disciplines for explosive damage.
+*   **Synergy:** **Melee Force Multiplier**. Boosts the damage of every physical class in the group. Pairs perfectly with the Monk's crit chance aura.
+*   **Stats:** Scales with **DEX** (Fatal Precision).
+
+### II. [Defensive] Shadow Step
+*   **Description:** The Rogue blends into the environment, becoming incredibly difficult to hit. The next hit taken is entirely absorbed and triggers an automatic **Vanish**.
+*   **Scaling:** $DodgeBoost = (\text{Level} \times 2) + (\text{AGI} \times 0.5)$.
+*   **Cooldown:** 90 Seconds.
+*   **Duration:** 8 Seconds.
+*   **Solo Use:** Essential for surviving a failed assassination or a high-damage burst from a boss.
+*   **Group/Synergy:** None (Survival focus).
+
+### III. [Utility/Synergy] Expose Weakness
+*   **Description:** A brutal strike that leaves the target's armor in tatters. Reduces the target's **Armor Class** by a massive amount and increases **Physical Damage Taken**.
+*   **Scaling:** $ACReduc = (\text{Level} \times 5) + (\text{DEX} \times 0.5)\%$.
+*   **Cooldown:** 60 Seconds.
+*   **Duration:** 12 Seconds.
+*   **Solo Use:** Allows your attacks to penetrate even the most heavily armored targets.
+*   **Synergy:** **Armor Shred Multiplier**. This is the ultimate "Melee Amp." By removing the enemy's mitigation, it allows every physical attacker (Warrior, Berserker, Monk, Ranger) to deal their maximum possible damage.
+*   **Stats:** Scales with **DEX** (Combat Knowledge).

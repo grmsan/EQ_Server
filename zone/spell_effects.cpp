@@ -89,20 +89,30 @@ enum class SpecialStat {
 	Dex,
 	Sta,
 	Agi,
+	Int,
+	Wis,
 };
 
 struct SpecialAttackConfig {
 	float primary_weapon_mult{1.0f};
 	float secondary_weapon_mult{0.0f};
 	SpecialStat stat{SpecialStat::None};
-	// level curve for stat term (defaults to STR curve knobs)
 	float level_divisor{CombatBalance::STR_LEVEL_DIVISOR};
 	float level_exponent{CombatBalance::STR_LEVEL_EXPONENT};
 	float level_min_multiplier{CombatBalance::STR_MIN_LEVEL_MULTIPLIER};
 	float flat_bonus{0.0f};
 	float min_damage{1.0f};
-	float damage_mult{1.0f}; // optional post-scale multiplier (e.g., crippling-style bonus)
-	float ac_debuff_pct_of_damage{0.0f}; // optional rider: AC debuff magnitude based on % of damage
+	float damage_mult{1.0f};
+	float ac_debuff_pct_of_damage{0.0f};
+	float mitigation_pct_of_damage{0.0f};
+	float spell_dmg_pct_of_damage{0.0f};
+	float heal_amt_pct_of_damage{0.0f};
+	float atk_bonus_pct_of_damage{0.0f};
+	float accuracy_pct_of_damage{0.0f};
+	float crit_chance_pct_of_damage{0.0f};
+	float lifetap_pct_of_damage{0.0f};
+	float avoidance_pct_of_damage{0.0f};
+	float stat_bonus_pct_of_damage{0.0f};
 };
 
 static int GetPrimaryWeaponBaseDamage(const Mob* caster) {
@@ -142,6 +152,8 @@ static float GetStatValue(const Mob* caster, SpecialStat stat) {
 	case SpecialStat::Dex: return static_cast<float>(caster->GetDEX());
 	case SpecialStat::Sta: return static_cast<float>(caster->GetSTA());
 	case SpecialStat::Agi: return static_cast<float>(caster->GetAGI());
+	case SpecialStat::Int: return static_cast<float>(caster->GetINT());
+	case SpecialStat::Wis: return static_cast<float>(caster->GetWIS());
 	default: return 0.0f;
 	}
 }
@@ -173,30 +185,85 @@ static int64 ComputeSpecialAttackDamage(const Mob* caster, int caster_level, con
 
 // Registry of special-attack style spells/AAs we scale automatically
 static const std::unordered_map<uint16, SpecialAttackConfig> kSpecialAttackSpells{
-	// Heroic Throw (custom AA spell ID 65000): primary weapon + STR curve, AC debuff rider
-	{65000, SpecialAttackConfig{
-		.primary_weapon_mult = 1.0f,
-		.secondary_weapon_mult = 0.0f,
-		.stat = SpecialStat::Str,
-		.level_divisor = CombatBalance::STR_LEVEL_DIVISOR,
-		.level_exponent = CombatBalance::STR_LEVEL_EXPONENT,
-		.level_min_multiplier = CombatBalance::STR_MIN_LEVEL_MULTIPLIER,
-		.flat_bonus = 0.0f,
-		.min_damage = 1.0f,
-		.ac_debuff_pct_of_damage = 0.10f // 10% of dealt damage becomes an AC debuff magnitude
-	}},
-	// Colossal Smash (Warrior AA, spell ID 65010): crippling-style swing with both weapons
-	{65010, SpecialAttackConfig{
-		.primary_weapon_mult = 1.0f,
-		.secondary_weapon_mult = 1.0f, // dual wielders hit with both; 2H only uses primary
-		.stat = SpecialStat::Str,
-		.level_divisor = CombatBalance::STR_LEVEL_DIVISOR,
-		.level_exponent = CombatBalance::STR_LEVEL_EXPONENT,
-		.level_min_multiplier = CombatBalance::STR_MIN_LEVEL_MULTIPLIER,
-		.flat_bonus = 0.0f,
-		.min_damage = 1.0f,
-		.damage_mult = 2.2f // approximate crippling blow bonus over a base hit
-	}}
+	// --- WARRIOR (65000) ---
+	{65000, SpecialAttackConfig{ .primary_weapon_mult = 1.5f, .stat = SpecialStat::Str, .level_divisor = 150.0f, .level_exponent = 2.1f, .ac_debuff_pct_of_damage = 0.15f }},
+	{65010, SpecialAttackConfig{ .primary_weapon_mult = 1.0f, .secondary_weapon_mult = 1.0f, .stat = SpecialStat::Str, .level_divisor = 150.0f, .level_exponent = 2.1f, .ac_debuff_pct_of_damage = 0.25f }},
+	{65020, SpecialAttackConfig{ .stat = SpecialStat::Sta, .level_divisor = 1000.0f, .level_exponent = 1.0f, .min_damage = 10.0f, .mitigation_pct_of_damage = 1.0f }},
+
+	// --- ENCHANTER (65100) ---
+	{65100, SpecialAttackConfig{ .stat = SpecialStat::Int, .level_divisor = 100.0f, .level_exponent = 1.5f, .spell_dmg_pct_of_damage = 1.0f }},
+	{65110, SpecialAttackConfig{ .stat = SpecialStat::Int, .level_divisor = 500.0f, .level_exponent = 1.0f, .mitigation_pct_of_damage = 0.5f }},
+	{65120, SpecialAttackConfig{ .stat = SpecialStat::Int, .level_divisor = 100.0f, .level_exponent = 1.2f, .stat_bonus_pct_of_damage = 1.0f }},
+
+	// --- MAGICIAN (65200) ---
+	{65200, SpecialAttackConfig{ .stat = SpecialStat::Int, .level_divisor = 100.0f, .level_exponent = 1.6f, .flat_bonus = 500.0f }}, // High fire burst
+	{65210, SpecialAttackConfig{ .stat = SpecialStat::Int, .level_divisor = 800.0f, .level_exponent = 1.0f, .mitigation_pct_of_damage = 0.8f }}, // Elemental Shield
+	{65220, SpecialAttackConfig{ .stat = SpecialStat::Int, .level_divisor = 150.0f, .level_exponent = 1.3f, .atk_bonus_pct_of_damage = 0.5f, .accuracy_pct_of_damage = 0.5f }}, // Pet Synergy
+
+	// --- ROGUE (65300) ---
+	{65300, SpecialAttackConfig{ .primary_weapon_mult = 3.0f, .stat = SpecialStat::Dex, .level_divisor = 120.0f, .level_exponent = 2.1f }}, // Backstab damage
+	{65310, SpecialAttackConfig{ .stat = SpecialStat::Dex, .level_divisor = 500.0f, .level_exponent = 1.1f, .avoidance_pct_of_damage = 0.5f }}, // Smoke Screen
+	{65320, SpecialAttackConfig{ .primary_weapon_mult = 1.0f, .stat = SpecialStat::Dex, .level_divisor = 200.0f, .level_exponent = 1.8f, .ac_debuff_pct_of_damage = 0.1f }}, // Armor Shred
+
+	// --- WIZARD (65400) ---
+	{65400, SpecialAttackConfig{ .stat = SpecialStat::Int, .level_divisor = 60.0f, .level_exponent = 2.0f }}, // Mana Burn
+	{65410, SpecialAttackConfig{ .stat = SpecialStat::Int, .level_divisor = 600.0f, .level_exponent = 1.0f, .mitigation_pct_of_damage = 0.6f }}, // Arcane Barrier
+	{65420, SpecialAttackConfig{ .stat = SpecialStat::Int, .level_divisor = 100.0f, .level_exponent = 1.5f, .spell_dmg_pct_of_damage = 2.0f }}, // Spell Synergy
+
+	// --- SHAMAN (65500) ---
+	{65500, SpecialAttackConfig{ .stat = SpecialStat::Wis, .level_divisor = 120.0f, .level_exponent = 1.7f }}, // Spirit Strike
+	{65510, SpecialAttackConfig{ .stat = SpecialStat::Sta, .level_divisor = 700.0f, .level_exponent = 1.0f, .mitigation_pct_of_damage = 0.7f }}, // Ancestral Guard
+	{65520, SpecialAttackConfig{ .stat = SpecialStat::Wis, .level_divisor = 200.0f, .level_exponent = 1.2f, .stat_bonus_pct_of_damage = 1.5f }}, // Spirit Synergy
+
+	// --- BARD (65600) ---
+	{65600, SpecialAttackConfig{ .primary_weapon_mult = 1.0f, .secondary_weapon_mult = 1.0f, .stat = SpecialStat::Dex, .level_divisor = 200.0f, .level_exponent = 1.8f }}, // Discordant Chord
+	{65610, SpecialAttackConfig{ .stat = SpecialStat::Dex, .level_divisor = 800.0f, .level_exponent = 1.0f, .mitigation_pct_of_damage = 0.5f }}, // Shield of Song
+	{65620, SpecialAttackConfig{ .stat = SpecialStat::Dex, .level_divisor = 150.0f, .level_exponent = 1.3f, .atk_bonus_pct_of_damage = 1.0f }}, // Bard Synergy
+
+	// --- BEASTLORD (65700) ---
+	{65700, SpecialAttackConfig{ .primary_weapon_mult = 1.0f, .secondary_weapon_mult = 1.0f, .stat = SpecialStat::Str, .level_divisor = 150.0f, .level_exponent = 2.0f }}, // Bestial Rage
+	{65710, SpecialAttackConfig{ .stat = SpecialStat::Sta, .level_divisor = 600.0f, .level_exponent = 1.0f, .mitigation_pct_of_damage = 0.6f }}, // Primal Fortitude
+	{65720, SpecialAttackConfig{ .stat = SpecialStat::Str, .level_divisor = 150.0f, .level_exponent = 1.4f, .atk_bonus_pct_of_damage = 0.4f, .accuracy_pct_of_damage = 0.4f }}, // Bestial Synergy
+
+	// --- BERSERKER (65800) ---
+	{65800, SpecialAttackConfig{ .primary_weapon_mult = 2.0f, .stat = SpecialStat::Str, .level_divisor = 100.0f, .level_exponent = 2.2f }}, // Decapitating Strike
+	{65810, SpecialAttackConfig{ .stat = SpecialStat::Sta, .level_divisor = 600.0f, .level_exponent = 1.0f, .mitigation_pct_of_damage = 0.8f }}, // Brute Force
+	{65820, SpecialAttackConfig{ .stat = SpecialStat::Str, .level_divisor = 150.0f, .level_exponent = 1.5f, .crit_chance_pct_of_damage = 1.0f }}, // Berserker Synergy
+
+	// --- PALADIN (65900) ---
+	{65900, SpecialAttackConfig{ .primary_weapon_mult = 1.2f, .stat = SpecialStat::Wis, .level_divisor = 150.0f, .level_exponent = 1.9f }}, // Holy Strike
+	{65910, SpecialAttackConfig{ .stat = SpecialStat::Sta, .level_divisor = 500.0f, .level_exponent = 1.0f, .mitigation_pct_of_damage = 1.2f }}, // Holy Aegis
+	{65920, SpecialAttackConfig{ .stat = SpecialStat::Wis, .level_divisor = 150.0f, .level_exponent = 1.3f, .heal_amt_pct_of_damage = 0.8f }}, // Paladin Synergy
+
+	// --- SHADOWKNIGHT (66000) ---
+	{66000, SpecialAttackConfig{ .primary_weapon_mult = 1.2f, .stat = SpecialStat::Int, .level_divisor = 150.0f, .level_exponent = 1.9f }}, // Unholy Strike
+	{66010, SpecialAttackConfig{ .stat = SpecialStat::Sta, .level_divisor = 500.0f, .level_exponent = 1.0f, .mitigation_pct_of_damage = 1.2f }}, // Unholy Aegis
+	{66020, SpecialAttackConfig{ .stat = SpecialStat::Int, .level_divisor = 120.0f, .level_exponent = 1.5f, .lifetap_pct_of_damage = 0.5f }}, // SK Synergy (Melee Lifetap)
+
+	// --- RANGER (66100) ---
+	{66100, SpecialAttackConfig{ .primary_weapon_mult = 1.5f, .stat = SpecialStat::Dex, .level_divisor = 150.0f, .level_exponent = 2.0f }}, // Predator\'s Strike
+	{66110, SpecialAttackConfig{ .stat = SpecialStat::Sta, .level_divisor = 700.0f, .level_exponent = 1.0f, .mitigation_pct_of_damage = 0.5f }}, // Nature\'s Guard
+	{66120, SpecialAttackConfig{ .stat = SpecialStat::Dex, .level_divisor = 150.0f, .level_exponent = 1.4f, .accuracy_pct_of_damage = 1.5f }}, // Ranger Synergy
+
+	// --- MONK (66200) ---
+	{66200, SpecialAttackConfig{ .primary_weapon_mult = 1.8f, .stat = SpecialStat::Str, .level_divisor = 130.0f, .level_exponent = 2.1f }}, // Flying Kick
+	{66210, SpecialAttackConfig{ .stat = SpecialStat::Sta, .level_divisor = 600.0f, .level_exponent = 1.0f, .mitigation_pct_of_damage = 0.9f }}, // Iron Skin
+	{66220, SpecialAttackConfig{ .stat = SpecialStat::Dex, .level_divisor = 150.0f, .level_exponent = 1.4f, .avoidance_pct_of_damage = 1.0f }}, // Monk Synergy
+
+	// --- CLERIC (66300) ---
+	{66300, SpecialAttackConfig{ .stat = SpecialStat::Wis, .level_divisor = 150.0f, .level_exponent = 1.6f }}, // Celestial Strike
+	{66310, SpecialAttackConfig{ .stat = SpecialStat::Sta, .level_divisor = 600.0f, .level_exponent = 1.0f, .mitigation_pct_of_damage = 0.6f }}, // Divine Guard
+	{66320, SpecialAttackConfig{ .stat = SpecialStat::Wis, .level_divisor = 100.0f, .level_exponent = 1.5f, .heal_amt_pct_of_damage = 2.0f }}, // Cleric Synergy
+
+	// --- DRUID (66400) ---
+	{66400, SpecialAttackConfig{ .stat = SpecialStat::Wis, .level_divisor = 110.0f, .level_exponent = 1.8f }}, // Nature\'s Wrath
+	{66410, SpecialAttackConfig{ .stat = SpecialStat::Sta, .level_divisor = 700.0f, .level_exponent = 1.0f, .mitigation_pct_of_damage = 0.4f }}, // Barkskin
+	{66420, SpecialAttackConfig{ .stat = SpecialStat::Wis, .level_divisor = 120.0f, .level_exponent = 1.5f, .spell_dmg_pct_of_damage = 1.5f }}, // Druid Synergy
+
+	// --- NECROMANCER (66500) ---
+	{66500, SpecialAttackConfig{ .stat = SpecialStat::Int, .level_divisor = 100.0f, .level_exponent = 1.9f }}, // Soul Strike
+	{66510, SpecialAttackConfig{ .stat = SpecialStat::Int, .level_divisor = 600.0f, .level_exponent = 1.0f, .mitigation_pct_of_damage = 0.5f }}, // Death\'s Guard
+	{66520, SpecialAttackConfig{ .stat = SpecialStat::Int, .level_divisor = 120.0f, .level_exponent = 1.6f, .spell_dmg_pct_of_damage = 1.0f, .lifetap_pct_of_damage = 0.2f }}, // Necro Synergy
 };
 
 
@@ -3618,67 +3685,69 @@ int64 Mob::CalcSpellEffectValue(uint16 spell_id, int effect_id, int caster_level
 	auto special_it = kSpecialAttackSpells.find(spell_id);
 	if (special_it != kSpecialAttackSpells.end()) {
 		const auto& cfg = special_it->second;
+		int spa = spells[spell_id].effect_id[effect_id];
+
+		// Lazy calc damage only if needed
+		auto get_dmg = [&]() {
+			return ComputeSpecialAttackDamage(caster, caster_level, cfg);
+		};
+
 		// Damage override
-		if (spells[spell_id].effect_id[effect_id] == SpellEffect::CurrentHPOnce) {
-			int64 dmg = ComputeSpecialAttackDamage(caster, caster_level, cfg);
-
-			// Debug for Heroic Throw / Colossal Smash damage resolution
-			if (spell_id == 65000 || spell_id == 65010) {
-				LogSpells(
-					"SpecialAttackDamage: spell_id [{}], caster [{}], level [{}], effect_index [{}], final_damage [{}]",
-					spell_id,
-					(caster ? caster->GetCleanName() : "nullptr"),
-					caster_level,
-					effect_id,
-					dmg
-				);
+		if (spa == SpellEffect::CurrentHPOnce) {
+			int64 dmg = get_dmg();
+			if (spell_id >= 65000 && spell_id <= 66999) {
+				LogSpells("SpecialAttackDamage: spell_id [{}], caster [{}], final_damage [{}]",
+					spell_id, (caster ? caster->GetCleanName() : "nullptr"), dmg);
 			}
-
-			return -dmg; // detrimental is negative
+			return -dmg;
 		}
-		// AC debuff rider (scaled off damage)
-		if (cfg.ac_debuff_pct_of_damage > 0.0f && spells[spell_id].effect_id[effect_id] == SpellEffect::ArmorClass) {
-			int64 dmg = ComputeSpecialAttackDamage(caster, caster_level, cfg);
-			int32 debuff = static_cast<int32>(dmg * cfg.ac_debuff_pct_of_damage);
-			if (debuff < 1) debuff = 1;
 
-			if (spell_id == 65000 || spell_id == 65010) {
-				LogSpells(
-					"SpecialAttackACDebuff: spell_id [{}], caster [{}], level [{}], effect_index [{}], dmg [{}], ac_debuff [{}]",
-					spell_id,
-					(caster ? caster->GetCleanName() : "nullptr"),
-					caster_level,
-					effect_id,
-					dmg,
-					debuff
-				);
-			}
+		// Riders based on specific SPA and config fields
+		if (cfg.ac_debuff_pct_of_damage > 0.0f && spa == SpellEffect::ArmorClass) {
+			return -static_cast<int32>(get_dmg() * cfg.ac_debuff_pct_of_damage);
+		}
 
-			return -debuff; // debuff AC by this amount
+		if (cfg.mitigation_pct_of_damage > 0.0f && spa == SpellEffect::MeleeMitigation) {
+			int32 val = static_cast<int32>(get_dmg() * cfg.mitigation_pct_of_damage);
+			return std::min(75, val);
 		}
-	}
 
-	// Heroic Throw (custom AA spell 65000): scale damage off STR and weapon
-	// rather than a flat base value so it feels like a thrown melee swing.
-	if (spell_id == 65000
-		&& spells[spell_id].effect_id[effect_id] == SpellEffect::CurrentHPOnce
-		&& caster) {
-		int weapon_dmg = 0;
-		if (caster->IsClient()) {
-			auto inst = caster->CastToClient()->GetInv().GetItem(EQ::invslot::slotPrimary);
-			if (inst && inst->GetItem()) {
-				weapon_dmg = inst->GetItem()->Damage;
-			}
+		if (cfg.spell_dmg_pct_of_damage > 0.0f && spa == SpellEffect::ImprovedDamage) {
+			int32 val = static_cast<int32>(get_dmg() * cfg.spell_dmg_pct_of_damage);
+			return std::min(500, val);
 		}
-		int str = caster->GetSTR();
-		float level_term = std::pow(static_cast<float>(caster_level), CombatBalance::STR_LEVEL_EXPONENT) / CombatBalance::STR_LEVEL_DIVISOR;
-		level_term = std::max(level_term, CombatBalance::STR_MIN_LEVEL_MULTIPLIER);
-		int str_bonus = static_cast<int>(str * level_term);
-		int scaled = weapon_dmg + str_bonus;
-		if (scaled <= 0) {
-			scaled = -base_value; // fallback to defined base damage
+
+		if (cfg.heal_amt_pct_of_damage > 0.0f && spa == SpellEffect::ImprovedHeal) {
+			int32 val = static_cast<int32>(get_dmg() * cfg.heal_amt_pct_of_damage);
+			return std::min(500, val);
 		}
-		return -scaled; // detrimental damage is negative in spell data
+
+		if (cfg.atk_bonus_pct_of_damage > 0.0f && spa == SpellEffect::ATK) {
+			return static_cast<int32>(get_dmg() * cfg.atk_bonus_pct_of_damage);
+		}
+
+		if (cfg.accuracy_pct_of_damage > 0.0f && spa == SpellEffect::Accuracy) {
+			return static_cast<int32>(get_dmg() * cfg.accuracy_pct_of_damage);
+		}
+
+		if (cfg.crit_chance_pct_of_damage > 0.0f && spa == SpellEffect::CriticalHitChance) {
+			int32 val = static_cast<int32>(get_dmg() * cfg.crit_chance_pct_of_damage);
+			return std::min(100, val);
+		}
+
+		if (cfg.lifetap_pct_of_damage > 0.0f && spa == SpellEffect::MeleeLifetap) {
+			int32 val = static_cast<int32>(get_dmg() * cfg.lifetap_pct_of_damage);
+			return std::min(100, val);
+		}
+
+		if (cfg.avoidance_pct_of_damage > 0.0f && (spa == SpellEffect::AvoidMeleeChance || spa == SpellEffect::DodgeChance)) {
+			int32 val = static_cast<int32>(get_dmg() * cfg.avoidance_pct_of_damage);
+			return std::min(50, val);
+		}
+
+		if (cfg.stat_bonus_pct_of_damage > 0.0f && (spa == SpellEffect::AllStats || spa == SpellEffect::STR)) {
+			return static_cast<int32>(get_dmg() * cfg.stat_bonus_pct_of_damage);
+		}
 	}
 
 	if (IsBlankSpellEffect(spell_id, effect_id))

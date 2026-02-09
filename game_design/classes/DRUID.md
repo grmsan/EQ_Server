@@ -74,3 +74,35 @@ Druids wear Leather. They are squishy.
 
 ## 6. Summary
 The Druid is the **High Mobility, High Utility** solo class. You are the master of travel and the open world. You dictate the terms of the engagement. If the fight goes bad, you leave. If the fight goes well, you kill 4 enemies at once.
+
+---
+
+## 7. The Big Three: Core Abilities
+
+These abilities harness the untamed fury of the natural world, scaling with wisdom and environmental connection.
+
+### I. [Offensive] Wrath of the Heavens
+*   **Description:** Calls down a massive strike of lightning followed by a localized hail storm. Deals Fire, Cold, and Magic damage.
+*   **Scaling:** $Damage = (\text{Level}^{2.1} \times 1.3) + (\text{WIS} \times 18)$.
+*   **Cooldown:** 45 Seconds.
+*   **Duration:** Instant / 6 Seconds (Elemental Debuff).
+*   **Solo Use:** Elite burst damage for finishing quad-kites or taking down bosses.
+*   **Group/Synergy:** None (Pure DPS).
+
+### II. [Defensive] Spirit of the Grove
+*   **Description:** The Druid becomes one with the earth. While active, they are immune to Root and Snare, and receive a massive Health Regeneration boost.
+*   **Scaling:** $Regen = (\text{Level}^{1.5} \times 2.0) + (\text{WIS} \times 5)$ per tick.
+*   **Cooldown:** 120 Seconds.
+*   **Duration:** 10 Seconds.
+*   **Solo Use:** Essential for survival when a kite goes wrong or when being chased by multiple enemies.
+*   **Group/Synergy:** None (Survival focus).
+
+### III. [Utility/Synergy] Primal Attunement
+*   **Description:** Elements hum in resonance around the Druid. All allies gain increased **Spell Damage** and **Spell Critical Chance**.
+*   **Scaling:** $SpellDamage = (\text{Level} \times 1.0) + (\text{WIS} \times 0.1)\%$. $CritChance = (\text{Level} \times 0.1)\%$.
+*   **Cooldown:** 90 Seconds.
+*   **Duration:** 12 Seconds.
+*   **Solo Use:** Massive boost to your own Nukes and DoTs.
+*   **Synergy:** **Caster Force Multiplier**. This is the primary damage buff for Wizards, Magicians, Necromancers, and even Shamans. It turns a group of casters into a firing squad.
+*   **Stats:** Scales with **WIS** (Nature's Harmony).
+*   **Synergy Value:** Extreme. Essential for any magic-based group composition.

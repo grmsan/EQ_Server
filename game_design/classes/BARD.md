@@ -74,3 +74,40 @@ Bards wear Plate and move with supernatural grace.
 
 ## 6. Summary
 The Bard is the **Supercharged Soloist**. You are a group of 6 players rolled into one. You have the Haste of an Enchanter, the Regen of a Shaman, the Armor of a Warrior, and the Speed of... well, a Bard.
+
+---
+
+## 6. Summary
+The Bard is the **Supercharged Soloist**. You are a group of 6 players rolled into one. You have the Haste of an Enchanter, the Regen of a Shaman, the Armor of a Warrior, and the Speed of... well, a Bard.
+
+---
+
+## 7. The Big Three: Core Abilities
+
+These abilities represent the peak of musical mastery, turning the Bard into a harmonic epicenter that scales with charisma and level.
+
+### I. [Offensive] Sound & Fury
+*   **Description:** The Bard enters a state of violent musical resonance. Every melee hit releases a sonic shockwave that deals magic damage to the target and all nearby enemies.
+*   **Scaling:** $Damage = (\text{Level}^{2.0} \times 0.8) + (\text{CHA} \times 10)$.
+*   **Cooldown:** 45 Seconds.
+*   **Duration:** 12 Seconds.
+*   **Solo Use:** Massive boost to single-target and area DPS.
+*   **Synergy:** **Magic Damage Multiplier**. This ability significantly boosts the "proc" rate and damage for any weapon-based magic effects, making it powerful when paired with magical melee classes like the Paladin or Shadowknight.
+*   **Stats:** Scales with **CHA** (Sonic Prowess).
+
+### II. [Defensive] Sonic Barrier
+*   **Description:** The Bard weaves a high-frequency wall of sound. For the duration, there is a high chance to deflect all projectiles and reflect 50% of spell damage back to the caster.
+*   **Scaling:** $Reflection = 50\%$. $DeflectChance = (\text{Level} \times 0.5) + (\text{CHA} \times 0.1)\%$.
+*   **Cooldown:** 90 Seconds.
+*   **Duration:** 8 Seconds.
+*   **Solo Use:** Essential for surviving heavy caster mobs or large groups of archers.
+*   **Group/Synergy:** None (Survival focus).
+
+### III. [Utility/Synergy] Virtuoso's Reach
+*   **Description:** The Bard projects a field of perfect harmony. All allies within the aura have the **Effectiveness** of their active buffs and songs increased by a percentage.
+*   **Scaling:** $Multiplier = (\text{Level} \times 0.5) + (\text{CHA} \times 0.1)\%$ increase to buff potency.
+*   **Cooldown:** 120 Seconds.
+*   **Duration:** 12 Seconds.
+*   **Solo Use:** Massive boost to your own songs, effectively doubling your power.
+*   **Synergy:** **Buff Potency Multiplier**. This is the ultimate "force multiplier" for any group. It makes everyone's buffs (Clarity, Haste, AC, Heals) significantly stronger, effectively turning a normal group into a raid-tier force.
+*   **Stats:** Scales with **CHA** (Harmonic Mastery).

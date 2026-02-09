@@ -20,7 +20,8 @@ INSERT INTO spells_new (
     id, name, player_1, you_cast, other_casts, cast_on_other,
     cast_time, buffduration, buffdurationformula, `range`, targettype, skill,
     effectid1, effect_base_value1, effect_limit_value1,
-    goodEffect, TargetAnim
+    effectid2, effect_base_value2, effect_limit_value2,
+    goodEffect, TargetAnim, buffduration, buffdurationformula
 ) VALUES (
     65010,
     'Colossal Smash',
@@ -29,16 +30,19 @@ INSERT INTO spells_new (
     'unleashes a colossal smash!',
     'are smashed by a colossal blow!',
     0,
-    0,
-    0,
     50,
     5,
     51,        -- throwing anim for now; damage is melee-like in code
     79,        -- CurrentHPOnce (damage), base overridden in code via scaler
     -500,      -- placeholder, real damage is computed in zone/spell_effects.cpp
     0,
+    1,         -- ArmorClass (debuff magnitude set in code)
+    -10,       -- base value (scaled in code)
+    0,
     0,         -- detrimental
-    45         -- throw animation; change if you want different visuals
+    45,        -- throw animation; change if you want different visuals
+    60,        -- 6 seconds duration
+    0
 );
 
 -- db_str entries for name/description

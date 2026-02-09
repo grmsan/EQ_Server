@@ -73,3 +73,35 @@ Necromancers wear Cloth, but they have massive health pools to fuel their dark m
 
 ## 6. Summary
 The Necromancer is the **King of Solo**. You have the perfect toolkit: Snare, Fear, Pet, Self-Heal, Mana-Regen, and Feign Death. You can kill anything that can be snared or feared.
+
+---
+
+## 7. The Big Three: Core Abilities
+
+These abilities tap into the ultimate power over life and death, scaling with dark intelligence and level.
+
+### I. [Offensive] Blighted Apocalypse
+*   **Description:** Instantly detonates all active Damage-over-Time effects on the target, dealing their remaining damage plus a massive bonus.
+*   **Scaling:** $BonusDamage = (\text{Level}^{2.1} \times 1.4) + (\text{INT} \times 15)$.
+*   **Cooldown:** 45 Seconds.
+*   **Duration:** Instant.
+*   **Solo Use:** The perfect "finisher" for a target that has been rotted down.
+*   **Group/Synergy:** None (Pure DPS).
+
+### II. [Defensive] Vampiric Embrace
+*   **Description:** The Necromancer enter a state of total vampirism. Every spell that deals damage also heals the Necromancer for a percentage of that damage.
+*   **Scaling:** $HealChance = (\text{Level} \times 1) + (\text{INT} \times 0.1)\%$. $HealAmount = (\text{Level}^{1.5} \times 0.5)$.
+*   **Cooldown:** 120 Seconds.
+*   **Duration:** 12 Seconds.
+*   **Solo Use:** Combined with Lich form, this ensures the Necromancer stays at 100% health even while losing it to mana regen.
+*   **Group/Synergy:** None (Survival focus).
+
+### III. [Utility/Synergy] Soul Shackle
+*   **Description:** Chains the target's soul, weakening its connection to the physical and magical nodes of the world. Reduces the target's **All Resistances** and increases **Damage from Spells** for all allies.
+*   **Scaling:** $ResistReduction = (\text{Level} \times 0.5) + (\text{INT} \times 0.1)$. $DmgBonus = (\text{Level} \times 0.2)\%$.
+*   **Cooldown:** 90 Seconds.
+*   **Duration:** 12 Seconds.
+*   **Solo Use:** Makes your DoTs and Lifetaps impossible to resist.
+*   **Synergy:** **Magic Penetration Multiplier**. This is a massive "Raid-wide" buff. It ensures that every caster's spells land for full damage, even against high-resistance bosses. It pairs exceptionally well with the Druid's `Primal Attunement`.
+*   **Stats:** Scales with **INT** (Necrotic Insight).
+*   **Synergy Value:** High. Makes every caster in the raid feel significantly more powerful.

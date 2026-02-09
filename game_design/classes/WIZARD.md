@@ -73,3 +73,35 @@ Wizards wear Cloth and have the lowest HP in the game.
 
 ## 6. Summary
 The Wizard is the **Artillery Cannon**. You are the fastest traveler and the hardest hitter. Your life is a cycle of "Boom" and "Meditate."
+
+---
+
+## 7. The Big Three: Core Abilities
+
+These abilities channel raw arcane force, scaling with intelligence and level.
+
+### I. [Offensive] Arcane Singularity
+*   **Description:** A massive direct blast of pure energy that deals catastrophic magic damage and reduces the target's **All Resistances** to near zero.
+*   **Scaling:** $Damage = (\text{Level}^{2.2} \times 1.5) + (\text{INT} \times 20)$.
+*   **Cooldown:** 60 Seconds.
+*   **Duration:** 12 Seconds (Resist Shred).
+*   **Solo Use:** The perfect opener for high-end bosses to ensure subsequent nukes land for maximum damage.
+*   **Synergy:** **Magic Penetration Multiplier**. By stripping all resists, the Wizard ensures all casters (Magicians, Necromancers, Druids) deal 100% unmitigated damage.
+*   **Stats:** Scales with **INT** (Arcane Mastery).
+
+### II. [Defensive] Force Shield
+*   **Description:** The Wizard wraps themselves in a kinetic barrier. For the duration, a percentage of incoming damage is absorbed by Mana, and any enemy striking the shield is knocked back.
+*   **Scaling:** $Absorb = 85\%$. $Efficiency = (\text{Level} \times 0.5) + (\text{INT} \times 0.1)\%$ Mana cost reduction.
+*   **Cooldown:** 90 Seconds.
+*   **Duration:** 10 Seconds.
+*   **Solo Use:** Crucial for surviving an accidental pull or a boss's hard-hitting burst.
+*   **Group/Synergy:** None (Survival focus).
+
+### III. [Utility/Synergy] Leyline Attunement
+*   **Description:** The Wizard aligns their soul with the ley lines of the world. Greatly increases **Spell Casting Speed** and provides a high chance for spells to **Twin Cast** (hit twice).
+*   **Scaling:** $Haste = (\text{Level} \times 0.5) + (\text{INT} \times 0.2)\%$. $TwinCast = (\text{Level} \times 0.5) + (\text{INT} \times 0.1)\%$.
+*   **Cooldown:** 120 Seconds.
+*   **Duration:** 12 Seconds.
+*   **Solo Use:** Massive throughput increase for burning down targets.
+*   **Synergy:** **Caster Haste Multiplier**. Highly beneficial in any magic-oriented group, allowing all casters to output damage much faster.
+*   **Stats:** Scales with **INT** (Planar Synchronicity).

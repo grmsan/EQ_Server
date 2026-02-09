@@ -72,3 +72,35 @@ Shadowknights wear Plate, but their true defense is offense.
 
 ## 6. Summary
 The Shadowknight is the **Aggressive Soloist**. You control the fight with Snare and Fear. You survive by stealing life. You have the best "Get Out of Jail Free" card in the game (Feign Death).
+
+---
+
+## 7. The Big Three: Core Abilities
+
+These abilities leverage the Shadowknight's unholy nature, scaling with dark intelligence and level.
+
+### I. [Offensive] Soul Rend
+*   **Description:** A concentrated blast of necrotic energy that deals massive damage and heals the Shadowknight for 150% of the damage dealt.
+*   **Scaling:** $Damage = (\text{Level}^{2.1} \times 1.3) + (\text{INT} \times 12)$.
+*   **Cooldown:** 45 Seconds.
+*   **Duration:** Instant / 6 Seconds (Lifesteal).
+*   **Solo Use:** Primary burst and survival tool.
+*   **Group/Synergy:** Generates massive threat.
+
+### II. [Defensive] Unholy Skin
+*   **Description:** Surrounds the Shadowknight in a flickering shadow shield. Increases AC and provides a chance to absorb damage and convert it into Mana.
+*   **Scaling:** $AC = (\text{Level} \times 4) + (\text{INT} \times 0.4)$. $ManaConvert = (\text{Level} \times 0.1)\%$ of damage absorbed.
+*   **Cooldown:** 120 Seconds.
+*   **Duration:** 12 Seconds.
+*   **Solo Use:** Allows the SK to maintain mana while tanking high-damage enemies.
+*   **Group/Synergy:** None (Personal survival).
+
+### III. [Utility/Synergy] Malevolent Grasp
+*   **Description:** Curses the target, causing its soul to leak out. Every time an ally hits the cursed target with a melee attack, they are healed for a small amount.
+*   **Scaling:** $HealPerHit = (\text{Level} \times 1) + (\text{INT} \times 0.1)$.
+*   **Cooldown:** 60 Seconds.
+*   **Duration:** 12 Seconds.
+*   **Solo Use:** Adds a constant stream of healing to your auto-attacks and pet attacks.
+*   **Synergy:** **Raid Survival Multiplier**. This provides a massive amount of "passive" healing to the entire group/raid, especially for high-attack-speed classes like Monks and Rogues. It eases the pressure on dedicated healers.
+*   **Stats:** Scales with **INT** (Occult Power).
+*   **Synergy Value:** High. Makes the Shadowknight a highly desired "Offensi-Tank".

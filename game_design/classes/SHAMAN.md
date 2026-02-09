@@ -74,3 +74,34 @@ Shamans wear Chain. They are sturdy.
 
 ## 6. Summary
 The Shaman is the **King of Attrition**. You can kill anything that can be slowed. You never run out of mana. You never run out of health. It might take a minute to kill the dragon, but the dragon has absolutely zero chance of killing you.
+
+---
+
+## 7. The Big Three: Core Abilities
+
+These abilities reflect the Shaman's role as a primordial force of nature and spirit, scaling with wisdom and level.
+
+### I. [Offensive] Avatar of War
+*   **Description:** The Shaman imprints the spirit of the ultimate warrior onto an ally. Drastically increases **Attack Speed**, **Accuracy**, and **Double Attack** chance.
+*   **Scaling:** $Accuracy = (\text{Level} \times 2) + (\text{WIS} \times 0.2)$. $Haste = (\text{Level} \times 0.5) + (\text{WIS} \times 0.2)\%$.
+*   **Cooldown:** 60 Seconds.
+*   **Duration:** 12 Seconds.
+*   **Solo Use:** Turns the Shaman and their pet into a melee whirlwind.
+*   **Synergy:** **Melee Multiplier**. This is the single best melee buff in the game. It makes any physical attacker (Warrior, Rogue, Monk, etc.) deal exponentially more damage.
+*   **Stats:** Scales with **WIS** (Spiritual Connection).
+
+### II. [Defensive] Ancestral Guard
+*   **Description:** The Shaman calls upon the spirits of the ancestors to shield an ally. Grants a high-potency **Damage Shield** and a unique "Super-Slow" that affects even slow-immune bosses.
+*   **Scaling:** $Slow = (\text{Level} \times 0.5) + (\text{STA} \times 0.05)\%$. $DS = (\text{Level}^{1.5} \times 0.5) + (\text{WIS} \times 2)$.
+*   **Cooldown:** 90 Seconds.
+*   **Duration:** 8 Seconds.
+*   **Solo Use:** Vital for surviving the hardest-hitting bosses.
+*   **Group/Synergy:** Provides a major defensive layers to the group's tank.
+
+### III. [Utility/Synergy] Spirit Transfuse
+*   **Description:** The Shaman sacrifices their own vitality to restore the spirits of their allies. Converts Shaman HP into **Group Mana Restoration**.
+*   **Scaling:** $ManaRestore = (\text{Level} \times 2) + (\text{WIS} \times 5)$ per ally.
+*   **Cooldown:** 120 Seconds.
+*   **Solo Use:** Instant mana restoration to keep the Shaman's own casting cycle going.
+*   **Synergy:** **Energy Multiplier**. This is a powerful tool for magic-based groups, acting as an "emergency battery" to keep healers and nukers from going dry.
+*   **Stats:** Scales with **WIS** (Sacrificial Wisdom).

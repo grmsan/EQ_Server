@@ -74,3 +74,35 @@ The Magician should never take damage. The Pet takes it all.
 
 ## 6. Summary
 The Magician is the **Army of One**. You are never truly solo. You have a loyal guardian who hits like a truck and takes a beating. You support them with buffs and nukes.
+
+---
+
+## 7. The Big Three: Core Abilities
+
+These abilities represent the peak of elemental command, turning the Magician into a conduit for planar energy.
+
+### I. [Offensive] Elemental Empowerment
+*   **Description:** A massive surge of energy that flows through the Magician into all nearby pets, doubling their strength and precision.
+*   **Scaling:** $PetDamage = (\text{Level} \times 1.5) + (\text{INT} \times 0.1)\%$ increase.
+*   **Cooldown:** 60 Seconds.
+*   **Duration:** 12 Seconds.
+*   **Solo Use:** Massive throughput increase for your pet and swarm pets.
+*   **Synergy:** **Pet Force Multiplier**. This is the single most powerful buff for any pet-using class. In a group with a Necromancer or Beastlord, it turns their pets into absolute monsters.
+*   **Stats:** Scales with **INT** (Magical Potency).
+
+### II. [Defensive] Earth Bond
+*   **Description:** Forges a deep spiritual link with the Earth, allowing the Magician to transfer all incoming damage to their pet.
+*   **Scaling:** $AbsorbChance = 100\%$. $PetResistance = (\text{Level} \times 0.5) + (\text{INT} \times 0.05)\%$.
+*   **Cooldown:** 120 Seconds.
+*   **Duration:** 10 Seconds.
+*   **Solo Use:** Essential survival tool when being attacked directly.
+*   **Group/Synergy:** None (Survival focus).
+
+### III. [Utility/Synergy] Planar Gateway
+*   **Description:** Tears open a rift to the elemental planes, summoning a swarm of temporary elementals and restoring Mana to all pets.
+*   **Scaling:** $SwarmDamage = (\text{Level}^{2.0} \times 1.0) + (\text{INT} \times 10)$.
+*   **Cooldown:** 90 Seconds.
+*   **Duration:** 12 Seconds.
+*   **Solo Use:** Overwhelms the target with numbers and sustains your pet's manapool.
+*   **Synergy:** **Resource Multiplier**. Restoration of pet mana is critical for Beastlords and Shadowknights who rely on their pets' special abilities (Stuns/Lifetaps).
+*   **Stats:** Scales with **INT** (Planar Connection).

@@ -73,3 +73,33 @@ Enchanters are physically frail but magically impregnable.
 
 ## 6. Summary
 The Enchanter is the **High Skill, Infinite Ceiling** solo class. You are as strong as your knowledge of the zone. If you know which mob hits the hardest, you win. If you let your Rune drop or your Charm break without a backup plan, you die.
+
+---
+
+## 7. The Big Three: Core Abilities
+
+These abilities allow the Enchanter to manipulate the flow of battle, scaling with charisma and level.
+
+### I. [Offensive] Echoes of Power
+*   **Description:** The Enchanter amplifies the magical resonance of all allies. Increases **Spell Damage** and **Spell Penetration**.
+*   **Stats:** Scales with **CHA** and **Level**.
+*   **Scaling:** $DamageBonus = (\text{Level} \times 1.0) + (\text{CHA} \times 0.1)\%$
+*   **Cooldown:** 60 Seconds.
+*   **Duration:** 12 Seconds.
+*   **Synergy:** **Magic Penetration**. Reduces enemy Magic Resist by 50. This ensures that Wizards, Magicians, and even the Enchanter's own mind-spells land for full damage.
+
+### II. [Utility] Mental Fracture
+*   **Description:** Crushes the target's will, significantly reducing their **Magic Resistance** and **Attack Speed**.
+*   **Stats:** Scales with **CHA** and **Level**.
+*   **Scaling:** $Slow = (\text{Level} \times 0.5) + (\text{CHA} \times 0.05)\%$.
+*   **Cooldown:** 45 Seconds.
+*   **Duration:** 12 Seconds.
+*   **Synergy:** **Enfeeble**. Stackable with standard slows. Makes high-end bosses hit significantly slower, protecting the tank/pet.
+
+### III. [Defensive] Mind Ward
+*   **Description:** Creates a reactive shield that absorbs all damage and restores Mana upon taking a hit.
+*   **Stats:** Scales with **CHA** and **Level**.
+*   **Scaling:** $Absorb = (\text{Level}^{2.0} \times 1.2) + (\text{CHA} \times 15)$.
+*   **Cooldown:** 120 Seconds.
+*   **Duration:** 8 Seconds.
+*   **Synergy:** None (Pure Survival). Allows the Enchanter to survive a target switch or a charm break.

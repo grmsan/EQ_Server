@@ -71,3 +71,35 @@ Berserkers are squishy for a melee class.
 
 ## 6. Summary
 The Berserker is the **High-Octane Soloist**. You live on the edge. If you crit, you live. If you miss, you die. It is a fast-paced, adrenaline-fueled playstyle.
+
+---
+
+## 7. The Big Three: Core Abilities
+
+These abilities are the cornerstone of the Berserker's power, scaling exponentially with level and stats.
+
+### I. [Offensive] Decapitating Cyclone
+*   **Description:** A massive circular slash that deals physical damage to all enemies in range.
+*   **Scaling:** $Damage = (\text{Level}^{2.1} \times 1.5) + (\text{STR} \times 15)$.
+*   **Cooldown:** 30 Seconds.
+*   **Duration:** Instant / 6 Seconds (Bleed).
+*   **Solo Use:** Primary tool for swarm clearing and high burst.
+*   **Group/Synergy:** None (Pure DPS).
+
+### II. [Defensive] Bloodthirster's Resolve
+*   **Description:** Enters a state where every successful melee hit heals the Berserker.
+*   **Scaling:** $Heal = (\text{Level}^{1.9} \times 0.5) + (\text{STA} \times 2)$ per hit.
+*   **Cooldown:** 90 Seconds.
+*   **Duration:** 12 Seconds.
+*   **Solo Use:** Essential for staying alive while tanking multiple mobs.
+*   **Group/Synergy:** None (Survival focus).
+
+### III. [Utility/Synergy] Savage Exposure
+*   **Description:** A brutal strike that leaves the target vulnerable. Increases the **Melee Critical Damage** of all attackers against that target.
+*   **Scaling:** $Bonus = (\text{Level} \times 0.5) + (\text{DEX} \times 0.05)\%$ increased crit damage.
+*   **Cooldown:** 60 Seconds.
+*   **Duration:** 12 Seconds.
+*   **Solo Use:** Increases your own massive crit numbers.
+*   **Synergy:** **Melee Force Multiplier**. This makes Rogues, Monks, Warriors, and Paladins deal significantly more damage when grouped with a Berserker.
+*   **Stats:** Scales with **DEX** (Precision).
+*   **Synergy Value:** High. Makes every melee class feel more powerful.

@@ -33,6 +33,12 @@ INSERT INTO spells_new (
     effectid1,
     effect_base_value1,
     effect_limit_value1,
+    effectid2,
+    effect_base_value2,
+    effect_limit_value2,
+    effectid3,
+    effect_base_value3,
+    effect_limit_value3,
     goodEffect,
     TargetAnim
 ) VALUES (
@@ -52,7 +58,11 @@ INSERT INTO spells_new (
     -500,                           -- effect_base_value1 (placeholder; overridden in code)
     0,                              -- effect_limit_value1
     1,                              -- effectid2 (ArmorClass debuff, magnitude set in code)
-    0,                              -- effect_base_value2 (placeholder; overridden in code)
+    -5,                             -- effect_base_value2 (placeholder; overridden in code)
+    0,
+    11,                             -- effectid3 (MovementSpeed - Snare)
+    -50,                            -- 50% snare
+    0,
     0,                              -- goodEffect (detrimental)
     0                               -- TargetAnim (animation)
 );

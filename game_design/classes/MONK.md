@@ -72,3 +72,35 @@ Monks wear Leather but have the best defensive skills in the game.
 
 ## 6. Summary
 The Monk is the **Tactical Soloist**. You control the engagement terms with Feign Death. You overwhelm the enemy with speed. You are self-sufficient, requiring no weapons or armor to be effective (though they help).
+
+---
+
+## 7. The Big Three: Core Abilities
+
+These abilities channel the Monk's inner focus into physical perfection, scaling with agility and level.
+
+### I. [Offensive] Falling Star Strike
+*   **Description:** A devastating aerial kick that channels the Monk's momentum into a single point. Deals massive physical damage and can stun.
+*   **Scaling:** $Damage = (\text{Level}^{2.1} \times 1.4) + (\text{AGI} \times 15)$.
+*   **Cooldown:** 30 Seconds.
+*   **Duration:** Instant / 6 Seconds (Stun).
+*   **Solo Use:** Elite burst damage to finish off enemies or interrupt spells.
+*   **Group/Synergy:** None (Pure DPS).
+
+### II. [Defensive] Zen Meditation
+*   **Description:** The Monk enters a state of perfect calm. For a short duration, they become immune to all physical damage but cannot attack. On completion, they are healed.
+*   **Scaling:** $Heal = (\text{Level}^{1.8} \times 1.0) + (\text{AGI} \times 5)$.
+*   **Cooldown:** 120 Seconds.
+*   **Duration:** 6 Seconds.
+*   **Solo Use:** The ultimate "reset" button. Use it when Mend is on cooldown to survive a heavy burst.
+*   **Group/Synergy:** Allows the Monk to "off-tank" a massive hit for the group.
+
+### III. [Utility/Synergy] Vulnerable Points
+*   **Description:** A series of precise strikes that expose the target's weaknesses. Increases the **Critical Hit Chance** of all allies attacking the target.
+*   **Scaling:** $Bonus = (\text{Level} \times 0.2) + (\text{AGI} \times 0.05)\%$ increased crit chance.
+*   **Cooldown:** 60 Seconds.
+*   **Duration:** 12 Seconds.
+*   **Solo Use:** Boosts your own massive flurry of crits.
+*   **Synergy:** **Critical Force Multiplier**. This is powerful for every single class, as it increases the chance for everyone to deal double (or triple) damage. Pairs exceptionally well with the Berserker's `Savage Exposure`.
+*   **Stats:** Scales with **AGI** (Fluidity).
+*   **Synergy Value:** Extreme. Crit chance is the most sought-after stat for end-game DPS.

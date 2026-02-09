@@ -37,4 +37,9 @@ def run_sql_file(filename):
             connection.close()
 
 if __name__ == "__main__":
-    run_sql_file('create_quest.sql')
+    import sys
+    if len(sys.argv) > 1:
+        run_sql_file(sys.argv[1])
+    else:
+        print("Usage: python run_sql.py <filename>")
+        # run_sql_file('create_quest.sql')

@@ -1098,6 +1098,13 @@ public:
 	bool HasAlreadyPurchasedRank(AA::Rank* rank);
 	void ListPurchasedAAs(Client *to, std::string search_criteria = std::string());
 
+	// Dynamic AA Timer Support (Multiclass)
+	void LoadDynamicAATimers();
+	void SaveDynamicAATimers();
+	int32 GetDynamicAATimer(uint32 aa_id);
+	int32 SetDynamicAATimer(uint32 aa_id);
+	std::map<uint32, int32> m_dynamic_aa_timer_cache;
+
 	bool SendGMCommand(std::string message, bool ignore_status = false);
 
 	void RegisterBug(BugReport_Struct* r);

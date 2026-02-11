@@ -261,40 +261,57 @@ INSERT INTO data_buckets (`key`, `value`, `character_id`) VALUES
 - [x] Character creation seeds GestaltClasses bucket
 - [ ] Skills seeding on class add (partially working)
 
-### Phase 2: Spell System (~70% Complete)
-- [ ] Memorize spell checks union-of-classes
-- [ ] Cast spell checks union-of-classes
-- [x] Spell merchant "Show Usable Items" filter (FIXED 2026-01-31)
-- [x] Spell tooltips show correct class levels (FIXED 2026-01-31)
-- [ ] Spellbook UI shows all usable spells
-- [ ] Spell scribe validates class ownership
-- [ ] Mana bar appears when any owned class is caster
+### Phase 2: Spell System (~90% Complete)
+- [x] Memorize spell checks union-of-classes (Verified OP_MemorizeSpell logic)
+- [x] Cast spell checks union-of-classes (Verified CheckFizzle logic)
+- [x] Spell merchant "Show Usable Items" filter (Verified classes_required check)
+- [x] Spell tooltips show correct class levels (Handled by DLL)
+- [x] Spellbook UI shows all usable spells (Handled by DLL)
+- [x] Spell scribe validates class ownership (Verified client_process.cpp logic)
+- [ ] Mana bar appears when any owned class is caster (UI flag needs verification)
 
-### Phase 3: AA System (~30% Complete)
+### Phase 3: AA System (~80% Complete)
 - [ ] AA purchase checks union-of-classes
-- [ ] AA activation checks union-of-classes
-- [ ] AA window displays AAs for all owned classes
-- [ ] Dynamic AA timers (UseDynamicAATimers rule)
+- [x] AA activation checks union-of-classes
+- [x] AA window displays AAs for all owned classes (Server side mask sending implemented)
+- [x] Dynamic AA timers (UseDynamicAATimers rule)
 - [ ] Passive AA effects gated by current ownership
 
-### Phase 4: Skills & Training (~40% Complete)
-- [ ] MaxSkill() uses best owned class cap
-- [ ] Skill trainers allow training for any owned class
-- [ ] Skills window shows all available skills
-- [ ] Skill use validates class ownership at runtime
+### Phase 4: Skills & Training (~90% Complete)
+- [x] MaxSkill() uses best owned class cap
+- [x] Skill trainers allow training for any owned class
+- [ ] Skills window shows all available skills (Relies on DLL override)
+- [x] Skill use validates class ownership at runtime (via CheckIncreaseSkill)
 
 ### Phase 5: Items & Equipment (~20% Complete)
 - [ ] Item class mask checks union-of-classes
 - [ ] Merchant item filtering uses union-of-classes
 - [ ] Equip validation for class-restricted items
+- [ ] Augment validation for class-restricted augs
 
-### Phase 6: Combat & Disciplines (~10% Complete)
-- [ ] Discipline tome learning
-- [ ] Discipline activation gating
-- [ ] Combat ability class restrictions
-- [ ] Pet summoning class restrictions
+### Phase 6: Combat & Disciplines (~95% Complete)
+- [x] Discipline tome learning (Via OP_MemorizeSpell logic)
+- [x] Discipline activation gating (Verified UseDiscipline logic)
+- [x] Combat ability class restrictions (Refactored OPCombatAbility checks)
+- [x] Damage Caps (Refactored DoDamageCaps in zone/attack.cpp)
+- [x] Bard Cast-While-Attacking (Refactored zone/attack.cpp)
 
-### Phase 7: Polish & UX (~0% Complete)
+### Phase 7: Items & Equipment (~90% Complete)
+- [x] Wearing items (Verified SwapItem/IsEquipable)
+- [x] Item Procs (Refactored spell_effects.cpp checks)
+- [x] Consumption Timers (Refactored zone/bonuses.cpp)
+- [ ] Item Clicking (Need to verify HasItemClickClass checks if any)
+
+### Phase 8: AA System (50% Complete)
+- [x] Viewing/Buying AAs (zone/aa.cpp already supports multiclass via SendAATable)
+- [ ] AA Effect stacking (Need to verify if AA bonuses stack properly across classes)
+
+### Phase 9: Experience & Scaling (10% Complete)
+- [x] Hybrid penalties/bonuses (Refactored zone/exp.cpp)
+- [ ] Level Cap / Exp Cap logic (Check strict class level limits)
+- [ ] Item class mask checks union-of-classes
+- [ ] Merchant item filtering uses union-of-classes
+- [ ] Equip validation for class-restricted items
 - [ ] Character select shows all classes
 - [ ] /who displays multiclass abbreviations
 - [ ] #mystats shows multiclass info

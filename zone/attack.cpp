@@ -1470,6 +1470,34 @@ int64 Mob::GetWeaponDamage(Mob *against, const EQ::ItemInstance *weapon_item, in
 	return std::max((int64)0, dmg);
 }
 
+enum DamageCapCat { CapDefault, CapPriest, CapCaster };
+
+static DamageCapCat GetDamageCapCat(Mob* m) {
+	bool mc = m->IsClient() && RuleB(Custom, MulticlassingEnabled);
+	if (!mc) {
+		uint8 c = m->GetClass();
+		if (c == Class::Cleric || c == Class::Druid || c == Class::Shaman) return CapPriest;
+		if (c == Class::Necromancer || c == Class::Wizard || c == Class::Magician || c == Class::Enchanter) return CapCaster;
+		return CapDefault;
+	}
+
+	const uint16 bits = m->CastToClient()->GetClassesBits();
+
+	// Check Default (Melee/Hybrid)
+	// Identities: WAR(1), PAL(3), RNG(4), SHD(5), MNK(7), BRD(8), ROG(9), BST(15), BER(16)
+	const uint16 maskDefault = (1 << (Class::Warrior - 1)) | (1 << (Class::Paladin - 1)) | (1 << (Class::Ranger - 1)) | (1 << (Class::ShadowKnight - 1)) |
+		(1 << (Class::Monk - 1)) | (1 << (Class::Bard - 1)) | (1 << (Class::Rogue - 1)) | (1 << (Class::Beastlord - 1)) | (1 << (Class::Berserker - 1));
+
+	if (bits & maskDefault) return CapDefault;
+
+	// Check Priest
+	// Identities: CLR(2), DRU(6), SHM(10)
+	const uint16 maskPriest = (1 << (Class::Cleric - 1)) | (1 << (Class::Druid - 1)) | (1 << (Class::Shaman - 1));
+	if (bits & maskPriest) return CapPriest;
+
+	return CapCaster;
+}
+
 int64 Mob::DoDamageCaps(int64 base_damage)
 {
 	// this is based on a client function that caps melee base_damage
@@ -1490,97 +1518,35 @@ int64 Mob::DoDamageCaps(int64 base_damage)
 	else if (level >= 70) {
 		cap = 4 * level;
 	}
-	else if (level >= 40) {
-		switch (GetClass()) {
-		case Class::Cleric:
-		case Class::Druid:
-		case Class::Shaman:
-			cap = 80;
-			break;
-		case Class::Necromancer:
-		case Class::Wizard:
-		case Class::Magician:
-		case Class::Enchanter:
-			cap = 40;
-			break;
-		default:
-			cap = 200;
-			break;
-		}
-	}
-	else if (level >= 30) {
-		switch (GetClass()) {
-		case Class::Cleric:
-		case Class::Druid:
-		case Class::Shaman:
-			cap = 26;
-			break;
-		case Class::Necromancer:
-		case Class::Wizard:
-		case Class::Magician:
-		case Class::Enchanter:
-			cap = 18;
-			break;
-		default:
-			cap = 60;
-			break;
-		}
-	}
-	else if (level >= 20) {
-		switch (GetClass()) {
-		case Class::Cleric:
-		case Class::Druid:
-		case Class::Shaman:
-			cap = 20;
-			break;
-		case Class::Necromancer:
-		case Class::Wizard:
-		case Class::Magician:
-		case Class::Enchanter:
-			cap = 12;
-			break;
-		default:
-			cap = 30;
-			break;
-		}
-	}
-	else if (level >= 10) {
-		switch (GetClass()) {
-		case Class::Cleric:
-		case Class::Druid:
-		case Class::Shaman:
-			cap = 12;
-			break;
-		case Class::Necromancer:
-		case Class::Wizard:
-		case Class::Magician:
-		case Class::Enchanter:
-			cap = 10;
-			break;
-		default:
-			cap = 14;
-			break;
-		}
-	}
 	else {
-		switch (GetClass()) {
-		case Class::Cleric:
-		case Class::Druid:
-		case Class::Shaman:
-			cap = 9;
-			break;
-		case Class::Necromancer:
-		case Class::Wizard:
-		case Class::Magician:
-		case Class::Enchanter:
-			cap = 6;
-			break;
-		default:
-			cap = 10; // this is where the 20 damage cap comes from
-			break;
+		DamageCapCat cat = GetDamageCapCat(this);
+
+		if (level >= 40) {
+			if (cat == CapPriest) cap = 80;
+			else if (cat == CapCaster) cap = 40;
+			else cap = 200;
+		}
+		else if (level >= 30) {
+			if (cat == CapPriest) cap = 26;
+			else if (cat == CapCaster) cap = 18;
+			else cap = 60;
+		}
+		else if (level >= 20) {
+			if (cat == CapPriest) cap = 20;
+			else if (cat == CapCaster) cap = 12;
+			else cap = 30;
+		}
+		else if (level >= 10) {
+			if (cat == CapPriest) cap = 12;
+			else if (cat == CapCaster) cap = 10;
+			else cap = 14;
+		}
+		else {
+			if (cat == CapPriest) cap = 9;
+			else if (cat == CapCaster) cap = 6;
+			else cap = 10;
 		}
 	}
-
 	return std::min((int64)cap, base_damage);
 }
 
@@ -1690,15 +1656,19 @@ bool Mob::Attack(Mob* other, int Hand, bool bRiposte, bool IsStrikethrough, bool
 
 	LogCombatDetail("Attacking [{}] with hand [{}] [{}]", other->GetName(), Hand, bRiposte ? "this is a riposte" : "");
 
+	// Multiclass: Casting restriction is based on the spell type (Song vs Spell),
+	// not just the class of the caster. If it's a song, we can attack.
+	bool is_casting_song = IsBardSong(casting_spell_id);
+
 	if (
-		(IsCasting() && GetClass() != Class::Bard && !IsFromSpell)
+		(IsCasting() && !is_casting_song && !IsFromSpell)
 		|| ((IsClient() && CastToClient()->dead) || (other->IsClient() && other->CastToClient()->dead))
 		|| (GetHP() < 0)
 		|| (!IsAttackAllowed(other))
 		|| (IsBot() && GetAppearance() == eaDead)
 		) {
 		LogCombat("Attack cancelled, invalid circumstances");
-		return false; // Only bards can attack while casting
+		return false; // Only bards can attack while casting (songs)
 	}
 
 	if (DivineAura() && !CastToClient()->GetGM()) { //cant attack while invulnerable unless your a gm

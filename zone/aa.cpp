@@ -897,6 +897,69 @@ Mob *SwarmPet::GetOwner()
 }
 
 //New AA
+// Dynamic AA Timer Support (Multiclass)
+void Client::LoadDynamicAATimers() {
+	m_dynamic_aa_timer_cache.clear();
+	std::string data = GetBucket("DynamicAATimers");
+	if (data.empty()) return;
+
+	auto entries = Strings::Split(data, ',');
+	for (const auto& entry : entries) {
+		auto parts = Strings::Split(entry, ':');
+		if (parts.size() == 2) {
+			uint32 aa_id = std::stoul(parts[0]);
+			int32 timer_id = std::stoi(parts[1]);
+			m_dynamic_aa_timer_cache[aa_id] = timer_id;
+		}
+	}
+}
+
+void Client::SaveDynamicAATimers() {
+	std::string data;
+	for (const auto& [aa_id, timer_id] : m_dynamic_aa_timer_cache) {
+		if (!data.empty()) data += ",";
+		data += std::to_string(aa_id) + ":" + std::to_string(timer_id);
+	}
+	SetBucket("DynamicAATimers", data);
+}
+
+int32 Client::GetDynamicAATimer(uint32 aa_id) {
+	if (m_dynamic_aa_timer_cache.empty()) {
+		LoadDynamicAATimers();
+	}
+	auto it = m_dynamic_aa_timer_cache.find(aa_id);
+	if (it != m_dynamic_aa_timer_cache.end()) {
+		return it->second;
+	}
+	return 0;
+}
+
+int32 Client::SetDynamicAATimer(uint32 aa_id) {
+	if (m_dynamic_aa_timer_cache.empty()) {
+		LoadDynamicAATimers();
+	}
+
+	// Find unused timer ID starting from 1999 down
+	// pTimerAAEnd is 2999, Start is 1000.
+	// spell_type is what we return. pTimerAAStart is added later by system.
+	// Max spell_type = 1999.
+	for (int32 t = 1999; t >= 1000; --t) {
+		bool used = false;
+		for (const auto& [id, timer] : m_dynamic_aa_timer_cache) {
+			if (timer == t) {
+				used = true;
+				break;
+			}
+		}
+		if (!used) {
+			m_dynamic_aa_timer_cache[aa_id] = t;
+			SaveDynamicAATimers();
+			return t;
+		}
+	}
+	return 0; // Failed to find slot
+}
+
 void Client::SendAlternateAdvancementTable() {
 	for(auto &aa : zone->aa_abilities) {
 		uint32 charges = 0;
@@ -930,19 +993,18 @@ void Client::SendAlternateAdvancementRank(int aa_id, int level) {
 	auto outapp = new EQApplicationPacket(OP_SendAATable, size);
 	AARankInfo_Struct *aai = (AARankInfo_Struct*)outapp->pBuffer;
 
-	// THJServer parity: Server does class filtering, then tells client "all classes can use"
-	// to prevent client-side double-filtering based on base class.
-	// AA classes are left-shifted by 1 from DB (see LoadAlternateAdvancementAbilities).
-	// GetClassesBits() uses standard format, so we right-shift to compare.
+	// THJServer parity: AA classes are left-shifted by 1 from DB.
+	// 0xFFFFFFF (28 bits) covers all classes.
 	if (RuleB(Custom, MulticlassingEnabled)) {
 		const uint32 aa_classes_normalized = ability->classes >> 1;
+		
+		// If check passes, send "All Classes" mask
 		if (aa_classes_normalized & GetClassesBits()) {
-			// Multiclass can use this AA - tell client "all classes" to bypass client filtering
-			aai->classes = 0xFFFFFFFF;
+			aai->classes = 0xFFFFFFF;
 		} else {
-			// No multiclass match - skip this AA
-			safe_delete(outapp);
-			return;
+			// If check fails, send original mask (client filters it out)
+			// This matches THJServer behavior and ensures consistent deletion logic
+			aai->classes = ability->classes;
 		}
 	} else {
 		// Non-multiclass: use original single-class check
@@ -969,7 +1031,7 @@ void Client::SendAlternateAdvancementRank(int aa_id, int level) {
 	aai->spell = rank->spell;
 	aai->spell_type = rank->spell_type;
 	aai->spell_refresh = rank->recast_time;
-	// aai->classes already set above
+	// aai->classes set above
 	aai->level_req = rank->level_req;
 	aai->current_level = level;
 	aai->max_level = ability->GetMaxLevel(this);
@@ -987,6 +1049,19 @@ void Client::SendAlternateAdvancementRank(int aa_id, int level) {
 	aai->grant_only = ability->grant_only;
 	aai->total_effects = rank->effects.size();
 	aai->total_prereqs = rank->prereqs.size();
+
+	// Dynamics AA Timers
+	if (RuleB(Custom, UseDynamicAATimers)) {
+		if (aai->classes == 0xFFFFFFF && rank->base_ability->first->recast_time > 0 && !rank->base_ability->grant_only) {
+			int32 dyn_timer = GetDynamicAATimer(rank->base_ability->id);
+			if (dyn_timer == 0) {
+				dyn_timer = SetDynamicAATimer(rank->base_ability->id);
+			}
+			if (dyn_timer > 0) {
+				aai->spell_type = dyn_timer;
+			}
+		}
+	}
 
 	outapp->SetWritePosition(sizeof(AARankInfo_Struct));
 	for(auto &effect : rank->effects) {
@@ -1355,9 +1430,22 @@ void Client::ActivateAlternateAdvancementAbility(int rank_id, int target_id) {
 		return;
 	}
 
+	// Dynamic AA Timer support (Multiclass)
+	int32 timer_id = rank->spell_type;
+	if (RuleB(Custom, UseDynamicAATimers) && RuleB(Custom, MulticlassingEnabled)) {
+		// If we would have sent a dynamic timer, use it here too
+		// Check if we have one assigned
+		if (rank->base_ability->first && rank->base_ability->first->recast_time > 0 && !rank->base_ability->grant_only) {
+			int32 dyn = GetDynamicAATimer(ability->id);
+			if (dyn > 0) {
+				timer_id = dyn;
+			}
+		}
+	}
+
 	//check cooldown
-	if (!p_timers.Expired(&database, rank->spell_type + pTimerAAStart, false)) {
-		uint32 aaremain = p_timers.GetRemainingTime(rank->spell_type + pTimerAAStart);
+	if (!p_timers.Expired(&database, timer_id + pTimerAAStart, false)) {
+		uint32 aaremain = p_timers.GetRemainingTime(timer_id + pTimerAAStart);
 		uint32 aaremain_hr = aaremain / (60 * 60);
 		uint32 aaremain_min = (aaremain / 60) % 60;
 		uint32 aaremain_sec = aaremain % 60;
@@ -1372,12 +1460,13 @@ void Client::ActivateAlternateAdvancementAbility(int rank_id, int target_id) {
 		}
 
 		LogInfo(
-			"AA DEBUG: cooldown not expired for aa_id [{}] rank_id [{}] (client [{}], remaining [{}]s, spell_type [{}])",
+			"AA DEBUG: cooldown not expired for aa_id [{}] rank_id [{}] (client [{}], remaining [{}]s, spell_type [{}], dynamic_timer_id [{}])",
 			ability->id,
 			rank_id,
 			GetCleanName(),
 			aaremain,
-			rank->spell_type
+			rank->spell_type,
+			timer_id
 		);
 
 		return;
@@ -1389,12 +1478,13 @@ void Client::ActivateAlternateAdvancementAbility(int rank_id, int target_id) {
 	}
 
 	LogInfo(
-		"AA DEBUG: proceeding to cast aa_id [{}] rank_id [{}], spell [{}], spell_type [{}], timer_duration [{}] for client [{}]",
+		"AA DEBUG: proceeding to cast aa_id [{}] rank_id [{}], spell [{}], spell_type [{}], timer_duration [{}], dynamic_timer_id [{}] for client [{}]",
 		ability->id,
 		rank_id,
 		rank->spell,
 		rank->spell_type,
 		timer_duration,
+		timer_id,
 		GetCleanName()
 	);
 
@@ -1405,7 +1495,7 @@ void Client::ActivateAlternateAdvancementAbility(int rank_id, int target_id) {
 		MessageString(Chat::SpellFailure, SNEAK_RESTRICT);
 		return;
 	}
-	//
+	
 	// Modern clients don't require pet targeted for AA casts that are ST_Pet
 	if (spells[rank->spell].target_type == ST_Pet || spells[rank->spell].target_type == ST_SummonedPet)
 		target_id = GetPetID();
@@ -1447,7 +1537,7 @@ void Client::ActivateAlternateAdvancementAbility(int rank_id, int target_id) {
 				spells[rank->spell].resist_difficulty,
 				false,
 				-1,
-				rank->spell_type + pTimerAAStart,
+				timer_id + pTimerAAStart,
 				timer_duration,
 				false,
 				rank->id
@@ -1472,7 +1562,7 @@ void Client::ActivateAlternateAdvancementAbility(int rank_id, int target_id) {
 				-1,
 				0,
 				-1,
-				rank->spell_type + pTimerAAStart,
+				timer_id + pTimerAAStart,
 				timer_duration,
 				nullptr,
 				rank->id

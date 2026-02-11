@@ -127,11 +127,16 @@ uint64 Client::CalcEXP(uint8 consider_level, bool ignore_modifiers) {
 		}
 
 		if (RuleB(Character, UseRaceClassExpBonuses)) {
-			if (
-				GetClass() == Class::Warrior ||
-				GetClass() == Class::Rogue ||
-				GetBaseRace() == Race::Halfling
-			) {
+			bool has_bonus = (GetBaseRace() == Race::Halfling);
+			if (!has_bonus) {
+				if (RuleB(Custom, MulticlassingEnabled)) {
+					has_bonus = HasClass(Class::Warrior) || HasClass(Class::Rogue);
+				} else {
+					has_bonus = (GetClass() == Class::Warrior || GetClass() == Class::Rogue);
+				}
+			}
+
+			if (has_bonus) {
 				total_modifier *= 1.05;
 			}
 		}

@@ -1,304 +1,382 @@
-# Multiclass Test Tracker
+# Multiclass Test Tracker & Test Plan
 
-**Last Updated:** 2026-01-31
-**Master Technical Document:** [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
-**Port Checklist:** [PORT_CHECKLIST.md](PORT_CHECKLIST.md)
+**Status**: Active Testing
+**Date**: 2026-02-10
+**Technical Docs**: [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
 
----
+This document contains detailed step-by-step procedures for every verification point of the Multiclass system.
 
-## Setup & Quick Reference
+**Instructions**:
 
-### Test Character
-
-- Use `#addclass <class_id>` to add a second class (e.g., `#addclass 6` for Druid)
-- Use `#addclass list` to see all classes with status (X = enabled)
-- Use `#multiclassdiag` for full diagnostic dump
-- Class IDs: 1=WAR, 2=CLR, 3=PAL, 4=RNG, 5=SHD, 6=DRU, 7=MNK, 8=BRD, 9=ROG, 10=SHM, 11=NEC, 12=WIZ, 13=MAG, 14=ENC, 15=BST, 16=BER
-
-### Log Locations
-
-| Log Type | Location | How to Enable |
-|----------|----------|---------------|
-| Server multiclass debug | `logs/zone/Custom_MulticlassDebug.log` | Already enabled via LogSys |
-| DLL debug log | `<RoF2 client folder>/dinput8_debug.log` | Automatic when DLL loaded |
-| Server zone log | `logs/zone/zone_*.log` | Standard zone logging |
-
-### Debug Commands
-
-- `#addclass list` - Shows all 16 classes with X for enabled ones
-- `#multiclassdiag` - Full multiclass state dump (bitmask, EdgeStat, etc.)
-- `#multiclassdiag refresh` - Force resend EdgeStatLabel to client DLL
-- `#logs set Custom:MulticlassDebug 3` - Enable multiclass debug logging (level 3 = detail)
-
-### Quick Test Commands
-
-```
-#addclass 13              # Add Magician class
-#addclass list            # See all classes (X = enabled)
-#multiclassdiag           # Full diagnostic dump
-#multiclassdiag refresh   # Force resend EdgeStatLabel to DLL
-```
+1. Execute the **Procedure** steps in-game.
+2. Mark **[x] Pass** or **[x] Fail**.
+3. Add notes in the **Comments** section if issues arise.
 
 ---
 
-## Current Bugs / Observations
+## 🛠️ Global Testing Commands
 
-### Fixed
-
-- [x] Melee Progression: Berserker Frenzy and Monk special attacks (Flying Kick, etc) use bitmask logic ([special_attacks.cpp](special_attacks.cpp)).
-- [x] Defense Scaling: Any character with Warrior/Knight bits receives native AC softcaps and return scalars ([attack.cpp](attack.cpp)).
-- [x] Spell Casting: Bard song scaling/casting level logic uses bitmask ([spells.cpp](spells.cpp)).
-- [x] Tradeskills: Alchemy and Poison making unlocked for any character with Shaman/Rogue bits ([tradeskills.cpp](tradeskills.cpp)).
-- [x] Base Stats: HP/Endurance regeneration now uses the "Best of Class" union logic ([client_mods.cpp](client_mods.cpp)).
-- [x] Mixed-Class Procs: ShadowKnight "Vampiric Embrace" and similar procs now trigger for multiclass SKs ([spell_effects.cpp](spell_effects.cpp)).
-- [x] Item Click/Bard UI: Casting logic for item clicks respects Bard rules for multiclass Bards ([client_packet.cpp](client_packet.cpp)).
-- [x] Skill Caps/Training: Skills learn at the earliest level and cap at the highest value among all owned classes ([skill_manager.cpp](skill_manager.cpp)).
-- [x] Spell merchant "Show usable items": Fixed RVA `0x002A6D26` whitelist in DLL for proper filtering.
-- [x] Autoskill System: Complete port of `#autoskill` command and combat trigger loop (Check `attack_autoskill_timer` in `client_process.cpp`).
-
-### Open
-
-- [ ] DEX Twincast Scaling: Verify if high DEX grants twincast chance for any multiclass bit (Refactor pending in [mob.cpp](mob.cpp)).
-- [ ] Spell vendor details: shows base-class label for aggregated spells (e.g., `RNG(2)` instead of `MAG(2)`), plus `255` entries for unrelated classes.
-- [ ] AA window: missing AAs for added classes (and sometimes missing even base-class AAs).
-- [ ] Skills window: added-class skills (e.g., Mend/Tracking) inconsistent / missing.
-- [ ] Item class masks: items that are `ALL` can appear restricted to the owned class trio (verify class mask logic and client display).
+- `#addclass <id>` : Add a class (Ids: 1=WAR, 2=CLR, 3=PAL, 4=RNG, 5=SHD, 6=DRU, 7=MNK, 8=BRD, 9=ROG, 10=SHM, 11=NEC, 12=WIZ, 13=MAG, 14=ENC, 15=BST, 16=BER)
+- `#removeclass <id>`
+- `#addclass list`
+- `#level 60` (Recommended for most tests)
+- `#setskill <id> <value>`
 
 ---
 
-## Smoke Tests (run after each port batch)
+## 1. Core Logic & Persistence
 
-### A) Class Bits / Persistence
+### 1.1 Add/Remove Class
 
-- [ ] Create new character; run `#multiclassdiag` and verify `GestaltClasses` bucket exists and matches base class bit.
-- [ ] `#addclass <id>` then `#multiclassdiag` shows bit set; relog and verify it persists.
-- [ ] `#removeclass <id>` then `#multiclassdiag` shows bit cleared; relog and verify it persists.
+**Goal**: Ensure bitmask updates correctly on command.
+**Procedure**:
 
-### B) UI Sync (RoF2 + DLL)
+1. Create a character or log in.
+2. Type `#addclass 1` (Warrior).
+3. Type `#addclass list` -> Verify "Warrior" is listed.
+4. Type `#removeclass 1`.
+5. Type `#addclass list` -> Verify "Warrior" is NOT listed.
+**Status**: [ ] Pass  [ ] Fail
+**Comments**: __________________________________________________
 
-- [ ] On login, `#multiclassdiag refresh` and confirm `EdgeStatLabel` contains the expected class bitmask.
-- [ ] HP/mana/end bars behave correctly when adding/removing caster classes.
+### 1.2 Persistence
 
-### C) Spells (scribe + mem + cast)
+**Goal**: Ensure class bits survive a session change.
+**Procedure**:
 
-- [ ] Add a caster class, scribe a low-level spell, memorize it (bar completes), then cast it.
-- [ ] Remove that class and verify the spell fails cleanly (soft-locked) without client hangs.
+1. `#addclass 1` (Warrior) and `#addclass 2` (Cleric).
+2. Type `#camp` to return to character select.
+3. Log back in to the world.
+4. Type `#addclass list`.
+**Expected**: Both Warrior and Cleric are still listed.
+**Status**: [ ] Pass  [ ] Fail
+**Comments**: __________________________________________________
 
-### D) Spell Merchant / "Show Usable Items"
+### 1.3 Client Sync (Login)
 
-- [x] With a multiclass that includes a caster class, toggle "Show usable items".
-  - ✓ Includes spells for any owned caster class.
-  - ✓ Hides spells for non-owned caster classes.
-  - ✓ Required levels display correctly (not all `255`).
+**Goal**: Ensure UI connects correctly on login.
+**Procedure**:
 
-### E) AAs
+1. Ensure your character has a mana-using class (e.g. `#addclass 12` Wizard).
+2. Camp and log in.
+3. Look at the Player Window.
+**Expected**: You should see a Mana Bar (blue bar) even if your base class is Warrior.
+**Status**: [ ] Pass  [ ] Fail
+**Comments**: __________________________________________________
 
-- [ ] Open AA window on single-class; confirm baseline AAs appear.
-- [ ] Add a class with known class-only AAs; confirm they appear.
-- [ ] Remove that class; confirm AAs are hidden/blocked per design.
+### 1.4 Hot-Reload
 
-### F) Skills
+**Goal**: Ensure UI updates immediately without zoning.
+**Procedure**:
 
-- [ ] Add Monk; verify Mend appears and can be used.
-- [ ] Add Ranger; verify Tracking appears and can be used.
-- [ ] Remove class and confirm skills fail/are gated (value may remain stored).
-
-### G) Autoskill System (Automatic Specials)
-
-- [ ] `#autoskill list` shows available skills for current class bitmask.
-- [ ] `#autoskill <skill> enable` sets bucket and message correctly.
-- [ ] Auto-attacking triggers the special attack on the `attack_autoskill_timer` (1s intervals).
-- [ ] Monk "ladder" logic: verifies Kick -> Flying Kick auto-progression at level 30.
-- [ ] Relogging persists enabled autoskills (buckets).
-
----
-
-## Detailed User Verification Procedures
-
-Use these procedures to verify the core multiclass logic. Replace `<id>` with your character ID or use on yourself.
-
-### 1. Verification: Best-of-Class Melee Special
-
-**Goal**: Verify a Monk/Warrior uses Flying Kick instead of regular Kick.
-
-1. `#level 60`
-2. `#addclass 1` (Warrior)
-3. `#addclass 7` (Monk)
-4. `#setskill 38 400` (Skill: Flying Kick)
-5. `#setskill 30 400` (Skill: Kick)
-6. `#spawn 10` (Any mob)
-7. Turn on auto-attack.
-8. **Expected**: You should see "You try to flying kick..." in the combat log. If you remove the Monk bit (`#removeclass 7`), you should revert to "You try to kick...".
-
-### 2. Verification: Defensive Parity (AC Returns)
-
-**Goal**: Verify a Wizard/Warrior gains Warrior-tier AC scaling.
-
-1. `#level 60`
-2. `#addclass 12` (Wizard)
-3. `#addclass 1` (Warrior)
-4. Equip high-AC plate armor.
-5. Note your "Total AC" in inventory.
-6. `#removeclass 1` (Warrior bit gone)
-7. **Expected**: Total AC should drop significantly (Wizards have a 0.20 return scalar, Warriors have 0.35). Restoring the bit (`#addclass 1`) should bring the AC back up.
-
-### 3. Verification: Skill Training Union
-
-**Goal**: Verify a Ranger can learn Kick at Level 1 (via Warrior bit).
-
-1. Create a fresh Level 1 character (e.g. Ranger).
-2. `#addclass 4` (Confirm Ranger)
-3. `#addclass 1` (Add Warrior)
-4. `#setskill 30 1` (Try to set Kick)
-5. **Expected**: The skill should successfully be set to 1. Without the Warrior bit, a Level 1 Ranger cannot train Kick (requires Level 5 natively).
-
-### 4. Verification: Tradeskill Unlocking
-
-**Goal**: Verify a Cleric/Rogue can create poisons.
-
-1. `#level 60`
-2. `#addclass 2` (Cleric)
-3. `#addclass 9` (Rogue)
-4. `#setskill 56 200` (Skill: Make Poison)
-5. Obtain poison components and a Mortar & Pestle.
-6. Attempt a combine.
-7. **Expected**: The combine should proceed. Without the Rogue bit, the character would be blocked from the "Make Poison" skill.
-
-### 5. Verification: Bard Song Scaling
-
-**Goal**: Verify a Paladin/Bard scales songs correctly.
-
-1. `#level 60`
-2. `#addclass 3` (Paladin)
-3. `#addclass 8` (Bard)
-4. Memorize a low-level Bard song (e.g. *Selo's Accelerando*).
-5. Cast the song.
-6. **Expected**: The buff duration and movement speed should scale for Level 60. Without the multiclass logic, the Bard level would default to 1, resulting in a 1-tick duration.
-### 6. Verification: Autoskill & Monk Special Ladder
-
-**Goal**: Prove that the server triggers specialized attacks automatically during auto-attack.
-
-1. `#level 60`
-2. `#addclass 7` (Monk)
-3. `#addclass 1` (Warrior)
-4. `#setskill 30 400` (Kick)
-5. `#setskill 26 400` (Flying Kick)
-6. `#autoskill flying kick enable`
-7. Turn on auto-attack vs a target.
-8. **Expected**: You should see "You try to flying kick..." messages automatically every second (assuming you are facing the target).
-9. `#autoskill kick enable`
-10. **Expected**: Because of the Monk bit, enabling "Kick" should still trigger "Flying Kick" in the combat log due to the `DoClassAttacks` ladder logic.
-11. `#removeclass 7` (Remove monk)
-12. **Expected**: Automatic attacks with `#autoskill kick` should now say "You try to kick..." (Warrior bit only).
----
-
-## Diagnostics to Capture When Something Breaks
-
-- [ ] Client `dinput8_debug.log` around the action (vendor list open, trainer list open, AA window open).
-- [ ] Zone console around add/remove class and any packet sends.
-- [ ] `#multiclassdiag` output before and after the action.
+1. Start as a Pure Warrior (No Mana Bar).
+2. Type `#addclass 12` (Wizard).
+**Expected**: The Mana Bar should appear instantly on your screen.
+**Status**: [ ] Pass  [ ] Fail
+**Comments**: __________________________________________________
 
 ---
 
-## Equipment & Item Use Tests
+## 2. Spells & Casting
 
-### G) Item Equipping (multiclass)
+### 2.1 Hybrid Scribing
 
-- [ ] Equip a Cleric-only item on a Ranger/Warrior multiclass → should fail immediately in UI (red text/icon).
-- [ ] Equip a Magician-only item on a Warrior/Mage multiclass → should succeed and show valid in UI.
-- [ ] Item Tooltip: Verify that a Cleric-only item shows "Classes: CLR" but indicates "(Can Equip)" status correctly based on multiclass bits.
+**Goal**: Scribe a spell not available to base class.
+**Procedure**:
 
-### H) Combat Effectiveness (Best-of-Class)
+1. Be a Warrior (Base).
+2. `#addclass 12` (Wizard). `#level 50`.
+3. `#scribe 12 10` (Scribe 'Frost Shock' or similar Level 12 spell to valid slot).
+   *Alternatively*: Give spell scroll `Item ID: 15212` (Frost Shock) and click to learn.
+**Expected**: System message "You have finished scribing...". Spell appears in book.
+**Status**: [ ] Pass  [ ] Fail
+**Comments**: __________________________________________________
 
-- [ ] Equip Warrior/Wizard; confirm AC Softcap is high (Warrior tier) vs low (Wizard tier).
-- [ ] Equip Monk/Warrior; confirm Flying Kick triggers during auto-attack if leveled.
-- [ ] Equip Rogue/Mage; confirm "Hide" result uses Rogue level evasion logic.
-- [ ] Check Shaman/Rogue; confirm Alchemy and Poison combines are successful at low level.
-- [ ] Check Bard/Warrior; confirm songs scale with player level/instruments correctly.
+### 2.2 Hybrid Casting
 
----
+**Goal**: Cast a spell from a secondary class.
+**Procedure**:
 
-## Spell Damage & Heal Bonus Tests
+1. Memorize the spell from Test 2.1.
+2. Target self or valid target.
+3. Cast the spell.
+**Expected**: Spell casts, consumes mana, and applies effect.
+**Status**: [ ] Pass  [ ] Fail
+**Comments**: __________________________________________________
 
-### I) Spell Damage Bonus (multiclass)
+### 2.3 Bard Song Casting
 
-- [ ] Cast a Ranger nuke on Ranger/Mage → item SpellDmg should apply if spell level is within 5 of caster level.
-- [ ] Cast a Mage nuke on Ranger/Mage → item SpellDmg should apply (tests multiclass best-level lookup).
-- [ ] Cast a Wizard nuke (if not owned) on Ranger/Mage → SpellDmg should NOT apply (class not owned).
+**Goal**: Verify access to Bard songs.
+**Procedure**:
 
-### J) Heal Bonus (multiclass)
+1. Base Class: Paladin.
+2. `#addclass 8` (Bard). `#level 50`.
+3. `#scribe 120` (Selo's Accelerando). Memorize it.
+4. Cast Selo's Accelerando.
+**Expected**: Cast completes, buff icon appears. Duration should be > 1 tick (scaled to Level 50).
+**Status**: [ ] Pass  [ ] Fail
+**Comments**: __________________________________________________
 
-- [ ] Cast a Druid heal on Ranger/Druid → item HealAmt should apply.
-- [ ] Cast a Cleric heal (if not owned) on Ranger/Druid → HealAmt should NOT apply.
+### 2.4 Bard Song (Melee Checking)
 
-### K) Clairvoyance Mana Return (multiclass)
+**Goal**: Verify songs do not stop melee combat (Cast-While-Moving logic).
+**Procedure**:
 
-- [ ] Cast a spell with Clairvoyance item bonus on multiclass → should return mana based on best spell level.
+1. Engage a combat dummy/target with Auto-Attack ON.
+2. Cast Selo's Accelerando (Bard Song).
+**Expected**: Auto-attack continues swinging *during* the cast bar. Combat does not stop.
+**Status**: [ ] Pass  [ ] Fail
+**Comments**: __________________________________________________
 
----
+### 2.5 Standard Casting (Melee Checking)
 
-## Discipline & Combat Tome Tests
+**Goal**: Verify standard spells DO stop melee combat.
+**Procedure**:
 
-### L) Discipline Use (multiclass)
+1. `#addclass 12` (Wizard). Memorize a nuke (e.g., `#scribe 12 10`).
+2. Engage target with Auto-Attack ON.
+3. Cast the Nuke.
+**Expected**: Auto-attack stops immediately when casting begins to prevent "Battle Mage" exploitation unless intended.
+**Status**: [ ] Pass  [ ] Fail
+**Comments**: __________________________________________________
 
-- [ ] Use a Warrior discipline on Ranger/Warrior → should activate.
-- [ ] Use a Monk discipline (if not owned) on Ranger/Warrior → should fail with class error.
+### 2.6 Group Targets
 
----
+**Goal**: Verify group checks recognize the caster.
+**Procedure**:
 
-## Spell Focus Effect Tests
-
-### M) Focus Effect Level Limits (multiclass)
-
-- [ ] Equip a focus item with `LimitMaxLevel` → should use best (lowest) spell level across owned classes.
-- [ ] Equip a focus item with `LimitMinLevel` → should pass if ANY owned class meets the minimum.
-
----
-
-## Fixed Functions (Server-Side)
-
-The following functions have been updated to support multiclass (GetClassesBits):
-
-### zone/spells.cpp
-
-- [x] `CheckItemRaceClassDietyRestrictionsOnCast()` - Item click validation now uses GetClassesBits()
-- [x] `CheckFizzle()` - Already had multiclass support via GetBestSpellLevelForMulticlass()
-
-### zone/effects.cpp
-
-- [x] `GetActSpellDamage()` - SpellDmg bonus now uses MeetsSpellLevelForBonusDamage() helper
-- [x] `GetActDoTDamage()` - DOT damage bonus now uses MeetsSpellLevelForBonusDamage() helper
-- [x] `GetActSpellHealing()` - HealAmt bonus now uses MeetsSpellLevelForBonusDamage() helper
-- [x] `GetActSpellCost()` - Clairvoyance mana return now uses MeetsSpellLevelForBonusDamage() helper
-- [x] `UseDiscipline()` - Discipline class check now uses GetClassesBits() loop
-
-### zone/spell_effects.cpp
-
-- [x] `CalcFocusEffect()` - LimitMaxLevel now uses GetBestSpellLevelForFocus() helper
-- [x] `CalcFocusEffect()` - LimitMinLevel now uses GetBestSpellLevelForFocus() helper
-- [x] `GetFocusEffect()` - LimitMaxLevel now uses GetBestSpellLevelForFocus() helper
-- [x] `GetFocusEffect()` - LimitMinLevel now uses GetBestSpellLevelForFocus() helper
-
-### zone/mob.cpp
-
-- [x] `GetDecayEffectValue()` - Spell level for decay now uses GetBestSpellLevelForMob() helper
-
-### zone/inventory.cpp
-
-- [x] `SwapItem()` calls - Already updated to pass GetClassesBits() for item validation
-
-### zone/bonuses.cpp
-
-- [x] Item equip class checks - Already uses GetClassesBits() at lines 288 and 549
-
-### zone/aa.cpp
-
-- [x] AA validation - Already has multiclass support via MulticlassingEnabled rule check
+1. Form a group with another player or bot.
+2. Cast a Group Buff for a secondary class (e.g. Cleric `Heroism`).
+**Expected**: Buff lands on you and group members.
+**Status**: [ ] Pass  [ ] Fail
+**Comments**: __________________________________________________
 
 ---
 
-## DLL Files Modified
+## 3. Combat & Skills
 
-| File | Change |
-|------|--------|
-| `extras/eq-core-dll-main/src/eqgame.cpp` | GetUsableClasses_Detour whitelist, GetSpellLevelNeeded_Detour filter logic |
+### 3.1 Skill Caps
+
+**Goal**: Verify the "Best of" skill cap logic.
+**Procedure**:
+
+1. Base Class: Wizard (Low 1H Blunt cap).
+2. `#addclass 1` (Warrior). `#level 60`.
+3. `#setskill 0 300` (1H Blunt).
+**Expected**: Skill sets to ~200+ (Warrior cap), not capped at Wizard limit (~100).
+**Status**: [ ] Pass  [ ] Fail
+**Comments**: __________________________________________________
+
+### 3.2 Skill Training (Level 1)
+
+**Goal**: Verify low-level skill access.
+**Procedure**:
+
+1. Make Level 1 Ranger.
+2. `#addclass 1` (Warrior).
+3. Open Skills window or use `#setskill 30 1` (Kick).
+**Expected**: Success. (Ranger normally gets Kick at Lvl 5, Warrior at Lvl 1).
+**Status**: [ ] Pass  [ ] Fail
+**Comments**: __________________________________________________
+
+### 3.3 Trainer Window
+
+**Goal**: Verify GM Trainer access.
+**Procedure**:
+
+1. Base Class: Warrior. `#addclass 12` (Wizard).
+2. Target a Wizard GM NPC.
+3. Right-click / hail.
+**Expected**: The Skill Trainer window opens. (Normally says "I am not your master").
+**Status**: [ ] Pass  [ ] Fail
+**Comments**: __________________________________________________
+
+### 3.4 Discipline Learning
+
+**Goal**: Verify Discipline tome consumption.
+**Procedure**:
+
+1. Base Class: Ranger. `#addclass 1` (Warrior).
+2. Use `#summon 20683` (Tome of Stone Stance).
+3. Right-click Tome.
+**Expected**: "You have learned Stone Stance".
+**Status**: [ ] Pass  [ ] Fail
+**Comments**: __________________________________________________
+
+### 3.5 Discipline Usage
+
+**Goal**: Verify Combat Ability activation.
+**Procedure**:
+
+1. Open Combat Abilities window (Ctrl+C).
+2. Create button for "Stone Stance".
+3. Press button.
+**Expected**: "You assume the durability of stone." (Buff active).
+**Status**: [ ] Pass  [ ] Fail
+**Comments**: __________________________________________________
+
+### 3.6 Monk Specials (Flying Kick)
+
+**Goal**: Verify `DoClassAttacks` handles secondary Monk.
+**Procedure**:
+
+1. Base: Warrior. `#addclass 7` (Monk). `#level 60`.
+2. `#setskill 38 300` (Flying Kick). `#setskill 30 300` (Kick).
+3. Turn on Auto-Attack.
+**Expected**: Combat log shows "You try to flying kick..." messages, not "You try to kick...".
+**Status**: [ ] Pass  [ ] Fail
+**Comments**: __________________________________________________
+
+### 3.7 Damage Caps
+
+**Goal**: Verify melee damage limits.
+**Procedure**:
+
+1. Base: Cleric. `#level 20`.
+2. Hit a dummy. Note max damage.
+3. `#addclass 1` (Warrior).
+4. Hit dummy.
+**Expected**: Max damage potential increases (Warrior table vs Cleric table).
+**Status**: [ ] Pass  [ ] Fail
+**Comments**: __________________________________________________
+
+---
+
+## 4. Items & Equipment
+
+### 4.1 Equip Logic
+
+**Goal**: Verify "Classes: WIZ" item works on WAR/WIZ.
+**Procedure**:
+
+1. Base: Warrior. `#addclass 12` (Wizard).
+2. `#summon 9444` (Gossamer Robe - WIZ only).
+3. Equip to Chest.
+**Expected**: Item equips successfully. Main view updates.
+**Status**: [ ] Pass  [ ] Fail
+**Comments**: __________________________________________________
+
+### 4.2 Race Logic
+
+**Goal**: Verify Race restrictions are STRICT data checks (NOT bypassed).
+**Procedure**:
+
+1. Race: Human. Class: Warrior.
+2. `#summon 4516` (Small Banded Helm - Small races only).
+3. Attempt to equip.
+**Expected**: Error message "Your race cannot wear this item."
+**Status**: [ ] Pass  [ ] Fail
+**Comments**: __________________________________________________
+
+### 4.3 Weapon Procs
+
+**Goal**: Verify class-restricted procs.
+**Procedure**:
+
+1. Base: Warrior. `#addclass 12` (Wizard).
+2. Summon a weapon with a Wizard-Specific proc (or custom item).
+3. Swing until proc.
+**Expected**: Proc fires successfully.
+**Status**: [ ] Pass  [ ] Fail
+**Comments**: __________________________________________________
+
+### 4.4 Right-Click Items
+
+**Goal**: Verify `CheckItemRaceClassDietyRestrictions`.
+**Procedure**:
+
+1. Base: Warrior. `#addclass 2` (Cleric).
+2. Summon Item with "Effect: ... (Must be Cleric)".
+3. Right click.
+**Expected**: Cast bar appears / Effect triggers.
+**Status**: [ ] Pass  [ ] Fail
+**Comments**: __________________________________________________
+
+### 4.5 Epic Quests
+
+**Goal**: Verify Quest turn-ins.
+**Procedure**:
+
+1. Find a secondary class Epic Quest NPC.
+2. Hand in a required item.
+**Expected**: NPC accepts item (Quest text triggers), does not return it saying "I have no need for this".
+**Status**: [ ] Pass  [ ] Fail
+**Comments**: __________________________________________________
+
+---
+
+## 5. XP & Stats
+
+### 5.1 XP Bonus
+
+**Goal**: Verify Hybrid XP modifiers.
+**Procedure**:
+
+1. `#addclass 1` (Warrior - Bonus XP) or `#addclass 9` (Rogue - Bonus XP).
+2. Kill a specific mob ID. Note XP gain message (if descriptive) or debug output.
+3. `#removeclass 1`. Kill same mob.
+**Expected**: XP values differ based on class bonuses defined in `exp.cpp`.
+**Status**: [ ] Pass  [ ] Fail
+**Comments**: __________________________________________________
+
+### 5.2 Food Consumption
+
+**Goal**: Verify Monk hunger rate.
+**Procedure**:
+
+1. `#addclass 7` (Monk).
+2. Wait for hunger ticks.
+**Expected**: Food consumes faster than standard classes.
+**Status**: [ ] Pass  [ ] Fail
+**Comments**: __________________________________________________
+
+### 5.3 Regen
+
+**Goal**: Verify HP Regen formulas.
+**Procedure**:
+
+1. Be Iksar or Troll (optional).
+2. `#addclass 7` (Monk) or `#addclass 15` (Beastlord).
+3. Sit down.
+4. Observe HP tick size.
+**Expected**: Higher regen tick than standard Warrior/Cleric.
+**Status**: [ ] Pass  [ ] Fail
+**Comments**: __________________________________________________
+
+---
+
+## 6. AA System
+
+### 6.1 Visibility
+
+**Goal**: Verify AA Tabs.
+**Procedure**:
+
+1. `#level 60`. `#addclass 2` (Cleric) `#addclass 12` (Wizard).
+2. Open AA Window (`V`).
+**Expected**: You see tabs/AAs for both Cleric (e.g., MGB) and Wizard (e.g., Manaburn).
+**Status**: [ ] Pass  [ ] Fail
+**Comments**: __________________________________________________
+
+### 6.2 Purchase & Activation
+
+**Goal**: Buy and use a secondary AA.
+**Procedure**:
+
+1. Grant AA points (`#setaa 100`).
+2. Buy a secondary class active AA (e.g. Exodus for Wizard on a Warrior).
+3. Make hotkey. Use it.
+**Expected**: Ability activates.
+**Status**: [ ] Pass  [ ] Fail
+**Comments**: __________________________________________________
+
+### 6.3 Passive Effects
+
+**Goal**: verify passive bonuses.
+**Procedure**:
+
+1. Buy "Innate Run Speed" (General) or a Class passive (e.g. Spell Casting Mastery).
+2. Verify effect (Run faster / Less mana cost).
+**Expected**: Passive persists.
+**Status**: [ ] Pass  [ ] Fail
+**Comments**: __________________________________________________

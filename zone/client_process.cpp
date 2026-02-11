@@ -1858,7 +1858,15 @@ void Client::OPGMTrainSkill(const EQApplicationPacket *app)
 	//you can only use your own trainer, client enforces this, but why trust it
 	if (!RuleB(Character, AllowCrossClassTrainers)) {
 		int trains_class = pTrainer->GetClass() - (Class::WarriorGM - Class::Warrior);
-		if (GetClass() != trains_class)
+		
+		bool can_train = false;
+		if (RuleB(Custom, MulticlassingEnabled)) {
+			can_train = HasClass(trains_class);
+		} else {
+			can_train = (GetClass() == trains_class);
+		}
+
+		if (!can_train)
 			return;
 	}
 

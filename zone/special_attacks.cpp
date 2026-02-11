@@ -380,8 +380,10 @@ void Client::OPCombatAbility(const CombatAbility_Struct *ca_atk)
 	}
 
 	// make sure were actually able to use such an attack. (Bards can throw while casting. ~Kayen confirmed on live 1/22)
+	// Multiclass: Check HasClass(Bard)
+	bool is_bard = RuleB(Custom, MulticlassingEnabled) ? HasClass(Class::Bard) : (GetClass() == Class::Bard);
 	if (
-		(spellend_timer.Enabled() && GetClass() != Class::Bard) ||
+		(spellend_timer.Enabled() && !is_bard) ||
 		IsFeared() ||
 		IsStunned() ||
 		IsMezzed() ||
@@ -550,16 +552,26 @@ void Client::OPCombatAbility(const CombatAbility_Struct *ca_atk)
 	const uint8 class_id = GetClass();
 
 	// Warrior, Ranger, Monk, Beastlord, and Berserker can kick always
+	// Multiclass: Check HasClass() for all kick-capable classes
 	const uint32 allowed_kick_classes = RuleI(Combat, ExtraAllowedKickClassesBitmask);
 
-	const bool can_use_kick = (
-		class_id == Class::Warrior ||
-		class_id == Class::Ranger ||
-		class_id == Class::Monk ||
-		class_id == Class::Beastlord ||
-		class_id == Class::Berserker ||
-		allowed_kick_classes & GetPlayerClassBit(class_id)
-	);
+	const bool can_use_kick = RuleB(Custom, MulticlassingEnabled) 
+		? (
+			HasClass(Class::Warrior) ||
+			HasClass(Class::Ranger) ||
+			HasClass(Class::Monk) ||
+			HasClass(Class::Beastlord) ||
+			HasClass(Class::Berserker) ||
+			(allowed_kick_classes & GetClassesBits())
+		)
+		: (
+			class_id == Class::Warrior ||
+			class_id == Class::Ranger ||
+			class_id == Class::Monk ||
+			class_id == Class::Beastlord ||
+			class_id == Class::Berserker ||
+			(allowed_kick_classes & GetPlayerClassBit(class_id))
+		);
 
 	bool found_skill = false;
 
@@ -586,7 +598,8 @@ void Client::OPCombatAbility(const CombatAbility_Struct *ca_atk)
 		}
 	}
 
-	if (class_id == Class::Monk) {
+	bool is_monk = RuleB(Custom, MulticlassingEnabled) ? HasClass(Class::Monk) : (class_id == Class::Monk);
+	if (is_monk) {
 		reuse_time = MonkSpecialAttack(GetTarget(), ca_atk->m_skill) - 1 - skill_reduction;
 
 		// Live AA - Technique of Master Wu

@@ -2736,7 +2736,12 @@ bool Mob::SpellFinished(uint16 spell_id, Mob *spell_target, CastingSlot slot, in
 					Group *target_group = entity_list.GetGroupByMob(spell_target);
 					if (target_group) {
 						target_group->CastGroupSpell(this, spell_id);
-						if (target_group != GetGroup() && GetClass() != Class::Bard) {
+						// Multiclass: Bards (and multiclass bards) do not hit themselves via this path
+						bool is_bard = RuleB(Custom, MulticlassingEnabled) 
+							? CastToClient()->HasClass(Class::Bard) 
+							: (GetClass() == Class::Bard);
+
+						if (target_group != GetGroup() && !is_bard) {
 							SpellOnTarget(spell_id, this);
 						}
 					}
@@ -3657,7 +3662,17 @@ int Mob::AddBuff(Mob *caster, uint16 spell_id, int duration, int32 level_overrid
 				);
 
 				if (caster) {
-					if (caster->IsClient() && RuleB(Client, UseLiveBlockedMessage) && caster->GetClass() != Class::Bard) {
+					// Multiclass: Check if caster has Bard class
+					bool is_bard = false;
+					if (caster->IsClient()) {
+						is_bard = RuleB(Custom, MulticlassingEnabled) 
+							? caster->CastToClient()->HasClass(Class::Bard) 
+							: (caster->GetClass() == Class::Bard);
+					} else {
+						is_bard = (caster->GetClass() == Class::Bard);
+					}
+
+					if (caster->IsClient() && RuleB(Client, UseLiveBlockedMessage) && !is_bard) {
 						caster->Message(
 							Chat::Red,
 							fmt::format(

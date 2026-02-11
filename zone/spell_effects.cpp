@@ -7861,6 +7861,40 @@ bool Mob::ImprovedTaunt(){
 }
 
 
+static bool IsPlateClassMC(const Mob* m) {
+	if (IsPlateClass(m->GetClass())) return true;
+	if (m->IsClient() && RuleB(Custom, MulticlassingEnabled)) {
+		const uint16 bits = m->CastToClient()->GetClassesBits();
+		// WAR(1), CLR(2), PAL(3), SHD(5), BRD(8)
+		const uint16 mask = (1 << (Class::Warrior - 1)) | (1 << (Class::Cleric - 1)) | (1 << (Class::Paladin - 1)) | (1 << (Class::ShadowKnight - 1)) | (1 << (Class::Bard - 1));
+		if (bits & mask) return true;
+	}
+	return false;
+}
+
+static bool IsCasterNoClericMC(const Mob* m) {
+	if (IsCasterClass(m->GetClass()) && m->GetClass() != Class::Cleric) return true;
+	if (m->IsClient() && RuleB(Custom, MulticlassingEnabled)) {
+		const uint16 bits = m->CastToClient()->GetClassesBits();
+		// DRU(6), MNK(7 - no), BRD(8 - no), ROG(9 - no), SHM(10), NEC(11), WIZ(12), MAG(13), ENC(14)
+		const uint16 mask = (1 << (Class::Druid - 1)) | (1 << (Class::Shaman - 1)) | (1 << (Class::Necromancer - 1)) | (1 << (Class::Wizard - 1)) | (1 << (Class::Magician - 1)) | (1 << (Class::Enchanter - 1));
+		if (bits & mask) return true;
+	}
+	return false;
+}
+
+static bool IsMeleeNoPlateMC(const Mob* m) {
+	uint8 c = m->GetClass();
+	if (c == Class::Beastlord || c == Class::Berserker || c == Class::Monk || c == Class::Ranger || c == Class::Rogue) return true;
+	if (m->IsClient() && RuleB(Custom, MulticlassingEnabled)) {
+		const uint16 bits = m->CastToClient()->GetClassesBits();
+		// BST(15), BER(16), MNK(7), RNG(4), ROG(9)
+		const uint16 mask = (1 << (Class::Beastlord - 1)) | (1 << (Class::Berserker - 1)) | (1 << (Class::Monk - 1)) | (1 << (Class::Ranger - 1)) | (1 << (Class::Rogue - 1));
+		if (bits & mask) return true;
+	}
+	return false;
+}
+
 bool Mob::PassCastRestriction(int value)
 {
 	/*
@@ -8587,34 +8621,32 @@ bool Mob::PassCastRestriction(int value)
 		}
 
 		case IS_CLIENT_AND_MALE_PLATE_USER:
-			if (IsClient() && GetGender() == Gender::Male && IsPlateClass(GetClass()))
+			if (IsClient() && GetGender() == Gender::Male && IsPlateClassMC(this))
 				return true;
 			break;
 
 		case IS_CLEINT_AND_MALE_DRUID_ENCHANTER_MAGICIAN_NECROANCER_SHAMAN_OR_WIZARD:
-			if (IsClient() && GetGender() == Gender::Male && (IsCasterClass(GetClass()) && GetClass() != Class::Cleric))
+			if (IsClient() && GetGender() == Gender::Male && IsCasterNoClericMC(this))
 				return true;
 			break;
 
 		case IS_CLIENT_AND_MALE_BEASTLORD_BERSERKER_MONK_RANGER_OR_ROGUE:
-			if (IsClient() && GetGender() == Gender::Male &&
-				(GetClass() == Class::Beastlord || GetClass() == Class::Berserker || GetClass() == Class::Monk || GetClass() == Class::Ranger || GetClass() == Class::Rogue))
+			if (IsClient() && GetGender() == Gender::Male && IsMeleeNoPlateMC(this))
 				return true;
 			break;
 
 		case IS_CLIENT_AND_FEMALE_PLATE_USER:
-			if (IsClient() && GetGender() == Gender::Female && IsPlateClass(GetClass()))
+			if (IsClient() && GetGender() == Gender::Female && IsPlateClassMC(this))
 				return true;
 			break;
 
 		case IS_CLIENT_AND_FEMALE_DRUID_ENCHANTER_MAGICIAN_NECROANCER_SHAMAN_OR_WIZARD:
-			if (IsClient() && GetGender() == Gender::Female && (IsCasterClass(GetClass()) && GetClass() != Class::Cleric))
+			if (IsClient() && GetGender() == Gender::Female && IsCasterNoClericMC(this))
 				return true;
 			break;
 
 		case IS_CLIENT_AND_FEMALE_BEASTLORD_BERSERKER_MONK_RANGER_OR_ROGUE:
-			if (IsClient() && GetGender() == Gender::Female &&
-				(GetClass() == Class::Beastlord || GetClass() == Class::Berserker || GetClass() == Class::Monk || GetClass() == Class::Ranger || GetClass() == Class::Rogue))
+			if (IsClient() && GetGender() == Gender::Female && IsMeleeNoPlateMC(this))
 				return true;
 			break;
 

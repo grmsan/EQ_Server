@@ -6,12 +6,49 @@
 
 ## Recent Implementation Updates
 
+- **2026-02-21**: THJ parity follow-up for profile class hydration.
+  - `zone/client_packet.cpp::CompleteConnect()` now seeds `m_pp.classes` directly from `GestaltClasses` and primes `m_classes_bits_cache` (THJ-style).
+  - `zone/client.cpp::GetClassesBits()` now prefers `m_pp.classes` when present before bucket fallback, matching THJ runtime behavior and reducing stale bucket-path reads.
+  - `zone/client_packet.cpp::CompleteConnect()` ordering updated so legacy bucket migration runs before `m_pp.classes` hydration.
+  - DLL fallback hardened: if runtime multiclass mask is still missing, cached char-select multiclass mask (from Deity override) is now used as final fallback for `GetUsableClasses` routing.
+
+- **2026-02-21**: THJ parity follow-up for char-select multiclass payload shaping.
+  - `world/worlddb.cpp` now queries `GestaltClasses` without extra scope filters (THJ-style lookup behavior).
+  - Char-select class/deity fields are now set from multiclass bits during initial character entry construction (instead of RoF2-only post-pass deity patching).
+  - Start-zone lookup now uses the actual outgoing `cse->Deity` value, matching THJ’s multiclass char-select flow.
+
+- **2026-02-21**: THJ parity alignment for multiclass client data path.
+  - Reverted `zone/client.cpp::SendEdgeStats()` class-key payload so multiclass mask is no longer sent via EdgeStat key `200` (THJ-style behavior).
+  - Updated DLL profile parsing in `extras/eq-core-dll-main/src/eqgame.cpp` to resolve multiclass mask from `OP_PlayerProfile` using THJ-compatible offsets (`19564` primary, `19568` fallback).
+  - Added diagnostics:
+    - `[PLAYER_PROFILE_MASK] ...`
+    - `[PLAYER_PROFILE_MASK_WARN] ...`
+  - `GetUsableClasses` now uses an effective mask (`EdgeStat mask` OR `profile classes mask`) so equip gating works with profile-only multiclass delivery.
+
+- **2026-02-21**: DLL warning-noise cleanup in `extras/eq-core-dll-main/src/MQ2DataTypes.h`.
+  - Replaced legacy `static enum ...` class declarations with `enum ...` to address repeated MSVC warning `C4091`.
+  - Goal: reduce high-volume compile warning noise so multiclass/debug warnings are easier to spot.
+
+- **2026-02-21**: DLL debug logging path hardening in `extras/eq-core-dll-main/src/eqgame.cpp`.
+  - `LogDebug` / `LogRawDebug` now mirror writes to both local `dinput8_debug.log` and repo log `logs/dinput8_debug.log`.
+  - Added startup breadcrumb line with multiclass option states to confirm active DLL and loaded toggles at launch.
+
 - **2026-02-21**: DLL multiclass equip gating fix in `extras/eq-core-dll-main/src/eqgame.cpp`.
   - `EQCharacter_GetUsableClasses_Detour` changed from RVA whitelist mode to mask-first mode.
   - Behavior now returns server multiclass class mask by default for usability/equip checks, with a tiny native-only denylist for display-only context.
   - Goal: prevent missed equip callsites (RVA drift) that caused client error `"your class isn't right"` for valid multiclass equipment.
   - Added debug toggle `isMulticlassUsableClassesVerboseLoggingEnabled` (`_options.h`) to dump every `GetUsableClasses` decision to `dinput8_debug.log`.
   - Added one-time warning log when multiclass override is enabled but server mask is still `0`.
+
+- **2026-02-21**: DLL usable-classes verbose logging noise reduction in `extras/eq-core-dll-main/src/eqgame.cpp`.
+  - `GetUsableClasses` verbose logging now deduplicates identical consecutive decisions and emits a compact `suppressed=<N> repeats` summary.
+  - Added `ctx=<name>` context tag to logs for known RVAs (`equip_validation`, `item_use_check`, `tooltip_classes`, etc.).
+  - Goal: keep `dinput8_debug.log` readable while preserving callsite/debug context.
+
+- **2026-02-21**: DLL usable-classes routing refinement for client equip deny behavior.
+  - `GetUsableClasses` override now applies when native class bits overlap owned multiclass bits (instead of strict base-class-only matching).
+  - Non-overlapping class masks (including non-owned classes like ENC-only) remain native to prevent false client-side allows and inventory desync.
+  - Added log fields: `base_mask` and `apply_multi` to confirm routing decisions during equip checks.
 
 - **2026-02-21**: `eqemu_config.json` world TCP port changed `9000 -> 9100`.
   - Reason: recurring local conflict with VS Code/Jupyter Python kernel binding `127.0.0.1:9000`, causing immediate world startup failure (`World port already in use`).
@@ -98,6 +135,19 @@ This document contains detailed step-by-step procedures for every verification p
 4. Try to equip a Mage-only item.
 **Expected**: Client permits equip attempts for both items (no client-side `"your class isn't right"` block).  
 Server remains final authority for any unrelated equip rules.
+**Status**: [ ] Pass  [ ] Fail
+**Comments**: __________________________________________________
+
+### 0.5 DLL Equip Gate Negative Case
+
+**Goal**: Confirm client still blocks non-owned classes while multiclass allows owned classes.
+**Procedure**:
+
+1. Base class Ranger; add Warrior and Mage (`#addclass 1`, `#addclass 13`).
+2. Attempt to equip an Enchanter-only item.
+3. Watch chat output and inventory slot behavior.
+**Expected**: Client/server denies equip for Enchanter-only item.  
+If a temporary inventory resync message appears, source/destination slot states recover and item remains not equipped.
 **Status**: [ ] Pass  [ ] Fail
 **Comments**: __________________________________________________
 

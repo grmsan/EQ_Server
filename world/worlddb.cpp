@@ -111,15 +111,13 @@ void WorldDatabase::GetCharSelectInfo(uint32 account_id, EQApplicationPacket **o
 		)
 	);
 
-	// Multiclass (THJServer parity): char select can carry the multiclass bitmask in `Deity`.
-	// The stock client doesn't know what to do with this, but our RoF2 DLL can read it and display
-	// combined class strings on the character select screen.
+	// THJ parity: read GestaltClasses for char-select shaping.
 	std::unordered_map<uint32, uint16> multiclass_bits_by_character_id;
-	if (RuleB(Custom, MulticlassingEnabled) && client_version == EQ::versions::ClientVersion::RoF2) {
+	if (RuleB(Custom, MulticlassingEnabled)) {
 		auto buckets = DataBucketsRepository::GetWhere(
 			database,
 			fmt::format(
-				"`key` = 'GestaltClasses' AND character_id IN ({}) AND account_id = 0 AND npc_id = 0 AND bot_id = 0 AND zone_id = 0 AND instance_id = 0",
+				"`key` = 'GestaltClasses' AND character_id IN ({})",
 				Strings::Join(character_ids, ",")
 			)
 		);
@@ -161,7 +159,43 @@ void WorldDatabase::GetCharSelectInfo(uint32 account_id, EQApplicationPacket **o
 		memset(&pp, 0, sizeof(PlayerProfile_Struct));
 		memset(cse->Name, 0, sizeof(cse->Name));
 		strcpy(cse->Name, e.name.c_str());
-		cse->Class       = e.class_;
+		// THJ parity: when multiclass is enabled, represent char-select class/deity from GestaltClasses.
+		if (RuleB(Custom, MulticlassingEnabled)) {
+			const uint16 base_bit = GetPlayerClassBit(e.class_);
+			uint16 bits = base_bit;
+			auto it = multiclass_bits_by_character_id.find(character_id);
+			if (it != multiclass_bits_by_character_id.end()) {
+				bits = static_cast<uint16>((it->second | base_bit) & 0xFFFF);
+			}
+
+			pp.classes = bits;
+			cse->Deity = bits;
+
+			// Choose one owned class for the class column; keeps char-select compatible with single class field.
+			std::vector<uint32> class_ids;
+			for (uint32 class_id = 1; class_id <= 16; ++class_id) {
+				if (bits & GetPlayerClassBit(class_id)) {
+					class_ids.push_back(class_id);
+				}
+			}
+
+			if (!class_ids.empty()) {
+				cse->Class = static_cast<uint32>(class_ids[rand() % class_ids.size()]);
+			}
+			else {
+				cse->Class = e.class_;
+			}
+
+			// Preserve THJ monk human/iksar display preference.
+			if ((bits & GetPlayerClassBit(Class::Monk)) && (e.race == Race::Human || e.race == Race::Iksar)) {
+				cse->Class = Class::Monk;
+			}
+		}
+		else {
+			cse->Class = e.class_;
+			cse->Deity = e.deity;
+		}
+
 		cse->Race        = e.race;
 		cse->Level       = e.level;
 		cse->ShroudClass = cse->Class;
@@ -184,8 +218,6 @@ void WorldDatabase::GetCharSelectInfo(uint32 account_id, EQApplicationPacket **o
 		cse->Unknown19       = 0xFF;
 		cse->DrakkinTattoo   = e.drakkin_tattoo;
 		cse->DrakkinDetails  = e.drakkin_details;
-		cse->Deity           = e.deity;
-		const uint32 deity_for_start_zones = e.deity;
 		cse->PrimaryIDFile   = 0;                            // Processed Below
 		cse->SecondaryIDFile = 0;                        // Processed Below
 		cse->HairColor       = e.hair_color;
@@ -243,7 +275,7 @@ void WorldDatabase::GetCharSelectInfo(uint32 account_id, EQApplicationPacket **o
 				fmt::format(
 					"`player_class` = {} AND `player_deity` = {} AND `player_race` = {} {}",
 					cse->Class,
-					deity_for_start_zones,
+					cse->Deity,
 					cse->Race,
 					ContentFilterCriteria::apply().c_str()
 				)
@@ -284,7 +316,7 @@ void WorldDatabase::GetCharSelectInfo(uint32 account_id, EQApplicationPacket **o
 				}
 			}
 			else {
-				LogError("No start zone found for class [{}] deity [{}] race [{}]", cse->Class, deity_for_start_zones, cse->Race);
+				LogError("No start zone found for class [{}] deity [{}] race [{}]", cse->Class, cse->Deity, cse->Race);
 			}
 
 
@@ -317,18 +349,6 @@ void WorldDatabase::GetCharSelectInfo(uint32 account_id, EQApplicationPacket **o
 				bind.slot        = 0;
 				CharacterBindRepository::ReplaceOne(*this, bind);
 			}
-		}
-
-		// Char select multiclass bitmask goes in `Deity` for RoF2 + multiclass enabled.
-		// This is intentionally after start-zone lookup so we don't break content_db queries.
-		if (RuleB(Custom, MulticlassingEnabled) && client_version == EQ::versions::ClientVersion::RoF2) {
-			const uint16 base_bit = GetPlayerClassBit(cse->Class);
-			uint16 bits = base_bit;
-			auto it = multiclass_bits_by_character_id.find(character_id);
-			if (it != multiclass_bits_by_character_id.end()) {
-				bits = static_cast<uint16>((it->second | base_bit) & 0xFFFF);
-			}
-			cse->Deity = bits;
 		}
 
 		// If our bind count is less than 5, then we have null data that needs to be filled in

@@ -59,7 +59,10 @@ IF(MSVC)
 
 	OPTION(EQEMU_DISABLE_MSVC_WARNINGS "Disable MSVC compile warnings." ON)
 	IF(EQEMU_DISABLE_MSVC_WARNINGS)
-		ADD_DEFINITIONS( "/W0 /D_CRT_SECURE_NO_WARNINGS /wd4005 /wd4996 /nologo /Os")
+		# Keep local builds readable: suppress high-volume warning families in this codebase.
+		add_compile_options(/W0 /wd4005 /wd4996 /wd4244 /wd4267 /nologo /Os)
+		# Suppress common linker noise that obscures true failures.
+		add_link_options(/IGNORE:4006 /IGNORE:4204)
 	ENDIF(EQEMU_DISABLE_MSVC_WARNINGS)
 ELSE(MSVC)
 	ADD_DEFINITIONS(-DHAS_UNION_SEMUN)
@@ -469,6 +472,27 @@ IF(EQEMU_BUILD_SERVER OR EQEMU_BUILD_LOGIN OR EQEMU_BUILD_TESTS OR EQEMU_BUILD_H
 	SET(RECASTNAVIGATION_TESTS OFF CACHE BOOL "Build tests")
 	SET(RECASTNAVIGATION_EXAMPLES OFF CACHE BOOL "Build examples")
 	ADD_SUBDIRECTORY(submodules/recastnavigation)
+
+	# Optional local-noise reduction for third-party and known duplicate-symbol linker chatter on MSVC.
+	IF(MSVC AND EQEMU_DISABLE_MSVC_WARNINGS)
+		FOREACH(third_party_target uv_a zlibstatic zlib fmt Detour)
+			IF(TARGET ${third_party_target})
+				target_compile_options(${third_party_target} PRIVATE
+					/W0
+					/wd4189
+					/wd4245
+					/wd4334
+					/wd4701
+					/wd4702
+				)
+			ENDIF()
+		ENDFOREACH()
+
+		IF(TARGET common)
+			# Suppress duplicate symbol warnings from manifest vectors during common static library link.
+			set_property(TARGET common APPEND PROPERTY STATIC_LIBRARY_OPTIONS "/IGNORE:4006")
+		ENDIF()
+	ENDIF()
 ENDIF(EQEMU_BUILD_SERVER OR EQEMU_BUILD_LOGIN OR EQEMU_BUILD_TESTS OR EQEMU_BUILD_HC)
 
 IF(EQEMU_BUILD_SERVER)

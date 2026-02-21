@@ -553,6 +553,11 @@ void Client::CompleteConnect()
 		}
 	}
 
+	if (RuleB(Custom, MulticlassingEnabled)) {
+		m_pp.classes = Strings::ToInt(GetBucket("GestaltClasses"), GetPlayerClassBit(m_pp.class_));
+		m_classes_bits_cache = (m_pp.classes | GetPlayerClassBit(GetClass()));
+	}
+
 	// RoF2 + custom DLL: ensure the client gets an initial server-authoritative snapshot (including multiclass bitmask)
 	// early in the session so UI filters ("show usable items", tooltips, etc) have data before windows are opened.
 	if (ClientVersion() == EQ::versions::ClientVersion::RoF2 && (RuleB(Custom, ServerAuthStats) || RuleB(Custom, MulticlassingEnabled))) {

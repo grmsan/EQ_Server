@@ -13365,6 +13365,13 @@ uint32 Client::GetClassesBits() const
 		return base_bit;
 	}
 
+	// THJ parity: if profile already has multiclass bits loaded, prefer that as authoritative runtime state.
+	if (m_pp.classes != 0) {
+		const uint32 bits = (static_cast<uint32>(m_pp.classes) | base_bit);
+		m_classes_bits_cache = bits;
+		return bits;
+	}
+
 	if (m_classes_bits_cache) {
 		return (m_classes_bits_cache | base_bit);
 	}
@@ -13692,8 +13699,6 @@ void Client::SendEdgeStats()
 	constexpr uint32 kINT     = 28;
 	constexpr uint32 kWIS     = 29;
 	constexpr uint32 kCHA     = 30;
-	// Custom keys (safe range well above base stat keys).
-	constexpr uint32 kClassesBitmask = 200;
 
 	struct Pair {
 		uint32 key;
@@ -13714,7 +13719,7 @@ void Client::SendEdgeStats()
 		{ kINT,     static_cast<uint64>(GetINT()) },
 		{ kWIS,     static_cast<uint64>(GetWIS()) },
 		{ kCHA,     static_cast<uint64>(GetCHA()) }
-		// , { kClassesBitmask, static_cast<uint64>(GetClassesBits()) } // Deprecated: Sent via PlayerProfile struct now
+		// , { kClassesBitmask, static_cast<uint64>(GetClassesBits()) } // THJ parity: multiclass mask comes from PlayerProfile
 	};
 
 	constexpr uint32 count = static_cast<uint32>(sizeof(pairs) / sizeof(pairs[0]));

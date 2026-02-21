@@ -33,24 +33,42 @@
 
 //#pragma comment(lib, "Iphlpapi.lib")
 
+static const char* kDebugLogLocalPath = "dinput8_debug.log";
+static const char* kDebugLogRepoPath = "C:\\Users\\marsh\\OneDrive\\Documents\\GitHub\\EQ_Server\\logs\\dinput8_debug.log";
+
+static void WriteDebugLineToFile(const char* file_path, const char* line)
+{
+	if (!file_path || !line) {
+		return;
+	}
+	FILE* file = nullptr;
+	if (fopen_s(&file, file_path, "a") == 0 && file) {
+		std::time_t now = std::time(nullptr);
+		char ts[20];
+		std::strftime(ts, sizeof(ts), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
+		fprintf(file, "[%s] %s\n", ts, line);
+		fclose(file);
+	}
+}
+
+static void WriteDebugLineBoth(const char* line)
+{
+	// Mirror logs to both client working-dir and repo logs path so diagnostics are visible in either workflow.
+	WriteDebugLineToFile(kDebugLogLocalPath, line);
+	CreateDirectoryA("C:\\Users\\marsh\\OneDrive\\Documents\\GitHub\\EQ_Server\\logs", nullptr);
+	WriteDebugLineToFile(kDebugLogRepoPath, line);
+}
+
 void LogDebug(const char* format, ...) {
 	if (!isDebugLoggingEnabled) {
 		return;
 	}
-	FILE* file;
-	if (fopen_s(&file, "dinput8_debug.log", "a") == 0) {
-		std::time_t now = std::time(nullptr);
-		char buf[20];
-		std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
-		fprintf(file, "[%s] ", buf);
-
-		va_list args;
-		va_start(args, format);
-		vfprintf(file, format, args);
-		fprintf(file, "\n");
-		va_end(args);
-		fclose(file);
-	}
+	char msg[4096] = { 0 };
+	va_list args;
+	va_start(args, format);
+	vsnprintf(msg, sizeof(msg), format, args);
+	va_end(args);
+	WriteDebugLineBoth(msg);
 }
 
 enum HookTag : LONG {
@@ -83,20 +101,12 @@ static void DumpRecentPackets(FILE* f, size_t count);
 
 static void LogRawDebug(const char* format, ...)
 {
-	FILE* file = nullptr;
-	if (fopen_s(&file, "dinput8_debug.log", "a") != 0 || !file) {
-		return;
-	}
-	std::time_t now = std::time(nullptr);
-	char buf[20];
-	std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
-	fprintf(file, "[%s] ", buf);
+	char msg[4096] = { 0 };
 	va_list args;
 	va_start(args, format);
-	vfprintf(file, format, args);
+	vsnprintf(msg, sizeof(msg), format, args);
 	va_end(args);
-	fprintf(file, "\n");
-	fclose(file);
+	WriteDebugLineBoth(msg);
 }
 
 static LONG CALLBACK CrashLogVEH(PEXCEPTION_POINTERS ep)
@@ -872,6 +882,22 @@ static uint8_t  g_edgeStatHas[kEdgeStatMaxKey]{};
 // This matches how EQ uses class bitmasks for item/spell usability (and the merchant "Show Usable Items" filter).
 static uint32_t g_serverUsableClassesMask = 0;
 static int g_last_logged_usable_classes_ret = INT_MIN;
+static uint32_t g_charselectUsableClassesMask = 0;
+
+static uint32_t GetEffectiveUsableClassesMask()
+{
+	const uint32_t mask = (g_serverUsableClassesMask & 0xFFFF);
+	if (mask != 0) {
+		return mask;
+	}
+	// THJ-style delivery uses PlayerProfile.classes; allow it as the primary fallback.
+	const uint32_t profile_mask = (g_serverProfile.classes_mask & 0xFFFF);
+	if (profile_mask != 0) {
+		return profile_mask;
+	}
+	// Last-resort fallback: char-select multiclass mask observed from Deity override.
+	return (g_charselectUsableClassesMask & 0xFFFF);
+}
 
 // Merchant UI helper state for multiclass spell display/filtering.
 // These are intentionally conservative and time-bounded; they are only used to improve "Show Usable Items"
@@ -1079,6 +1105,7 @@ static void ResetServerCaches()
     g_serverMaxMana = -1;
     g_serverProfile = ServerProfileCache{};
 	g_serverUsableClassesMask = 0;
+	g_charselectUsableClassesMask = 0;
 	g_last_recent_dump_ts = 0;
 	g_last_recent_dump_spawn = 0;
     logged_profile_candidate = false;
@@ -1366,9 +1393,10 @@ unsigned char __fastcall HandleWorldMessage_Detour(DWORD *con, DWORD edx, unsign
 			}
 		}
 
-        // Only parse PlayerProfile opcode (RoF2 0x6506) for stats snapshot; ignore other large packets.
+        // Parse PlayerProfile for stats snapshot and multiclass classes bitmask.
+        // THJ-style servers deliver multiclass through PlayerProfile.classes.
         const uint16_t player_profile_opcode = 0x6506; // OP_PlayerProfile (RoF2)
-		if (!logged_profile_candidate && (opcode & 0xFFFF) == player_profile_opcode && size > 9000) {
+		if (!logged_profile_candidate && ((opcode & 0xFFFF) == player_profile_opcode || size >= 19000) && size > 9000) {
             logged_profile_candidate = true;
             // Reset per-profile caches so we don't carry over stale values between characters.
             g_serverProfile = ServerProfileCache{};
@@ -1387,9 +1415,17 @@ unsigned char __fastcall HandleWorldMessage_Detour(DWORD *con, DWORD edx, unsign
 			uint32_t end_tot  = (size > 13760) ? ReadUInt32Safe(buf, size, 13756) : 0;
 			uint32_t mana_tot = (size > 13764) ? ReadUInt32Safe(buf, size, 13760) : 0;
 
-			// THJServer/multiclass parity: Server injects `classes` bitmask at offset 19568.
-			// This allows the client to know its multiclass capabilities immediately on zone-in.
-			uint32_t classes_mask = (size >= 19572) ? ReadUInt32Safe(buf, size, 19568) : 0;
+			// THJ parity: PlayerProfile.classes is adjacent to RestTimer in this profile region.
+			// In our current struct, classes is at 19564 and char_id at 19568.
+			// Keep a compatibility fallback for older assumptions.
+			uint32_t classes_mask_19564 = (size >= 19568) ? ReadUInt32Safe(buf, size, 19564) : 0;
+			uint32_t classes_mask_19568 = (size >= 19572) ? ReadUInt32Safe(buf, size, 19568) : 0;
+			uint32_t classes_mask = 0;
+			if (classes_mask_19564 != 0 && classes_mask_19564 <= 0xFFFF) {
+				classes_mask = classes_mask_19564;
+			} else if (classes_mask_19568 != 0 && classes_mask_19568 <= 0xFFFF) {
+				classes_mask = classes_mask_19568;
+			}
 
 			// Basic sanity: if mana_tot is absurd (e.g., garbage from struct mismatch), zero it.
 			if (mana_tot > 100000000) {
@@ -1421,6 +1457,11 @@ unsigned char __fastcall HandleWorldMessage_Detour(DWORD *con, DWORD edx, unsign
             if (classes_mask != 0) {
                 g_serverUsableClassesMask = classes_mask;
                 g_last_logged_usable_classes_ret = INT_MIN;
+				LogDebug("[PLAYER_PROFILE_MASK] opcode=0x%04x size=%zu classes_mask=0x%04X (off19564=0x%08X off19568=0x%08X)",
+					opcode & 0xFFFF, size, classes_mask & 0xFFFF, classes_mask_19564, classes_mask_19568);
+			} else {
+				LogDebug("[PLAYER_PROFILE_MASK_WARN] opcode=0x%04x size=%zu classes_mask unresolved (off19564=0x%08X off19568=0x%08X)",
+					opcode & 0xFFFF, size, classes_mask_19564, classes_mask_19568);
             }
 
             // Seed live caches from the profile so the UI doesn't show stale HP/Mana/End while waiting for updates.
@@ -2111,6 +2152,51 @@ static bool s_logged_usable_classes_no_mask = false;
 
 // Deduplication: track unique (RVA, native, mask) combos we've already logged
 static std::set<uint64_t> s_logged_usable_classes_combos;
+static DWORD s_last_usable_classes_rva = 0;
+static int s_last_usable_classes_a1 = 0;
+static DWORD s_last_usable_classes_a2 = 0;
+static int s_last_usable_classes_native = 0;
+static uint32_t s_last_usable_classes_base_mask = 0;
+static uint32_t s_last_usable_classes_mask = 0;
+static bool s_last_usable_classes_force_native = false;
+static int s_last_usable_classes_return = 0;
+static bool s_has_last_usable_classes_verbose = false;
+static volatile LONG s_usable_classes_verbose_suppressed = 0;
+
+static const char* GetUsableClassesContextName(DWORD rva)
+{
+	switch (rva) {
+	case 0x0004C472: return "equip_validation";
+	case 0x002F0DA3: return "item_use_check";
+	case 0x002F0E05: return "item_use_check_2";
+	case 0x002A9736: return "tooltip_classes";
+	case 0x002A6D16: return "display_filter";
+	default: return "unknown";
+	}
+}
+
+static uint32_t GetLocalBaseClassMask()
+{
+	uint8_t base_class_id = 0;
+	PCHARINFO2 ci2 = nullptr;
+	__try {
+		ci2 = GetCharInfo2();
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		ci2 = nullptr;
+	}
+
+	if (ci2 && ci2->Class >= 1 && ci2->Class <= 16) {
+		base_class_id = static_cast<uint8_t>(ci2->Class);
+	} else if (pLocalPlayer && pLocalPlayer->Data.Class >= 1 && pLocalPlayer->Data.Class <= 16) {
+		base_class_id = static_cast<uint8_t>(pLocalPlayer->Data.Class);
+	}
+
+	if (base_class_id >= 1 && base_class_id <= 16) {
+		return (1u << (base_class_id - 1));
+	}
+	return 0;
+}
 
 DETOUR_TRAMPOLINE_EMPTY(int __fastcall EQCharacter_GetUsableClasses_Tramp(void*, void*, int, DWORD));
 int __fastcall EQCharacter_GetUsableClasses_Detour(void* This, void* edx, int a1, DWORD a2)
@@ -2126,9 +2212,11 @@ int __fastcall EQCharacter_GetUsableClasses_Detour(void* This, void* edx, int a1
 		nativeVal = -1;
 	}
 
-	// If multiclass is disabled or no server mask, always use native
-	if (!isMulticlassUsableClassesOverrideEnabled || g_serverUsableClassesMask == 0) {
-		if (isDebugLoggingEnabled && isMulticlassUsableClassesOverrideEnabled && g_serverUsableClassesMask == 0 && !s_logged_usable_classes_no_mask) {
+	const uint32_t effectiveMask = GetEffectiveUsableClassesMask();
+
+	// If multiclass is disabled or no effective mask, always use native
+	if (!isMulticlassUsableClassesOverrideEnabled || effectiveMask == 0) {
+		if (isDebugLoggingEnabled && isMulticlassUsableClassesOverrideEnabled && effectiveMask == 0 && !s_logged_usable_classes_no_mask) {
 			LogDebug("[USABLE_CLASSES] multiclass override enabled but server mask is 0; using native until mask arrives");
 			s_logged_usable_classes_no_mask = true;
 		}
@@ -2143,23 +2231,62 @@ int __fastcall EQCharacter_GetUsableClasses_Detour(void* This, void* edx, int a1
 	// Default to multiclass mask unless this is a native-only display path.
 	bool forceNative = (s_native_usable_classes_rvas.find(ret_rva) != s_native_usable_classes_rvas.end());
 
-	// Determine what we'll return
-	int returnVal = forceNative ? nativeVal : static_cast<int>(g_serverUsableClassesMask);
+	// Multiclass override should only apply when the native class mask overlaps owned multiclass bits.
+	// This allows WAR/MAG items for a RNG/WAR/MAG character, while preserving native deny for ENC-only items.
+	const uint32_t baseClassMask = GetLocalBaseClassMask();
+	const uint32_t nativeMask16 = static_cast<uint32_t>(nativeVal) & 0xFFFFu;
+	const bool shouldApplyMulticlassOverride =
+		!forceNative &&
+		nativeMask16 != 0 &&
+		(nativeMask16 & effectiveMask) != 0;
+
+	// Determine what we'll return.
+	int returnVal = shouldApplyMulticlassOverride ? static_cast<int>(effectiveMask) : nativeVal;
 
 	// Debug logging - deduplicated to avoid spam
 	if (isDebugLoggingEnabled) {
 		InterlockedIncrement(&s_usable_classes_call_count);
 
 		if (isMulticlassUsableClassesVerboseLoggingEnabled) {
-			// VERBOSE MODE: Log every call (for RVA discovery only)
-			LogDebug("[USABLE_CLASSES] RVA=0x%08X a1=%d a2=%u native=%d mask=0x%04X force_native=%d returning=%d",
-				ret_rva, a1, a2, nativeVal, g_serverUsableClassesMask, forceNative ? 1 : 0, returnVal);
+			const bool sameAsLast =
+				s_has_last_usable_classes_verbose &&
+				s_last_usable_classes_rva == ret_rva &&
+				s_last_usable_classes_a1 == a1 &&
+				s_last_usable_classes_a2 == a2 &&
+				s_last_usable_classes_native == nativeVal &&
+				s_last_usable_classes_base_mask == baseClassMask &&
+				s_last_usable_classes_mask == effectiveMask &&
+				s_last_usable_classes_force_native == forceNative &&
+				s_last_usable_classes_return == returnVal;
+
+			if (sameAsLast) {
+				InterlockedIncrement(&s_usable_classes_verbose_suppressed);
+			} else {
+				const LONG suppressed = InterlockedExchange(&s_usable_classes_verbose_suppressed, 0);
+				if (suppressed > 0 && s_has_last_usable_classes_verbose) {
+					LogDebug("[USABLE_CLASSES] suppressed=%ld repeats for RVA=0x%08X ctx=%s returning=%d",
+						suppressed, s_last_usable_classes_rva, GetUsableClassesContextName(s_last_usable_classes_rva), s_last_usable_classes_return);
+				}
+
+				LogDebug("[USABLE_CLASSES] RVA=0x%08X ctx=%s a1=%d a2=%u native=%d base_mask=0x%04X mask=0x%04X force_native=%d apply_multi=%d returning=%d",
+					ret_rva, GetUsableClassesContextName(ret_rva), a1, a2, nativeVal, baseClassMask & 0xFFFFu, effectiveMask, forceNative ? 1 : 0, shouldApplyMulticlassOverride ? 1 : 0, returnVal);
+
+				s_last_usable_classes_rva = ret_rva;
+				s_last_usable_classes_a1 = a1;
+				s_last_usable_classes_a2 = a2;
+				s_last_usable_classes_native = nativeVal;
+				s_last_usable_classes_base_mask = baseClassMask;
+				s_last_usable_classes_mask = effectiveMask;
+				s_last_usable_classes_force_native = forceNative;
+				s_last_usable_classes_return = returnVal;
+				s_has_last_usable_classes_verbose = true;
+			}
 		} else {
 			// QUIET MODE: Only log first occurrence per unique (RVA, native, mask) combo
-			uint64_t combo = ((uint64_t)ret_rva << 32) | ((uint64_t)(nativeVal & 0xFFFF) << 16) | (g_serverUsableClassesMask & 0xFFFF);
+			uint64_t combo = ((uint64_t)ret_rva << 32) | ((uint64_t)(nativeVal & 0xFFFF) << 16) | (effectiveMask & 0xFFFF);
 			if (s_logged_usable_classes_combos.find(combo) == s_logged_usable_classes_combos.end()) {
-				LogDebug("[USABLE_CLASSES] RVA=0x%08X native=%d mask=0x%04X force_native=%d returning=%d (first occurrence)",
-					ret_rva, nativeVal, g_serverUsableClassesMask, forceNative ? 1 : 0, returnVal);
+				LogDebug("[USABLE_CLASSES] RVA=0x%08X native=%d base_mask=0x%04X mask=0x%04X force_native=%d apply_multi=%d returning=%d (first occurrence)",
+					ret_rva, nativeVal, baseClassMask & 0xFFFFu, effectiveMask, forceNative ? 1 : 0, shouldApplyMulticlassOverride ? 1 : 0, returnVal);
 				s_logged_usable_classes_combos.insert(combo);
 			}
 		}
@@ -2469,9 +2596,10 @@ char* __fastcall CEverQuest_GetClassDesc_Detour(void* This, void* edx, int class
 		if (IsReasonableClassBitmask(mask32, base_class)) {
 			const uint16_t mask = static_cast<uint16_t>(mask32 & 0xFFFF);
 			if (CountBits16(mask) > 1) {
+				g_charselectUsableClassesMask = mask;
 				BuildMulticlassAbbrevList(mask, s_buf, sizeof(s_buf));
 				if (isDebugLoggingEnabled && s_log_burst++ < 10) {
-					LogDebug("CLIENT_DETOUR stat=ClassDesc (charselect) base=%u mask=0x%04X -> %s", (unsigned)base_class, (unsigned)mask, s_buf);
+					LogDebug("CLIENT_DETOUR stat=ClassDesc (charselect) base=%u mask=0x%04X -> %s (cached for runtime fallback)", (unsigned)base_class, (unsigned)mask, s_buf);
 				}
 				return s_buf;
 			}
@@ -2543,9 +2671,10 @@ char* __fastcall CEverQuest_GetClassThreeLetterCode_Detour(void* This, void* edx
 		if (IsReasonableClassBitmask(mask32, base_class)) {
 			const uint16_t mask = static_cast<uint16_t>(mask32 & 0xFFFF);
 			if (CountBits16(mask) > 1) {
+				g_charselectUsableClassesMask = mask;
 				BuildMulticlassAbbrevList(mask, s_buf, sizeof(s_buf));
 				if (isDebugLoggingEnabled && s_log_burst++ < 10) {
-					LogDebug("CLIENT_DETOUR stat=Class3 (charselect) base=%u mask=0x%04X -> %s", (unsigned)base_class, (unsigned)mask, s_buf);
+					LogDebug("CLIENT_DETOUR stat=Class3 (charselect) base=%u mask=0x%04X -> %s (cached for runtime fallback)", (unsigned)base_class, (unsigned)mask, s_buf);
 				}
 				return s_buf;
 			}
@@ -2983,6 +3112,14 @@ extern CRITICAL_SECTION gDetourCS;
 void InitHooks()
 {
 	LogDebug("InitHooks: Started");
+	LogDebug(
+		"Multiclass options: usable_override=%d spell_ui_override=%d class_name_override=%d usable_verbose=%d debug=%d",
+		isMulticlassUsableClassesOverrideEnabled ? 1 : 0,
+		isMulticlassSpellUiOverrideEnabled ? 1 : 0,
+		isMulticlassClassNameOverrideEnabled ? 1 : 0,
+		isMulticlassUsableClassesVerboseLoggingEnabled ? 1 : 0,
+		isDebugLoggingEnabled ? 1 : 0
+	);
 	InstallCrashDiagnostics();
 	//rename("arena.eqg", "arena.eqg.bak");
 	//rename("highpasshold.eqg", "highpasshold.eqg.bak");

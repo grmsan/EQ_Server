@@ -1580,6 +1580,87 @@ class ServerManagerApp(tk.Tk):
     def run_build_thread(self):
         threading.Thread(target=self.run_build, daemon=True).start()
 
+    def _is_lock_related_build_line(self, line):
+        if not line:
+            return False
+        s = line.lower()
+        lock_patterns = [
+            "fatal error lnk1168",
+            "cannot open",
+            "for writing",
+            "pdb",
+            "idb",
+            "mspdbsrv",
+            "c2471",
+            "lnk1318",
+            "unexpected pdb error",
+            "access is denied",
+            "being used by another process",
+        ]
+        return any(p in s for p in lock_patterns)
+
+    def _kill_process_images(self, image_names):
+        if os.name != "nt":
+            return
+        for image in image_names:
+            try:
+                subprocess.run(
+                    ["taskkill", "/F", "/IM", image],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=False
+                )
+            except Exception:
+                pass
+
+    def _run_streamed_command(self, cmd, cwd=None):
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            cwd=cwd or os.getcwd()
+        )
+        lines = []
+        while True:
+            line = proc.stdout.readline()
+            if not line:
+                break
+            msg = line.strip()
+            lines.append(msg)
+            self.log(msg)
+        proc.wait()
+        return proc.returncode, lines
+
+    def _build_cmake_target_once(self, build_target):
+        cmd_build = ["cmake", "--build", "build"]
+        if build_target and build_target != "all":
+            cmd_build += ["--target", build_target]
+        cmd_build += ["--config", "RelWithDebInfo"]
+
+        # Pass MSBuild-specific anti-lock flags via the native tool switch
+        if os.name == "nt":
+            cmd_build += ["--", "/p:BuildInParallel=false", "/p:TrackFileAccess=false"]
+
+        return self._run_streamed_command(cmd_build)
+
+    def _attempt_lock_recovery(self):
+        self.log("Build lock recovery: stopping all server processes (managed + external)...")
+        self._kill_all_server_processes(include_external=True)
+        # Also clear common Windows lock holders for PDB/EXE writes.
+        self.log("Build lock recovery: stopping compiler/linker lock holders...")
+        self._kill_process_images([
+            "zone.exe",
+            "world.exe",
+            "eqlaunch.exe",
+            "loginserver.exe",
+            "ucs.exe",
+            "queryserv.exe",
+            "shared_memory.exe",
+            "mspdbsrv.exe",
+        ])
+        time.sleep(2)
+
     def run_build(self):
         self.ui_call(self._set_build_controls_enabled, False)
         build_target = (self.build_target_var.get() or "all").strip()
@@ -1612,43 +1693,39 @@ class ServerManagerApp(tk.Tk):
 
             self.log("Running CMake Configure...")
             cmd_config = ["cmake", "-S", ".", "-B", "build"]
-            proc = subprocess.Popen(cmd_config, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-            while True:
-                line = proc.stdout.readline()
-                if not line: break
-                self.log(line.strip())
-            proc.wait()
+            config_rc, _ = self._run_streamed_command(cmd_config)
 
-            if proc.returncode != 0:
+            if config_rc != 0:
                 self.log("CMake Configure Failed.")
                 self.ui_call(self._set_build_status, "Configure Failed")
                 return
 
             self.log("Running CMake Build...")
-            cmd_build = ["cmake", "--build", "build"]
-            if build_target and build_target != "all":
-                cmd_build += ["--target", build_target]
-            cmd_build += ["--config", "RelWithDebInfo"]
-            # Optimization: Use sequential build to avoid PDB locking errors (C2471)
-            # cmd_build += ["--parallel"]
+            build_rc, build_lines = self._build_cmake_target_once(build_target)
 
-            # Pass MSBuild-specific anti-lock flags via the native tool switch
-            # Check if we are on Windows/MSVC
-            if os.name == 'nt':
-                cmd_build += ["--", "/p:BuildInParallel=false", "/p:TrackFileAccess=false"]
+            if build_rc != 0:
+                lock_related = any(self._is_lock_related_build_line(line) for line in build_lines)
+                if os.name == "nt" and lock_related:
+                    self.log("Build failed with lock-related errors (PDB/EXE). Retrying once after recovery...")
+                    self._attempt_lock_recovery()
+                    self.log("Retrying CMake Build...")
+                    build_rc_retry, _ = self._build_cmake_target_once(build_target)
+                    if build_rc_retry != 0:
+                        self.log("Build Failed after lock recovery retry.")
+                        self.ui_call(self._set_build_status, "Build Failed")
+                        return
+                else:
+                    self.log("Build Failed.")
+                    self.ui_call(self._set_build_status, "Build Failed")
+                    return
 
-            proc = subprocess.Popen(cmd_build, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-            while True:
-                line = proc.stdout.readline()
-                if not line: break
-                self.log(line.strip())
-            proc.wait()
-
-            if proc.returncode != 0:
-                self.log("Build Failed.")
-                self.ui_call(self._set_build_status, "Build Failed")
-            else:
+            if build_rc == 0:
                 self.log("Build Successful.")
+                self.ui_call(self._set_build_status, "Build Complete")
+                self.bin_dir = self.find_bin_dir()
+            else:
+                # Success through retry path
+                self.log("Build Successful (after lock recovery retry).")
                 self.ui_call(self._set_build_status, "Build Complete")
                 self.bin_dir = self.find_bin_dir()
 

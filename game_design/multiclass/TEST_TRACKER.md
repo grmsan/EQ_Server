@@ -50,6 +50,16 @@
   - Non-overlapping class masks (including non-owned classes like ENC-only) remain native to prevent false client-side allows and inventory desync.
   - Added log fields: `base_mask` and `apply_multi` to confirm routing decisions during equip checks.
 
+- **2026-02-21**: Ranger archery close-range server check adjustment in `zone/special_attacks.cpp`.
+  - In `Client::RangedAttack`, ranger-class characters now use `0` minimum ranged distance for bow attacks on the server-side validation path.
+  - Goal: allow ranger autofire/bow usage at point-blank range without server-side `RANGED_TOO_CLOSE` rejection.
+
+- **2026-02-21**: THJ-style implied spell targeting port in `zone/spells.cpp` / `zone/mob.h`.
+  - Added `Mob::GetSpellImpliedTargetID(spell_id, target_id)` and invoked it at cast start in `Mob::CastSpell`.
+  - Beneficial spells now smart-reroute to a valid friendly target (`target`, then `target's target`, then self fallback).
+  - Detrimental spells remain hostile-target oriented and may fall through to `target's target` or pet target when appropriate.
+  - Guardrails retained for special spell categories (charm, corpse, PB-AE, cancel magic, alliance/lull, self-target).
+
 - **2026-02-21**: `eqemu_config.json` world TCP port changed `9000 -> 9100`.
   - Reason: recurring local conflict with VS Code/Jupyter Python kernel binding `127.0.0.1:9000`, causing immediate world startup failure (`World port already in use`).
   - Action: restart world stack so all services reconnect to world on `9100`.
@@ -148,6 +158,35 @@ Server remains final authority for any unrelated equip rules.
 3. Watch chat output and inventory slot behavior.
 **Expected**: Client/server denies equip for Enchanter-only item.  
 If a temporary inventory resync message appears, source/destination slot states recover and item remains not equipped.
+**Status**: [ ] Pass  [ ] Fail
+**Comments**: __________________________________________________
+
+### 0.6 Ranger Autofire Point-Blank
+
+**Goal**: Confirm ranger bow/autofire works at close range without server-side min-distance rejection.
+**Procedure**:
+
+1. Use a character with Ranger class access (`HasClass(Ranger)`), equip bow + arrows.
+2. Stand directly next to a valid target (melee distance).
+3. Enable autofire and observe attack attempts.
+**Expected**: Bow/autofire shots execute at point-blank range; no `RANGED_TOO_CLOSE` server rejection for ranger.
+**Status**: [ ] Pass  [ ] Fail
+**Comments**: __________________________________________________
+
+### 0.7 Smart Spell Targeting (THJ-style)
+
+**Goal**: Confirm beneficial spells reroute intelligently when hostile target is selected.
+**Procedure**:
+
+1. Ensure `Spells:UseSpellImpliedTargeting` is enabled.
+2. Target an NPC that is actively targeting you.
+3. Cast a single-target beneficial spell (example: direct heal).
+4. Repeat with no valid target selected and cast the same beneficial spell.
+5. Cast a detrimental spell with the same NPC target to confirm hostile targeting still applies.
+**Expected**:
+- Beneficial cast lands on a valid friendly implied target (self in the common NPC-targeting-you case).
+- Beneficial cast without a valid target falls back to self.
+- Detrimental cast remains on appropriate hostile implied target path and does not reroute to self.
 **Status**: [ ] Pass  [ ] Fail
 **Comments**: __________________________________________________
 

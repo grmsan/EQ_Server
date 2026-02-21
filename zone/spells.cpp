@@ -146,6 +146,127 @@ void NPC::SpellProcess()
 	Mob::SpellProcess();
 }
 
+uint16 Mob::GetSpellImpliedTargetID(uint16 spell_id, uint16 target_id)
+{
+	if (IsClient() && RuleB(Spells, UseSpellImpliedTargeting)) {
+		// Shortcut pet-only spells, these only have one potential valid target.
+		if (spells[spell_id].target_type == ST_Pet || spells[spell_id].target_type == ST_SummonedPet) {
+			ValidatePetList();
+
+			if (IsEffectInSpell(spell_id, SpellEffect::Illusion) && GetTarget()) {
+				return GetTarget()->GetID();
+			}
+
+			if (GetAllPets().size() > 0) {
+				for (const auto pet : GetAllPets()) {
+					if (spells[spell_id].target_type == ST_SummonedPet && pet->IsCharmedPet()) {
+						continue;
+					}
+					return pet->GetID();
+				}
+			} else {
+				Message(Chat::SpellFailure, "You must have a pet in order to cast this spell or ability (%s).", spells[spell_id].name);
+				return 0;
+			}
+		}
+
+		// Shortcuts for spells that should keep their explicit target behavior.
+		if (spell_id == 11086 || spell_id == 11087 || spell_id == 13721 || spell_id == 13732 || spell_id == 16742 || spell_id == 16743) {
+			auto potential_target = entity_list.GetMob(target_id);
+			if (!potential_target || potential_target->IsNPC()) {
+				if (potential_target && potential_target->GetTarget() && potential_target->GetTarget()->IsClient()) {
+					return potential_target->GetTarget()->GetID();
+				}
+				return GetID();
+			}
+			return target_id;
+		}
+
+		if (IsEffectInSpell(spell_id, SpellEffect::CancelMagic) ||
+			IsCharmSpell(spell_id) ||
+			(spells[spell_id].target_type == ST_AECaster) ||
+			(spells[spell_id].target_type == ST_Corpse) ||
+			IsAllianceSpell(spell_id) ||
+			IsEffectInSpell(spell_id, SpellEffect::Lull)) {
+			return target_id;
+		}
+
+		// Shortcut project illusion.
+		if (IsIllusionSpell(spell_id) && HasProjectIllusion()) {
+			return target_id;
+		}
+
+		// Self target spells always resolve to self.
+		if (spells[spell_id].target_type == ST_Self) {
+			return GetID();
+		}
+
+		// If targeting self, beneficials stay on self, detrimental tries pet target.
+		if (target_id == GetID()) {
+			if (IsBeneficialSpell(spell_id)) {
+				return GetID();
+			}
+
+			if (GetPet() && GetPet()->GetTarget()) {
+				target_id = GetPet()->GetTarget()->GetID();
+			} else {
+				Message(Chat::SpellFailure, "You may not cast this type of spell or ability on yourself (%s).", spells[spell_id].name);
+				return 0;
+			}
+		}
+
+		Mob* target_mob = entity_list.GetMob(target_id);
+		if (!target_mob || target_id == 0) {
+			if (IsBeneficialSpell(spell_id)) {
+				return GetID();
+			}
+			return target_id;
+		}
+
+		Mob* target_target = target_mob->GetTarget();
+
+		bool target_beneficial_valid = (target_mob->IsClient() || target_mob->IsPetOwnerClient() || (target_mob->GetOwner() && target_mob->GetOwner()->IsClient()));
+		bool target_detrimental_valid = (!target_beneficial_valid && target_mob->IsNPC());
+
+		bool tt_beneficial_valid = false;
+		bool tt_detrimental_valid = false;
+
+		if (target_target) {
+			tt_beneficial_valid = (target_target->IsClient() || target_target->IsPetOwnerClient() || (target_target->GetOwner() && target_target->GetOwner()->IsClient()));
+			tt_detrimental_valid = (!tt_beneficial_valid && target_target->IsNPC());
+		}
+
+		if (IsBeneficialSpell(spell_id)) {
+			if (target_beneficial_valid) {
+				return target_id;
+			}
+			if (tt_beneficial_valid) {
+				return target_target->GetID();
+			}
+			return GetID();
+		}
+
+		if (target_detrimental_valid) {
+			return target_id;
+		}
+		if (tt_detrimental_valid) {
+			return target_target->GetID();
+		}
+
+		if (GetPet() && GetPet()->GetTarget()) {
+			target_target = GetPet()->GetTarget();
+			if (target_target) {
+				tt_detrimental_valid = target_target->IsNPC();
+			}
+			if (tt_detrimental_valid) {
+				return target_target->GetID();
+			}
+		}
+	}
+
+	return target_id;
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // functions related to begin/finish casting, fizzling etc
 
@@ -176,6 +297,8 @@ bool Mob::CastSpell(uint16 spell_id, uint16 target_id, CastingSlot slot,
 	if ((item_slot != -1 && cast_time == 0) || aa_id) {
 		send_spellbar_enable = false;
 	}
+
+	target_id = GetSpellImpliedTargetID(spell_id, target_id);
 
 	if (!IsValidSpell(spell_id) ||
 		casting_spell_id ||

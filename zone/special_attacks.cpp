@@ -1025,12 +1025,14 @@ bool Client::RangedAttack(Mob* other, bool CanDoubleAttack) {
 	float range = RangeItem->Range + AmmoItem->Range + GetRangeDistTargetSizeMod(GetTarget());
 	LogCombat("Calculated bow range to be [{}]", range);
 	range *= range;
+	const int min_ranged_dist = HasClass(Class::Ranger) ? 0 : RuleI(Combat, MinRangedAttackDist);
+	const int min_ranged_dist_sq = min_ranged_dist * min_ranged_dist;
 
 	if (float dist = DistanceSquared(m_Position, other->GetPosition()); dist > range) {
 		LogCombat("Ranged attack out of range client should catch this. ([{}] > [{}]).\n", dist, range);
 		MessageString(Chat::Red,TARGET_OUT_OF_RANGE);//Client enforces range and sends the message, this is a backup just incase.
 		return false;
-	} else if (dist < (RuleI(Combat, MinRangedAttackDist)*RuleI(Combat, MinRangedAttackDist))){
+	} else if (dist < min_ranged_dist_sq){
 		MessageString(Chat::Yellow,RANGED_TOO_CLOSE);//Client enforces range and sends the message, this is a backup just incase.
 		return false;
 	}

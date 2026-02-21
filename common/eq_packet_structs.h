@@ -1122,6 +1122,7 @@ struct PlayerProfile_Struct
 /*19558*/	uint8				guildAutoconsent;	// 0=off, 1=on
 /*19559*/	uint8				unknown19595[5];	// ***Placeholder (6/29/2005)
 /*19564*/	uint32				RestTimer;
+			uint32				classes;			// bitfield for multiclass data
 /*19568*/	uint32				char_id;			// Found as part of bazaar revamp (5/15/2024)
 
 	// All player profile packets are translated and this overhead is ignored in out-bound packets

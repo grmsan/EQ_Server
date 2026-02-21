@@ -1765,10 +1765,18 @@ void Client::OPGMTraining(const EQApplicationPacket *app)
 		return;
 	}
 
+	const int trains_class = pTrainer->GetClass() - (Class::WarriorGM - Class::Warrior);
+
 	//you can only use your own trainer, client enforces this, but why trust it
 	if (!RuleB(Character, AllowCrossClassTrainers)) {
-		int trains_class = pTrainer->GetClass() - (Class::WarriorGM - Class::Warrior);
-		if (GetClass() != trains_class) {
+		bool can_train = false;
+		if (RuleB(Custom, MulticlassingEnabled)) {
+			can_train = HasClass(trains_class);
+		} else {
+			can_train = (GetClass() == trains_class);
+		}
+
+		if (!can_train) {
 			safe_delete(outapp);
 			return;
 		}
@@ -1787,13 +1795,14 @@ void Client::OPGMTraining(const EQApplicationPacket *app)
 		if (sk == EQ::skills::SkillTinkering && GetRace() != Race::Gnome) {
 			gmtrain->skills[sk] = 0; //Non gnomes can't tinker!
 		} else {
-			gmtrain->skills[sk] = GetMaxSkillAfterSpecializationRules((EQ::skills::SkillType)sk, MaxSkill((EQ::skills::SkillType)sk, GetClass(), RuleI(Character, MaxLevel)));
+			const int8 skill_class = RuleB(Custom, MulticlassingEnabled) ? static_cast<int8>(trains_class) : GetClass();
+			gmtrain->skills[sk] = GetMaxSkillAfterSpecializationRules((EQ::skills::SkillType)sk, MaxSkill((EQ::skills::SkillType)sk, skill_class, RuleI(Character, MaxLevel)));
 			//this is the highest level that the trainer can train you to, this is enforced clientside so we can't just
 			//Set it to 1 with CanHaveSkill or you wont be able to train past 1.
 		}
 	}
 
-	if (ClientVersion() < EQ::versions::ClientVersion::RoF2 && GetClass() == Class::Berserker) {
+	if (ClientVersion() < EQ::versions::ClientVersion::RoF2 && HasClass(Class::Berserker)) {
 		gmtrain->skills[EQ::skills::Skill1HPiercing] = gmtrain->skills[EQ::skills::Skill2HPiercing];
 		gmtrain->skills[EQ::skills::Skill2HPiercing] = 0;
 	}
@@ -1824,10 +1833,18 @@ void Client::OPGMEndTraining(const EQApplicationPacket *app)
 	if(!pTrainer || !pTrainer->IsNPC() || pTrainer->GetClass() < Class::WarriorGM || pTrainer->GetClass() > Class::BerserkerGM)
 		return;
 
+	const int trains_class = pTrainer->GetClass() - (Class::WarriorGM - Class::Warrior);
+
 	//you can only use your own trainer, client enforces this, but why trust it
 	if (!RuleB(Character, AllowCrossClassTrainers)) {
-		int trains_class = pTrainer->GetClass() - (Class::WarriorGM - Class::Warrior);
-		if (GetClass() != trains_class)
+		bool can_end_training = false;
+		if (RuleB(Custom, MulticlassingEnabled)) {
+			can_end_training = HasClass(trains_class);
+		} else {
+			can_end_training = (GetClass() == trains_class);
+		}
+
+		if (!can_end_training)
 			return;
 	}
 

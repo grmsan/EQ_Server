@@ -1779,6 +1779,7 @@ void Client::Handle_Connect_OP_ZoneEntry(const EQApplicationPacket *app)
 	}
 
 	m_inv.SetGMInventory((bool)m_pp.gm); // set to current gm state for calc
+	m_pp.classes = GetClassesBits();
 	CalcBonuses();
 	if (RuleB(Zone, EnableLoggedOffReplenishments) &&
 		time(nullptr) - m_pp.lastlogin >= RuleI(Zone, MinOfflineTimeToReplenishments)) {

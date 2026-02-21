@@ -855,6 +855,7 @@ struct ServerProfileCache {
     int    mana_max = -1;
     int    end_cur = -1; // profile provides total; use it until we have a better source
     int    end_max = -1;
+    uint32_t classes_mask = 0;
 };
 
 ServerProfileCache g_serverProfile;
@@ -1386,6 +1387,10 @@ unsigned char __fastcall HandleWorldMessage_Detour(DWORD *con, DWORD edx, unsign
 			uint32_t end_tot  = (size > 13760) ? ReadUInt32Safe(buf, size, 13756) : 0;
 			uint32_t mana_tot = (size > 13764) ? ReadUInt32Safe(buf, size, 13760) : 0;
 
+			// THJServer/multiclass parity: Server injects `classes` bitmask at offset 19568.
+			// This allows the client to know its multiclass capabilities immediately on zone-in.
+			uint32_t classes_mask = (size >= 19572) ? ReadUInt32Safe(buf, size, 19568) : 0;
+
 			// Basic sanity: if mana_tot is absurd (e.g., garbage from struct mismatch), zero it.
 			if (mana_tot > 100000000) {
 				LogDebug("[PLAYER_PROFILE_WARN] large mana_tot=%u; probable struct mismatch (size=%zu)", mana_tot, size);
@@ -1410,6 +1415,13 @@ unsigned char __fastcall HandleWorldMessage_Detour(DWORD *con, DWORD edx, unsign
             g_serverProfile.wis      = static_cast<int>(wis);
             g_serverProfile.end_cur  = static_cast<int>(end_tot);
             g_serverProfile.end_max  = static_cast<int>(end_tot);
+            g_serverProfile.classes_mask = classes_mask;
+
+            // If the profile contains a multiclass mask, update the global hook state immediately.
+            if (classes_mask != 0) {
+                g_serverUsableClassesMask = classes_mask;
+                g_last_logged_usable_classes_ret = INT_MIN;
+            }
 
             // Seed live caches from the profile so the UI doesn't show stale HP/Mana/End while waiting for updates.
             g_serverCurHP   = static_cast<int>(cur_hp);
@@ -1974,6 +1986,26 @@ static int __cdecl GetLabelFromEQ_Detour(int eq_type, class CXStr *out, bool *ar
 		char tmp[16] = {0};
 		snprintf(tmp, sizeof(tmp), "%d", pct);
 		SetCXStr(&out->Ptr, (PCHAR)tmp);
+	}
+
+	// Multiclass Class Label (EQType 3)
+	if (eq_type == 3 && out && out->Ptr && g_serverUsableClassesMask > 0) {
+		char cls_str[256] = {0};
+		const char* short_names[] = {
+			"WAR", "CLR", "PAL", "RNG", "SHD", "DRU", "MNK", "BRD",
+			"ROG", "SHM", "NEC", "WIZ", "MAG", "ENC", "BST", "BER"
+		};
+		int count = 0;
+		for (int i = 0; i < 16; ++i) {
+			if (g_serverUsableClassesMask & (1 << i)) {
+				if (count > 0) strncat(cls_str, "/", 255 - strlen(cls_str));
+				strncat(cls_str, short_names[i], 255 - strlen(cls_str));
+				count++;
+			}
+		}
+		if (count > 0) {
+			SetCXStr(&out->Ptr, (PCHAR)cls_str);
+		}
 	}
 
 	return ret;

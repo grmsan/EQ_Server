@@ -4146,9 +4146,42 @@ void Mob::BuffProcess()
 			if (spells[buffs[buffs_i].spellid].buff_duration_formula != DF_Permanent &&
 			    spells[buffs[buffs_i].spellid].buff_duration_formula != DF_Aura &&
 				buffs[buffs_i].ticsremaining != PERMANENT_BUFF_DURATION) {
+
+				// Multiclass: Pulse logic for Bard Songs
+				// If the song is about to expire (0 ticks), check if it's still memorized and re-pulse it.
+				if (RuleB(Custom, MulticlassingEnabled) && IsBardSong(buffs[buffs_i].spellid)) {
+					// We need to resolve the caster (usually self for pulse songs)
+					Mob* caster_mob = entity_list.GetMob(buffs[buffs_i].casterid);
+					Client* caster_client = (caster_mob && caster_mob->IsClient()) ? caster_mob->CastToClient() : nullptr;
+
+					if (caster_client && caster_client == this) {
+						int memo_slot = caster_client->FindMemmedSpellBySpellID(buffs[buffs_i].spellid);
+						// Only pulse if memmed AND about to expire (0 ticks) AND reuse timer ready
+						if (memo_slot > -1 && buffs[buffs_i].ticsremaining == 0 &&
+							caster_client->IsLinkedSpellReuseTimerReady(spells[buffs[buffs_i].spellid].timer_id)) {
+
+							// ApplyBardPulse refreshes the buff duration back to max (e.g. 3 ticks)
+							// It also triggers the "pulse" effects (e.g. heal/dot tick) via SpellFinished
+							caster_client->ApplyBardPulse(buffs[buffs_i].spellid, this, (EQ::spells::CastingSlot)memo_slot);
+						}
+					}
+				}
+
 				if(!zone->BuffTimersSuspended() || !IsSuspendableSpell(buffs[buffs_i].spellid))
 				{
-					--buffs[buffs_i].ticsremaining;
+					// Multiclass Infinite Buffs:
+					// Beneficial buffs do not tick down for clients if Multiclassing is enabled.
+					// Bard songs are excluded here because they rely on the Pulse logic (ticking to 0) to refresh.
+					bool frozen_buff = false;
+					if (RuleB(Custom, MulticlassingEnabled) && IsClient() &&
+						!IsDetrimentalSpell(buffs[buffs_i].spellid) &&
+						!IsBardSong(buffs[buffs_i].spellid)) {
+						frozen_buff = true;
+					}
+
+					if (!frozen_buff) {
+						--buffs[buffs_i].ticsremaining;
+					}
 
 					if (buffs[buffs_i].ticsremaining < 0) {
 						LogSpells("Buff [{}] in slot [{}] has expired. Fading", buffs[buffs_i].spellid, buffs_i);

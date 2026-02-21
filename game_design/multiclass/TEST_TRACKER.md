@@ -1,8 +1,15 @@
 # Multiclass Test Tracker & Test Plan
 
 **Status**: Active Testing
-**Date**: 2026-02-10
+**Date**: 2026-02-21
 **Technical Docs**: [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
+
+## Recent Implementation Updates
+
+- **2026-02-21**: `zone/client_process.cpp` trainer handlers updated for multiclass parity.
+  - `OPGMTraining` now allows opening class trainer windows when the trainer's class is present in `GetClassesBits()` (`HasClass()`), not only base class.
+  - `OPGMEndTraining` now uses the same multiclass-aware class check.
+  - Trainer skill caps in `OPGMTraining` now use the trainer class in multiclass mode (THJ-style behavior), so the window reflects that guild trainer's skill domain.
 
 This document contains detailed step-by-step procedures for every verification point of the Multiclass system.
 
@@ -98,6 +105,36 @@ This document contains detailed step-by-step procedures for every verification p
 **Procedure**:
 
 1. Memorize the spell from Test 2.1.
+2. Select a target (yourself works).
+3. Cast.
+**Expected**: Spell lands successfully, consumes mana, and applies effect.
+**Status**: [ ] Pass  [ ] Fail
+**Comments**: __________________________________________________
+
+### 2.3 Bard Song Pulse (Persistence)
+
+**Goal**: Verify Bard songs re-pulse (refresh) when they hit 0 ticks if still memorized.
+**Procedure**:
+
+1. Ensure you have the Bard class (`#addclass 8`).
+2. Meditate/Sit to recover mana/endurance.
+3. Memorize a beneficial song (e.g. Hymn of Restoration, lvl 6).
+4. Start singing the song targeting yourself.
+5. Wait for the duration to run out (hit 0 ticks).
+**Expected**: The song should **not fade**. Instead, it should refresh its duration back to full (3 ticks) automatically, simulating a continuous "pulse".
+**Status**: [ ] Pass  [ ] Fail
+**Comments**: __________________________________________________
+
+### 2.4 Infinite Buffs (Non-Bard)
+
+**Goal**: Verify beneficial buffs do not expire on multiclass characters.
+**Procedure**:
+
+1. Cast a standard beneficial buff on yourself (e.g. skin/symbol/spirit of wolf).
+2. Wait for ticks to count down.
+**Expected**: The duration counter should either stop decreasing or reset, effectively making the buff permanent until cancelled or dispelled.
+**Status**: [ ] Pass  [ ] Fail
+**Comments**: __________________________________________________
 2. Target self or valid target.
 3. Cast the spell.
 **Expected**: Spell casts, consumes mana, and applies effect.
@@ -188,6 +225,18 @@ This document contains detailed step-by-step procedures for every verification p
 2. Target a Wizard GM NPC.
 3. Right-click / hail.
 **Expected**: The Skill Trainer window opens. (Normally says "I am not your master").
+**Status**: [ ] Pass  [ ] Fail
+**Comments**: __________________________________________________
+
+### 3.3a Trainer End Session (Multiclass)
+
+**Goal**: Verify training close flow is also multiclass-aware.
+**Procedure**:
+
+1. Base Class: Warrior. `#addclass 12` (Wizard).
+2. Open a Wizard GM trainer window.
+3. Click **Done** / close the training session.
+**Expected**: Session closes normally, trainer sends departure text, no denial due to base class mismatch.
 **Status**: [ ] Pass  [ ] Fail
 **Comments**: __________________________________________________
 

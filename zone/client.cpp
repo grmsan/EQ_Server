@@ -13405,6 +13405,7 @@ bool Client::SetClassesBits(uint32 classes_bits)
 	const uint32 bits = (classes_bits | base_bit);
 
 	m_classes_bits_cache = bits;
+	m_pp.classes = bits;
 
 	// THJServer parity: always write GestaltClasses.
 	SetBucket(kGestaltClassesBucketKey, std::to_string(bits));
@@ -13673,7 +13674,7 @@ void Client::SendEdgeStats()
 	}
 
 	if (RuleB(Custom, MulticlassDebug)) {
-		Log(Logs::General, Logs::Info, "SendEdgeStats: sending for [{}] name=[{}] mask=0x{:04X}", 
+		Log(Logs::General, Logs::Info, "SendEdgeStats: sending for [{}] name=[{}] mask=0x{:04X}",
 			GetCleanName(), GetCleanName(), GetClassesBitmask());
 	}
 
@@ -13712,8 +13713,8 @@ void Client::SendEdgeStats()
 		{ kAGI,     static_cast<uint64>(GetAGI()) },
 		{ kINT,     static_cast<uint64>(GetINT()) },
 		{ kWIS,     static_cast<uint64>(GetWIS()) },
-		{ kCHA,     static_cast<uint64>(GetCHA()) },
-		{ kClassesBitmask, static_cast<uint64>(GetClassesBits()) }
+		{ kCHA,     static_cast<uint64>(GetCHA()) }
+		// , { kClassesBitmask, static_cast<uint64>(GetClassesBits()) } // Deprecated: Sent via PlayerProfile struct now
 	};
 
 	constexpr uint32 count = static_cast<uint32>(sizeof(pairs) / sizeof(pairs[0]));

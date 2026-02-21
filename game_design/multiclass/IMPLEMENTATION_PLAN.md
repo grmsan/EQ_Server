@@ -145,7 +145,9 @@ RULE_CATEGORY_END()
 
 | System | File | Check Pattern | Status |
 |--------|------|---------------|--------|
-| Spells | zone/spells.cpp | Memorize, Cast, Level requirements | Partial |
+| Spells | zone/spells.cpp | Memorize, Cast, Level requirements | Complete |
+| Bard Pulse | zone/spell_effects.cpp | Custom `ApplyBardPulse()` hook in `DoBuffTic` | Complete |
+| Infinite Buffs | zone/spell_effects.cpp | Bypass tick decrement for non-detrimental spells | Complete |
 | AAs | zone/aa.cpp | Purchase, Activate, Display | Partial |
 | Skills | zone/client_mods.cpp | MaxSkill(), GetRawSkillCap() | Partial |
 | Items | zone/inventory.cpp | CanEquip(), Class mask | Partial |

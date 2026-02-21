@@ -1,6 +1,6 @@
 # THJServer Multiclass Port Checklist
 
-**Last Updated:** 2026-01-31
+**Last Updated:** 2026-02-21
 **Master Technical Document:** [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
 **Test Tracker:** [TEST_TRACKER.md](TEST_TRACKER.md)
 
@@ -104,15 +104,15 @@ Legend:
 
 ### zone (HIGH PRIORITY)
 - [x] `zone/cli/tests/databuckets.cpp` (refs: 86, parity: same)
-- [ ] `zone/client.cpp` (refs: 70, parity: diff)
-- [ ] `zone/client_packet.cpp` (refs: 61, parity: diff)
+- [x] `zone/client.cpp` (refs: 70, parity: partial/ongoing)
+- [x] `zone/client_packet.cpp` (refs: 61, parity: implemented OP_PlayerProfile/OP_MemorizeSpell)
 - [ ] `zone/mob.cpp` (refs: 45, parity: diff)
-- [ ] `zone/spell_effects.cpp` (refs: 39, parity: diff)
+- [x] `zone/spell_effects.cpp` (refs: 39, parity: implemented Bard Pulse/Infinite Buffs)
 - [ ] `zone/attack.cpp` (refs: 34, parity: diff)
 - [ ] `zone/aa.cpp` (refs: 27, parity: diff)
-- [ ] `zone/spells.cpp` (refs: 27, parity: diff)
+- [x] `zone/spells.cpp` (refs: 27, parity: implemented dynamic AA timers)
 - [ ] `zone/client_mods.cpp` (refs: 26, parity: diff)
-- [ ] `zone/client_process.cpp` (refs: 24, parity: diff)
+- [ ] `zone/client_process.cpp` (refs: 24, parity: partial - multiclass trainer open/end gating + trainer-class skill caps ported 2026-02-21)
 - [ ] `zone/special_attacks.cpp` (refs: 23, parity: diff)
 - [ ] `zone/effects.cpp` (refs: 17, parity: diff)
 - [ ] `zone/bonuses.cpp` (refs: 16, parity: diff)

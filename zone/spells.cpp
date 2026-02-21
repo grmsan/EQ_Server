@@ -2869,11 +2869,15 @@ bool Mob::SpellFinished(uint16 spell_id, Mob *spell_target, CastingSlot slot, in
 					ExpendAlternateAdvancementCharge(rank->base_ability->id);
 				}
 				//set AA recast timer
-				CastToClient()->SendAlternateAdvancementTimer(rank->spell_type, 0, 0);
+				if (RuleB(Custom, UseDynamicAATimers)) {
+					CastToClient()->SendAlternateAdvancementTimer(CastToClient()->GetDynamicAATimer(rank->base_ability->id), 0, 0);
+				} else {
+					CastToClient()->SendAlternateAdvancementTimer(rank->spell_type, 0, 0);
+				}
 			}
 		}
 		//handle bard AA and Discipline recast timers when singing
-		if (HasClass(Class::Bard) && spell_id != casting_spell_id && timer != 0xFFFFFFFF) {
+		if (!RuleB(Custom, MulticlassingEnabled) && HasClass(Class::Bard) && spell_id != casting_spell_id && timer != 0xFFFFFFFF) {
 			CastToClient()->GetPTimers().Start(timer, timer_duration);
 			LogSpells("Spell [{}]: Setting BARD custom reuse timer [{}] to [{}]", spell_id, casting_spell_timer, casting_spell_timer_duration);
 		}

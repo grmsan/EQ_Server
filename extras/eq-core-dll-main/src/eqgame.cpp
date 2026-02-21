@@ -2089,8 +2089,8 @@ int __fastcall EQCharacter_MaxEnd_Detour(void* This, void* edx, int a1)
 // This is the key hook for multiclass equipment support - the client calls GetUsableClasses to check
 // if the player can equip an item.
 //
-// APPROACH: Whitelist specific RVAs that need multiclass bits for VALIDATION/USE.
-// All other call sites (tooltips, display) return NATIVE to preserve correct UI.
+// APPROACH: Default to server multiclass mask for ALL call sites.
+// Only force NATIVE on known display-only RVAs where returning the player mask would be misleading.
 //
 // Known RVAs (discovered via debug logging):
 //   0x0004C472 - Equipment slot validation (needs multiclass)
@@ -2099,24 +2099,15 @@ int __fastcall EQCharacter_MaxEnd_Detour(void* This, void* edx, int a1)
 //   0x002A9736 - Tooltip class display (needs NATIVE - show item's real classes)
 //   0x002A6D16 - Display/filter (needs NATIVE)
 //
-// Whitelist = RVAs that should return multiclass bits instead of native.
-static const std::set<DWORD> s_multiclass_rvas = {
-	0x0004C472,  // Equipment validation - MUST have multiclass bits
-	0x001716A2,  // CItemDisplayBase::CanEquip - Item Tooltip "Can Equip" status
-	0x00171784,  // CItemDisplayBase::CanEquip - Item Tooltip "Can Equip" status (secondary)
-	0x002F0DA3,  // Item use / right-click cast (tomes/scrolls)
-	0x002F0E05,  // Item use / right-click cast (secondary)
-	0x002A6D16,  // Merchant/Trade list visibility filter
-	0x002A6D26,  // Merchant/Trade list visibility filter (spells/tomes)
-	0x002F113C,  // CMerchantWnd item list usability check
+// Native-only denylist = RVAs that should return native values for display fidelity.
+// This avoids equip regressions when client callsites shift between builds.
+static const std::set<DWORD> s_native_usable_classes_rvas = {
+	0x002A9736,  // Tooltip class display text path
 };
-
-// Verbose logging - set to true to log EVERY GetUsableClasses call (for debugging)
-// Set to false once RVAs are known to reduce log spam
-static bool s_verbose_usable_classes_logging = false;
 
 // Call counter for verbose logging
 static volatile LONG s_usable_classes_call_count = 0;
+static bool s_logged_usable_classes_no_mask = false;
 
 // Deduplication: track unique (RVA, native, mask) combos we've already logged
 static std::set<uint64_t> s_logged_usable_classes_combos;
@@ -2137,33 +2128,38 @@ int __fastcall EQCharacter_GetUsableClasses_Detour(void* This, void* edx, int a1
 
 	// If multiclass is disabled or no server mask, always use native
 	if (!isMulticlassUsableClassesOverrideEnabled || g_serverUsableClassesMask == 0) {
+		if (isDebugLoggingEnabled && isMulticlassUsableClassesOverrideEnabled && g_serverUsableClassesMask == 0 && !s_logged_usable_classes_no_mask) {
+			LogDebug("[USABLE_CLASSES] multiclass override enabled but server mask is 0; using native until mask arrives");
+			s_logged_usable_classes_no_mask = true;
+		}
 		return nativeVal;
 	}
+	s_logged_usable_classes_no_mask = false;
 
 	// Get calling RVA
 	void* ret_addr = _ReturnAddress();
 	DWORD ret_rva = (DWORD)((uintptr_t)ret_addr - (uintptr_t)baseAddress);
 
-	// Check if this RVA is in our whitelist (needs multiclass bits)
-	bool useMulticlass = (s_multiclass_rvas.find(ret_rva) != s_multiclass_rvas.end());
+	// Default to multiclass mask unless this is a native-only display path.
+	bool forceNative = (s_native_usable_classes_rvas.find(ret_rva) != s_native_usable_classes_rvas.end());
 
 	// Determine what we'll return
-	int returnVal = useMulticlass ? static_cast<int>(g_serverUsableClassesMask) : nativeVal;
+	int returnVal = forceNative ? nativeVal : static_cast<int>(g_serverUsableClassesMask);
 
 	// Debug logging - deduplicated to avoid spam
 	if (isDebugLoggingEnabled) {
 		InterlockedIncrement(&s_usable_classes_call_count);
 
-		if (s_verbose_usable_classes_logging) {
+		if (isMulticlassUsableClassesVerboseLoggingEnabled) {
 			// VERBOSE MODE: Log every call (for RVA discovery only)
-			LogDebug("[USABLE_CLASSES] RVA=0x%08X a1=%d a2=%u native=%d mask=0x%04X whitelisted=%d returning=%d",
-				ret_rva, a1, a2, nativeVal, g_serverUsableClassesMask, useMulticlass ? 1 : 0, returnVal);
+			LogDebug("[USABLE_CLASSES] RVA=0x%08X a1=%d a2=%u native=%d mask=0x%04X force_native=%d returning=%d",
+				ret_rva, a1, a2, nativeVal, g_serverUsableClassesMask, forceNative ? 1 : 0, returnVal);
 		} else {
 			// QUIET MODE: Only log first occurrence per unique (RVA, native, mask) combo
 			uint64_t combo = ((uint64_t)ret_rva << 32) | ((uint64_t)(nativeVal & 0xFFFF) << 16) | (g_serverUsableClassesMask & 0xFFFF);
 			if (s_logged_usable_classes_combos.find(combo) == s_logged_usable_classes_combos.end()) {
-				LogDebug("[USABLE_CLASSES] RVA=0x%08X native=%d mask=0x%04X whitelisted=%d returning=%d (first occurrence)",
-					ret_rva, nativeVal, g_serverUsableClassesMask, useMulticlass ? 1 : 0, returnVal);
+				LogDebug("[USABLE_CLASSES] RVA=0x%08X native=%d mask=0x%04X force_native=%d returning=%d (first occurrence)",
+					ret_rva, nativeVal, g_serverUsableClassesMask, forceNative ? 1 : 0, returnVal);
 				s_logged_usable_classes_combos.insert(combo);
 			}
 		}

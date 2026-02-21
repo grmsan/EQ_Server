@@ -6,6 +6,24 @@
 
 ## Recent Implementation Updates
 
+- **2026-02-21**: DLL multiclass equip gating fix in `extras/eq-core-dll-main/src/eqgame.cpp`.
+  - `EQCharacter_GetUsableClasses_Detour` changed from RVA whitelist mode to mask-first mode.
+  - Behavior now returns server multiclass class mask by default for usability/equip checks, with a tiny native-only denylist for display-only context.
+  - Goal: prevent missed equip callsites (RVA drift) that caused client error `"your class isn't right"` for valid multiclass equipment.
+  - Added debug toggle `isMulticlassUsableClassesVerboseLoggingEnabled` (`_options.h`) to dump every `GetUsableClasses` decision to `dinput8_debug.log`.
+  - Added one-time warning log when multiclass override is enabled but server mask is still `0`.
+
+- **2026-02-21**: `eqemu_config.json` world TCP port changed `9000 -> 9100`.
+  - Reason: recurring local conflict with VS Code/Jupyter Python kernel binding `127.0.0.1:9000`, causing immediate world startup failure (`World port already in use`).
+  - Action: restart world stack so all services reconnect to world on `9100`.
+
+- **2026-02-21**: `server_manager.py` main UX layout pass (operations rail + live workspace).
+  - Main tab split into a left operations rail (`Build & Deploy`, `Server Actions`, `Client Sync`, `Client Asset Status`) and right live workspace.
+  - Process table replaced with compact service cards (3-column grid) with clear status tinting (`Running`, `External`, `Stopped`).
+  - Per-process arguments/console remain hidden behind `Options`, with in-card hint text showing effective runtime settings.
+  - Runtime log viewer now includes quick-focus buttons: `Active Zone Log`, `Active World Log`, `Most Recent Log`.
+  - Added process summary strip (`Running X/Y | External Z`) for faster state scanning.
+
 - **2026-02-21**: `zone/client_process.cpp` trainer handlers updated for multiclass parity.
   - `OPGMTraining` now allows opening class trainer windows when the trainer's class is present in `GetClassesBits()` (`HasClass()`), not only base class.
   - `OPGMEndTraining` now uses the same multiclass-aware class check.
@@ -28,6 +46,60 @@ This document contains detailed step-by-step procedures for every verification p
 - `#addclass list`
 - `#level 60` (Recommended for most tests)
 - `#setskill <id> <value>`
+
+---
+
+## 0. Tooling UX Smoke Test (Server Manager)
+
+### 0.1 Main Layout Scan
+
+**Goal**: Confirm main tab is visually consolidated and workflow-oriented.
+**Procedure**:
+
+1. Open `server_manager.py` UI.
+2. Go to `Server Control` tab.
+3. Verify the left rail shows grouped cards (`Build & Deploy`, `Server Actions`, `Client Sync`, `Client Asset Status`).
+4. Verify the right side shows `Live Server Workspace`, `Service Grid`, and logs area.
+**Status**: [ ] Pass  [ ] Fail
+**Comments**: __________________________________________________
+
+### 0.2 Process Card Behavior
+
+**Goal**: Confirm process cards reflect state and keep advanced fields hidden by default.
+**Procedure**:
+
+1. Start `world` and `eqlaunch` from the service cards.
+2. Confirm each card changes to running style and Start button disables.
+3. Click `Options` for `eqlaunch`, set custom args, close dialog.
+4. Confirm card hint text updates without exposing full argument fields in the main view.
+**Status**: [ ] Pass  [ ] Fail
+**Comments**: __________________________________________________
+
+### 0.3 Runtime Log Focus
+
+**Goal**: Confirm quick log focus actions work for active debugging.
+**Procedure**:
+
+1. Open `Runtime Log Viewer`.
+2. Click `Active Zone Log` and confirm source updates to a `zone*.log`.
+3. Click `Active World Log` and confirm source updates to a `world*.log`.
+4. Click `Most Recent Log` and confirm source follows latest touched log file.
+**Status**: [ ] Pass  [ ] Fail
+**Comments**: __________________________________________________
+
+### 0.4 DLL Equip Gate (Multiclass)
+
+**Goal**: Confirm client allows equip when item class mask matches any owned multiclass class.
+**Procedure**:
+
+1. Base class Ranger; add Warrior and Mage (`#addclass 1`, `#addclass 13`).
+2. Ensure class list shows Ranger/Warrior/Mage via your class listing command.
+3. Try to equip a Warrior-only item.
+4. Try to equip a Mage-only item.
+**Expected**: Client permits equip attempts for both items (no client-side `"your class isn't right"` block).  
+Server remains final authority for any unrelated equip rules.
+**Status**: [ ] Pass  [ ] Fail
+**Comments**: __________________________________________________
 
 ---
 

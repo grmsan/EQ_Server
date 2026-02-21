@@ -1,0 +1,20 @@
+{
+  "eq_dir": "D:\\Rof2",
+  "build_target": "all",
+  "process_args": {
+    "loginserver": "",
+    "world": "",
+    "ucs": "",
+    "queryserv": "",
+    "eqlaunch": "node_1",
+    "zone": "."
+  },
+  "process_console": {
+    "loginserver": false,
+    "world": false,
+    "ucs": false,
+    "queryserv": false,
+    "eqlaunch": false,
+    "zone": false
+  }
+}

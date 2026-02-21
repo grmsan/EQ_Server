@@ -48,6 +48,10 @@ bool isMulticlassSpellUiOverrideEnabled = true;
 // normally expects a single class id (e.g., /who class column, character select class label).
 bool isMulticlassClassNameOverrideEnabled = true;
 
+// isMulticlassUsableClassesVerboseLoggingEnabled logs every GetUsableClasses decision (RVA/native/mask/return)
+// into dinput8_debug.log. Keep false during normal play to avoid log spam.
+bool isMulticlassUsableClassesVerboseLoggingEnabled = true;
+
 // isPatchmeDisabled if set to true will let you double click eqgame.exe and not get the "Please run EverQuest" message, will start properly
 bool isPatchmeDisabled = true;
 

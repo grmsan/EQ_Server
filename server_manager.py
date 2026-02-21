@@ -9,6 +9,7 @@ import glob
 from datetime import datetime
 import shutil
 import json
+import shlex
 import mysql.connector
 
 class ServerManagerApp(tk.Tk):
@@ -19,6 +20,8 @@ class ServerManagerApp(tk.Tk):
         self.geometry("1100x850")
 
         self.processes = {}
+        self.settings_path = os.path.join(os.getcwd(), ".server_manager_settings.json")
+        self._settings = self._load_manager_settings()
 
         # Define the standard server processes
         self.process_info = [
@@ -37,10 +40,19 @@ class ServerManagerApp(tk.Tk):
         self.vcpkg_bin_dir = os.path.join(os.getcwd(), "vcpkg", "vcpkg-export-x64", "installed", "x64-windows", "bin")
         self.perl_bin_dir = os.path.join(os.getcwd(), "perl", "x64", "perl", "bin")
         # Default EQ client directory for exports/copies
-        self.eq_dir_var = tk.StringVar(value=r"D:\Rof2")
-        self.build_target_var = tk.StringVar(value="all")
+        self.eq_dir_var = tk.StringVar(value=self._settings.get("eq_dir", r"D:\Rof2"))
+        self.build_target_var = tk.StringVar(value=self._settings.get("build_target", "all"))
+        self.log_follow_var = tk.BooleanVar(value=True)
+        self.selected_log_path_var = tk.StringVar(value="")
+        self.log_source_var = tk.StringVar(value="Source: none")
+        self.process_summary_var = tk.StringVar(value="Running: 0/0  |  External: 0")
+        self.log_file_entries = {}
+        self._log_tail_pos = 0
 
         self.create_widgets()
+        self._apply_saved_process_settings()
+        self.eq_dir_var.trace_add("write", self._on_setting_changed)
+        self.build_target_var.trace_add("write", self._on_setting_changed)
         self.update_status_loop()
 
     def find_bin_dir(self):
@@ -55,7 +67,106 @@ class ServerManagerApp(tk.Tk):
                 return path
         return os.path.join(self.build_dir, "bin")
 
+    def ui_call(self, fn, *args, **kwargs):
+        if threading.current_thread() is threading.main_thread():
+            fn(*args, **kwargs)
+        else:
+            self.after(0, lambda: fn(*args, **kwargs))
+
+    def _set_build_controls_enabled(self, enabled):
+        state = "normal" if enabled else "disabled"
+        if hasattr(self, "build_btn"):
+            self.build_btn.config(state=state)
+        if hasattr(self, "clean_btn"):
+            self.clean_btn.config(state=state)
+
+    def _set_build_status(self, text):
+        if hasattr(self, "build_status_lbl"):
+            self.build_status_lbl.config(text=text)
+
+    def _set_text_widget(self, widget, text):
+        widget.delete(1.0, "end")
+        widget.insert("end", text)
+        widget.see("end")
+
+    def _append_text_widget(self, widget, text):
+        widget.insert("end", text)
+        widget.see("end")
+
+    def _load_manager_settings(self):
+        try:
+            if os.path.exists(self.settings_path):
+                with open(self.settings_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if isinstance(data, dict):
+                    return data
+        except Exception:
+            pass
+        return {}
+
+    def _save_manager_settings(self):
+        try:
+            data = {
+                "eq_dir": self.eq_dir_var.get(),
+                "build_target": self.build_target_var.get(),
+                "process_args": {},
+                "process_console": {},
+            }
+            if hasattr(self, "proc_widgets"):
+                for name, widgets in self.proc_widgets.items():
+                    data["process_args"][name] = widgets["args_var"].get()
+                    data["process_console"][name] = bool(widgets["console_var"].get())
+            with open(self.settings_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+        except Exception as e:
+            self.log(f"Warning: failed to save manager settings: {e}")
+
+    def _on_setting_changed(self, *_):
+        self._save_manager_settings()
+
+    def _apply_saved_process_settings(self):
+        saved_args = self._settings.get("process_args", {})
+        saved_console = self._settings.get("process_console", {})
+        for name, widgets in self.proc_widgets.items():
+            if name in saved_args:
+                widgets["args_var"].set(saved_args[name])
+            if name in saved_console:
+                widgets["console_var"].set(bool(saved_console[name]))
+            widgets["args_var"].trace_add("write", self._on_setting_changed)
+            widgets["console_var"].trace_add("write", self._on_setting_changed)
+            widgets["args_var"].trace_add("write", lambda *_args, n=name: self._on_process_option_changed(n))
+            widgets["console_var"].trace_add("write", lambda *_args, n=name: self._on_process_option_changed(n))
+            self._update_process_hint(name)
+
+    def _on_process_option_changed(self, name):
+        self._update_process_hint(name)
+
+    def _build_process_hint(self, name):
+        widgets = self.proc_widgets.get(name)
+        if not widgets:
+            return ""
+        args = (widgets["args_var"].get() or "").strip()
+        console_mode = bool(widgets["console_var"].get())
+        parts = []
+        if args:
+            parts.append(f"Args: {args}")
+        else:
+            parts.append("Args: default")
+        if console_mode:
+            parts.append("Console: separate window")
+        return "  |  ".join(parts)
+
+    def _update_process_hint(self, name):
+        widgets = self.proc_widgets.get(name)
+        if not widgets:
+            return
+        hint_text = self._build_process_hint(name)
+        if "hint_var" in widgets:
+            widgets["hint_var"].set(hint_text)
+
     def create_widgets(self):
+        self._configure_styles()
+
         # Create Tabs
         tab_control = ttk.Notebook(self)
 
@@ -80,133 +191,215 @@ class ServerManagerApp(tk.Tk):
         # Kick off initial status checks
         self.after(100, self.refresh_status_indicators)
 
+    def _configure_styles(self):
+        style = ttk.Style()
+        try:
+            style.theme_use("clam")
+        except Exception:
+            pass
+
+        style.configure("Shell.TFrame", background="#f4f6f8")
+        style.configure("OpsRail.TFrame", background="#eef2f6")
+        style.configure("Workspace.TFrame", background="#f4f6f8")
+        style.configure("Overview.TFrame", background="#dfe7ef")
+        style.configure("OverviewTitle.TLabel", font=("Segoe UI Semibold", 11), background="#dfe7ef")
+        style.configure("OverviewValue.TLabel", font=("Segoe UI", 10), background="#dfe7ef")
+        style.configure("ProcessCard.TFrame", background="#ffffff", relief="solid", borderwidth=1)
+        style.configure("ProcessTitle.TLabel", font=("Segoe UI Semibold", 10), background="#ffffff")
+        style.configure("ProcessHint.TLabel", font=("Consolas", 8), foreground="#596777", background="#ffffff")
+        style.configure("ProcessRunning.TFrame", background="#e6f4ea", relief="solid", borderwidth=1)
+        style.configure("ProcessExternal.TFrame", background="#fff4e5", relief="solid", borderwidth=1)
+        style.configure("ProcessStopped.TFrame", background="#ffffff", relief="solid", borderwidth=1)
+
     def create_main_tab(self):
-        # Build Section
-        build_frame = ttk.LabelFrame(self.main_tab, text="Build Server")
-        build_frame.pack(fill="x", padx=10, pady=5)
+        shell = ttk.Frame(self.main_tab, style="Shell.TFrame", padding=(10, 8, 10, 8))
+        shell.pack(fill="both", expand=True)
+        shell.grid_columnconfigure(0, weight=0, minsize=360)
+        shell.grid_columnconfigure(1, weight=1)
+        shell.grid_rowconfigure(0, weight=1)
 
-        self.build_btn = ttk.Button(build_frame, text="Build (CMake)", command=self.run_build_thread)
-        self.build_btn.pack(side="left", padx=5, pady=5)
+        ops_rail = ttk.Frame(shell, style="OpsRail.TFrame", padding=(8, 8, 8, 8))
+        ops_rail.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+        ops_rail.grid_columnconfigure(0, weight=1)
 
-        self.clean_btn = ttk.Button(build_frame, text="Clean Build", command=self.clean_build)
-        self.clean_btn.pack(side="left", padx=5, pady=5)
+        workspace = ttk.Frame(shell, style="Workspace.TFrame")
+        workspace.grid(row=0, column=1, sticky="nsew")
+        workspace.grid_columnconfigure(0, weight=1)
+        workspace.grid_rowconfigure(2, weight=1)
 
-        ttk.Label(build_frame, text="Target:").pack(side="left", padx=(10, 2))
+        build_card = ttk.LabelFrame(ops_rail, text="Build & Deploy", padding=8)
+        build_card.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        build_card.grid_columnconfigure(1, weight=1)
+
+        self.build_btn = ttk.Button(build_card, text="Build", command=self.run_build_thread)
+        self.build_btn.grid(row=0, column=0, padx=(0, 6), pady=3, sticky="w")
+        self.clean_btn = ttk.Button(build_card, text="Clean", command=self.clean_build)
+        self.clean_btn.grid(row=0, column=1, padx=(0, 6), pady=3, sticky="w")
+        self.build_status_lbl = ttk.Label(build_card, text="Ready")
+        self.build_status_lbl.grid(row=0, column=2, padx=2, pady=3, sticky="e")
+        ttk.Label(build_card, text="Target").grid(row=1, column=0, padx=(0, 6), pady=3, sticky="w")
         self.build_target_combo = ttk.Combobox(
-            build_frame,
+            build_card,
             textvariable=self.build_target_var,
             width=18,
             state="readonly",
-            values=[
-                "all",
-                "zone",
-                "world",
-                "loginserver",
-                "ucs",
-                "queryserv",
-                "shared_memory",
-                "eqlaunch",
-            ],
+            values=["all", "zone", "world", "loginserver", "ucs", "queryserv", "shared_memory", "eqlaunch"],
         )
-        self.build_target_combo.pack(side="left", padx=5, pady=5)
+        self.build_target_combo.grid(row=1, column=1, columnspan=2, padx=0, pady=3, sticky="ew")
 
-        self.build_status_lbl = ttk.Label(build_frame, text="Ready")
-        self.build_status_lbl.pack(side="left", padx=5, pady=5)
+        server_card = ttk.LabelFrame(ops_rail, text="Server Actions", padding=8)
+        server_card.grid(row=1, column=0, sticky="ew", pady=(0, 8))
+        server_card.grid_columnconfigure(0, weight=1)
+        server_card.grid_columnconfigure(1, weight=1)
 
-        # Global Controls
-        global_frame = ttk.LabelFrame(self.main_tab, text="Global Controls")
-        global_frame.pack(fill="x", padx=10, pady=5)
+        self.start_all_btn = ttk.Button(server_card, text="Start All", command=self.start_all_sequence_thread)
+        self.start_all_btn.grid(row=0, column=0, padx=3, pady=3, sticky="ew")
+        self.stop_all_btn = ttk.Button(server_card, text="Stop All", command=self.stop_all_processes)
+        self.stop_all_btn.grid(row=0, column=1, padx=3, pady=3, sticky="ew")
+        self.force_stop_btn = ttk.Button(server_card, text="Force Kill", command=self.force_kill_all)
+        self.force_stop_btn.grid(row=1, column=0, padx=3, pady=3, sticky="ew")
+        self.shared_mem_btn = ttk.Button(server_card, text="Shared Memory", command=self.run_shared_memory_thread)
+        self.shared_mem_btn.grid(row=1, column=1, padx=3, pady=3, sticky="ew")
+        self.restart_zones_btn = ttk.Button(server_card, text="Restart Zones", command=self.restart_zones)
+        self.restart_zones_btn.grid(row=2, column=0, columnspan=2, padx=3, pady=3, sticky="ew")
 
-        self.start_all_btn = ttk.Button(global_frame, text="Start All (Sequence)", command=self.start_all_sequence_thread)
-        self.start_all_btn.pack(side="left", padx=5, pady=5)
+        client_card = ttk.LabelFrame(ops_rail, text="Client Sync", padding=8)
+        client_card.grid(row=2, column=0, sticky="ew", pady=(0, 8))
+        client_card.grid_columnconfigure(0, weight=1)
 
-        self.stop_all_btn = ttk.Button(global_frame, text="Stop All", command=self.stop_all_processes)
-        self.stop_all_btn.pack(side="left", padx=5, pady=5)
+        ttk.Label(client_card, text="EQ Folder").grid(row=0, column=0, sticky="w", pady=(0, 3))
+        ttk.Entry(client_card, textvariable=self.eq_dir_var).grid(row=1, column=0, sticky="ew", pady=(0, 4))
+        browse_row = ttk.Frame(client_card)
+        browse_row.grid(row=2, column=0, sticky="ew", pady=(0, 4))
+        browse_row.grid_columnconfigure(0, weight=1)
+        browse_row.grid_columnconfigure(1, weight=1)
+        ttk.Button(browse_row, text="Browse", command=self.browse_eq_dir).grid(row=0, column=0, padx=(0, 3), sticky="ew")
+        ttk.Button(browse_row, text="Refresh Status", command=self.refresh_status_indicators).grid(row=0, column=1, padx=(3, 0), sticky="ew")
 
-        self.force_stop_btn = ttk.Button(global_frame, text="Force Kill All (Taskkill)", command=self.force_kill_all)
-        self.force_stop_btn.pack(side="left", padx=5, pady=5)
+        action_row_1 = ttk.Frame(client_card)
+        action_row_1.grid(row=3, column=0, sticky="ew", pady=2)
+        action_row_1.grid_columnconfigure(0, weight=1)
+        action_row_1.grid_columnconfigure(1, weight=1)
+        ttk.Button(action_row_1, text="Build+Copy DLL", command=self.run_build_eqcore_thread).grid(row=0, column=0, padx=(0, 3), sticky="ew")
+        ttk.Button(action_row_1, text="Copy DLL", command=self.copy_eqcore_dll).grid(row=0, column=1, padx=(3, 0), sticky="ew")
 
-        self.shared_mem_btn = ttk.Button(global_frame, text="Run Shared Memory", command=self.run_shared_memory_thread)
-        self.shared_mem_btn.pack(side="left", padx=5, pady=5)
+        action_row_2 = ttk.Frame(client_card)
+        action_row_2.grid(row=4, column=0, sticky="ew", pady=2)
+        action_row_2.grid_columnconfigure(0, weight=1)
+        action_row_2.grid_columnconfigure(1, weight=1)
+        ttk.Button(action_row_2, text="Export spells_us", command=self.run_export_spells_thread).grid(row=0, column=0, padx=(0, 3), sticky="ew")
+        ttk.Button(action_row_2, text="Export dbstr_us", command=self.run_export_dbstr_thread).grid(row=0, column=1, padx=(3, 0), sticky="ew")
+        ttk.Button(client_card, text="Launch eqgame", command=self.launch_eqgame).grid(row=5, column=0, sticky="ew", pady=(4, 0))
 
-        # Quick restart for testing - kills zones and restarts eqlaunch
-        self.restart_zones_btn = ttk.Button(global_frame, text="Restart Zones", command=self.restart_zones)
-        self.restart_zones_btn.pack(side="left", padx=5, pady=5)
-
-        # Client assets/status + quick actions
-        client_frame = ttk.LabelFrame(self.main_tab, text="Client Assets (EQ Folder + DLL/Exports)")
-        client_frame.pack(fill="x", padx=10, pady=5)
-
-        ttk.Label(client_frame, text="EQ Client Folder:").grid(row=0, column=0, padx=5, pady=5, sticky="e")
-        ttk.Entry(client_frame, textvariable=self.eq_dir_var, width=50).grid(row=0, column=1, padx=5, pady=5, sticky="w")
-        ttk.Button(client_frame, text="Browse", command=self.browse_eq_dir).grid(row=0, column=2, padx=5, pady=5)
-        ttk.Button(client_frame, text="Refresh Status", command=self.refresh_status_indicators).grid(row=0, column=3, padx=5, pady=5)
-
-        # Status labels (updated on load/refresh)
+        status_card = ttk.LabelFrame(ops_rail, text="Client Asset Status", padding=8)
+        status_card.grid(row=3, column=0, sticky="ew")
         self.status_labels = {
-            "dll": ttk.Label(client_frame, text="DLL: checking...", foreground="blue"),
-            "spells": ttk.Label(client_frame, text="spells_us: checking...", foreground="blue"),
-            "dbstr": ttk.Label(client_frame, text="dbstr_us: checking...", foreground="blue"),
+            "dll": ttk.Label(status_card, text="DLL: checking...", foreground="blue"),
+            "spells": ttk.Label(status_card, text="spells_us: checking...", foreground="blue"),
+            "dbstr": ttk.Label(status_card, text="dbstr_us: checking...", foreground="blue"),
         }
-        self.status_labels["dll"].grid(row=1, column=0, columnspan=2, padx=5, pady=2, sticky="w")
-        self.status_labels["spells"].grid(row=2, column=0, columnspan=2, padx=5, pady=2, sticky="w")
-        self.status_labels["dbstr"].grid(row=3, column=0, columnspan=2, padx=5, pady=2, sticky="w")
+        self.status_labels["dll"].pack(anchor="w", pady=1)
+        self.status_labels["spells"].pack(anchor="w", pady=1)
+        self.status_labels["dbstr"].pack(anchor="w", pady=1)
 
-        # Quick action buttons
-        ttk.Button(client_frame, text="Build + Copy DLL", command=self.run_build_eqcore_thread).grid(row=1, column=2, padx=5, pady=2, sticky="w")
-        ttk.Button(client_frame, text="Copy DLL Only", command=self.copy_eqcore_dll).grid(row=1, column=3, padx=5, pady=2, sticky="w")
-        ttk.Button(client_frame, text="Export spells_us", command=self.run_export_spells_thread).grid(row=2, column=2, padx=5, pady=2, sticky="w")
-        ttk.Button(client_frame, text="Export dbstr_us", command=self.run_export_dbstr_thread).grid(row=2, column=3, padx=5, pady=2, sticky="w")
-        ttk.Button(client_frame, text="Launch eqgame (patchme)", command=self.launch_eqgame).grid(row=3, column=2, padx=5, pady=2, sticky="w")
+        overview = ttk.Frame(workspace, style="Overview.TFrame", padding=(10, 8, 10, 8))
+        overview.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        overview.grid_columnconfigure(0, weight=1)
+        overview.grid_columnconfigure(1, weight=0)
 
-        # Processes List
-        proc_frame = ttk.LabelFrame(self.main_tab, text="Server Processes")
-        proc_frame.pack(fill="both", expand=True, padx=10, pady=5)
+        ttk.Label(overview, text="Live Server Workspace", style="OverviewTitle.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(overview, textvariable=self.process_summary_var, style="OverviewValue.TLabel").grid(row=1, column=0, sticky="w", pady=(2, 0))
+        ttk.Button(overview, text="Refresh Logs", command=self.refresh_runtime_log_files).grid(row=0, column=1, rowspan=2, padx=(10, 0), sticky="e")
 
-        # Headers
-        ttk.Label(proc_frame, text="Process").grid(row=0, column=0, padx=5, pady=5, sticky="w")
-        ttk.Label(proc_frame, text="Status").grid(row=0, column=1, padx=5, pady=5, sticky="w")
-        ttk.Label(proc_frame, text="Arguments").grid(row=0, column=2, padx=5, pady=5, sticky="w")
-        ttk.Label(proc_frame, text="Actions").grid(row=0, column=3, padx=5, pady=5, sticky="w")
+        proc_frame = ttk.LabelFrame(workspace, text="Service Grid", padding=8)
+        proc_frame.grid(row=1, column=0, sticky="ew", pady=(0, 8))
+        for c in range(3):
+            proc_frame.grid_columnconfigure(c, weight=1)
 
         self.proc_widgets = {}
         for i, info in enumerate(self.process_info):
-            row = i + 1
+            row = i // 3
+            col = i % 3
             name = info["name"]
 
-            ttk.Label(proc_frame, text=info["display"]).grid(row=row, column=0, padx=5, pady=5, sticky="w")
+            card = ttk.Frame(proc_frame, style="ProcessCard.TFrame", padding=(10, 8, 10, 8))
+            card.grid(row=row, column=col, padx=5, pady=5, sticky="nsew")
+            card.grid_columnconfigure(0, weight=1)
 
-            status_lbl = ttk.Label(proc_frame, text="Stopped", foreground="red")
-            status_lbl.grid(row=row, column=1, padx=5, pady=5, sticky="w")
+            ttk.Label(card, text=info["display"], style="ProcessTitle.TLabel").grid(row=0, column=0, sticky="w")
+            status_lbl = ttk.Label(card, text="Stopped", foreground="red")
+            status_lbl.grid(row=1, column=0, sticky="w", pady=(2, 4))
 
             args_var = tk.StringVar(value=info["args"])
-            ttk.Entry(proc_frame, textvariable=args_var, width=20).grid(row=row, column=2, padx=5, pady=5, sticky="w")
-
-            btn_frame = ttk.Frame(proc_frame)
-            btn_frame.grid(row=row, column=3, padx=5, pady=5, sticky="w")
-
-            start_btn = ttk.Button(btn_frame, text="Start", command=lambda n=name: self.start_process(n))
-            start_btn.pack(side="left", padx=2)
-
-            stop_btn = ttk.Button(btn_frame, text="Stop", state="disabled", command=lambda n=name: self.stop_process(n))
-            stop_btn.pack(side="left", padx=2)
-
             console_var = tk.BooleanVar(value=False)
-            ttk.Checkbutton(btn_frame, text="Console", variable=console_var).pack(side="left", padx=5)
+            hint_var = tk.StringVar(value="")
+
+            ttk.Label(card, textvariable=hint_var, style="ProcessHint.TLabel", wraplength=260).grid(row=2, column=0, sticky="w", pady=(0, 6))
+
+            btn_row = ttk.Frame(card)
+            btn_row.grid(row=3, column=0, sticky="ew")
+            btn_row.grid_columnconfigure(0, weight=1)
+            btn_row.grid_columnconfigure(1, weight=1)
+            btn_row.grid_columnconfigure(2, weight=1)
+
+            start_btn = ttk.Button(btn_row, text="Start", command=lambda n=name: self.start_process(n))
+            start_btn.grid(row=0, column=0, padx=(0, 3), sticky="ew")
+            stop_btn = ttk.Button(btn_row, text="Stop", state="disabled", command=lambda n=name: self.stop_process(n))
+            stop_btn.grid(row=0, column=1, padx=3, sticky="ew")
+            opts_btn = ttk.Button(btn_row, text="Options", command=lambda n=name: self.open_process_options(n))
+            opts_btn.grid(row=0, column=2, padx=(3, 0), sticky="ew")
 
             self.proc_widgets[name] = {
+                "card": card,
                 "status_lbl": status_lbl,
                 "start_btn": start_btn,
                 "stop_btn": stop_btn,
+                "opts_btn": opts_btn,
                 "args_var": args_var,
-                "console_var": console_var
+                "console_var": console_var,
+                "hint_var": hint_var,
             }
 
-        # Log Section
-        log_frame = ttk.LabelFrame(self.main_tab, text="Manager Log")
-        log_frame.pack(fill="both", expand=True, padx=10, pady=5)
-        self.log_text = scrolledtext.ScrolledText(log_frame, height=8, state="disabled")
+        log_tabs = ttk.Notebook(workspace)
+        log_tabs.grid(row=2, column=0, sticky="nsew")
+
+        manager_log_tab = ttk.Frame(log_tabs)
+        runtime_log_tab = ttk.Frame(log_tabs)
+        log_tabs.add(manager_log_tab, text="Manager Log")
+        log_tabs.add(runtime_log_tab, text="Runtime Log Viewer")
+
+        self.log_text = scrolledtext.ScrolledText(manager_log_tab, height=10, state="disabled")
         self.log_text.pack(fill="both", expand=True, padx=5, pady=5)
+
+        controls = ttk.Frame(runtime_log_tab)
+        controls.pack(fill="x", padx=5, pady=5)
+
+        ttk.Button(controls, text="Active Zone Log", command=self.select_active_zone_log).pack(side="left", padx=3)
+        ttk.Button(controls, text="Active World Log", command=self.select_active_world_log).pack(side="left", padx=3)
+        ttk.Button(controls, text="Most Recent Log", command=self.select_most_recent_runtime_log).pack(side="left", padx=3)
+        ttk.Button(controls, text="Refresh Logs", command=self.refresh_runtime_log_files).pack(side="left", padx=3)
+        ttk.Checkbutton(controls, text="Follow", variable=self.log_follow_var).pack(side="left", padx=8)
+        ttk.Label(controls, textvariable=self.log_source_var).pack(side="left", padx=10)
+
+        selector_row = ttk.Frame(runtime_log_tab)
+        selector_row.pack(fill="x", padx=5, pady=2)
+        ttk.Label(selector_row, text="Log File:").pack(side="left", padx=(0, 5))
+        self.runtime_log_combo = ttk.Combobox(
+            selector_row,
+            textvariable=self.selected_log_path_var,
+            state="readonly",
+            width=115,
+            values=[],
+        )
+        self.runtime_log_combo.pack(side="left", fill="x", expand=True)
+        self.runtime_log_combo.bind("<<ComboboxSelected>>", self.on_runtime_log_selected)
+
+        self.runtime_log_text = scrolledtext.ScrolledText(runtime_log_tab, height=14, state="disabled", font=("Consolas", 9))
+        self.runtime_log_text.pack(fill="both", expand=True, padx=5, pady=5)
+
+        self._refresh_process_overview()
+        self.after(200, self.refresh_runtime_log_files)
+        self.after(1000, self.runtime_log_follow_loop)
 
     def create_database_tab(self):
         """Create database management tools"""
@@ -394,7 +587,7 @@ class ServerManagerApp(tk.Tk):
     def list_launcher_zones(self):
         def run():
             try:
-                self.db_output.delete(1.0, "end")
+                self.ui_call(self._set_text_widget, self.db_output, "")
 
                 db_cfg = self._load_db_config()
                 conn = mysql.connector.connect(**db_cfg)
@@ -402,15 +595,14 @@ class ServerManagerApp(tk.Tk):
 
                 cur.execute("SHOW TABLES LIKE 'launcher_zones'")
                 if not cur.fetchone():
-                    self.db_output.insert("end", "Table launcher_zones not found in this database.\n")
-                    self.db_output.see("end")
+                    self.ui_call(self._append_text_widget, self.db_output, "Table launcher_zones not found in this database.\n")
                     cur.close()
                     conn.close()
                     return
 
                 cur.execute("SHOW COLUMNS FROM launcher_zones")
                 columns = [r[0] for r in cur.fetchall()]
-                self.db_output.insert("end", f"launcher_zones columns: {', '.join(columns)}\n\n")
+                self.ui_call(self._append_text_widget, self.db_output, f"launcher_zones columns: {', '.join(columns)}\n\n")
 
                 order_cols = [c for c in ["launcher", "zone", "port", "number", "startzone"] if c in columns]
                 if not order_cols:
@@ -420,34 +612,31 @@ class ServerManagerApp(tk.Tk):
                 cur.execute(q)
                 rows = cur.fetchall()
 
-                self.db_output.insert("end", f"Showing up to {len(rows)} rows:\n")
+                self.ui_call(self._append_text_widget, self.db_output, f"Showing up to {len(rows)} rows:\n")
                 for row in rows:
-                    self.db_output.insert("end", f"{row}\n")
-                self.db_output.see("end")
+                    self.ui_call(self._append_text_widget, self.db_output, f"{row}\n")
 
                 cur.close()
                 conn.close()
             except Exception as e:
-                self.db_output.insert("end", f"Error listing launcher_zones: {e}\n")
-                self.db_output.see("end")
+                self.ui_call(self._append_text_widget, self.db_output, f"Error listing launcher_zones: {e}\n")
 
         threading.Thread(target=run, daemon=True).start()
 
     def trim_launcher_zones(self):
+        keep = int(self.launcher_keep_count.get())
+        if keep < 0:
+            keep = 0
+
+        if not messagebox.askyesno(
+            "Trim launcher_zones",
+            f"This will keep only {keep} launcher_zones rows per launcher (based on sorted order) and delete the rest.\n\nContinue?",
+        ):
+            return
+
         def run():
             try:
-                keep = int(self.launcher_keep_count.get())
-                if keep < 0:
-                    keep = 0
-
-                if not messagebox.askyesno(
-                    "Trim launcher_zones",
-                    f"This will keep only {keep} launcher_zones rows per launcher (based on sorted order) and delete the rest.\n\nContinue?",
-                ):
-                    return
-
-                self.db_output.delete(1.0, "end")
-                self.db_output.insert("end", f"Trimming launcher_zones to {keep} per launcher...\n")
+                self.ui_call(self._set_text_widget, self.db_output, f"Trimming launcher_zones to {keep} per launcher...\n")
 
                 db_cfg = self._load_db_config()
                 conn = mysql.connector.connect(**db_cfg)
@@ -455,8 +644,7 @@ class ServerManagerApp(tk.Tk):
 
                 cur.execute("SHOW TABLES LIKE 'launcher_zones'")
                 if not cur.fetchone():
-                    self.db_output.insert("end", "Table launcher_zones not found in this database.\n")
-                    self.db_output.see("end")
+                    self.ui_call(self._append_text_widget, self.db_output, "Table launcher_zones not found in this database.\n")
                     cur.close()
                     conn.close()
                     return
@@ -503,8 +691,7 @@ class ServerManagerApp(tk.Tk):
                         to_delete.append(row)
 
                 if not to_delete:
-                    self.db_output.insert("end", "Nothing to delete.\n")
-                    self.db_output.see("end")
+                    self.ui_call(self._append_text_widget, self.db_output, "Nothing to delete.\n")
                     cur.close()
                     conn.close()
                     return
@@ -533,15 +720,13 @@ class ServerManagerApp(tk.Tk):
                         deleted += cur.rowcount
 
                 conn.commit()
-                self.db_output.insert("end", f"Deleted {deleted} rows.\n")
-                self.db_output.insert("end", "Done.\n")
-                self.db_output.see("end")
+                self.ui_call(self._append_text_widget, self.db_output, f"Deleted {deleted} rows.\n")
+                self.ui_call(self._append_text_widget, self.db_output, "Done.\n")
 
                 cur.close()
                 conn.close()
             except Exception as e:
-                self.db_output.insert("end", f"Error trimming launcher_zones: {e}\n")
-                self.db_output.see("end")
+                self.ui_call(self._append_text_widget, self.db_output, f"Error trimming launcher_zones: {e}\n")
 
         threading.Thread(target=run, daemon=True).start()
 
@@ -554,9 +739,9 @@ class ServerManagerApp(tk.Tk):
         """Run Python script and display output in widget"""
         def run():
             try:
-                output_widget.delete(1.0, "end")
-                output_widget.insert("end", f"Running: python {script} {' '.join(str(a) for a in args)}\n")
-                output_widget.insert("end", "=" * 60 + "\n")
+                self.ui_call(self._set_text_widget, output_widget, "")
+                self.ui_call(self._append_text_widget, output_widget, f"Running: python {script} {' '.join(str(a) for a in args)}\n")
+                self.ui_call(self._append_text_widget, output_widget, "=" * 60 + "\n")
 
                 result = subprocess.run(
                     [sys.executable, script] + [str(a) for a in args],
@@ -565,18 +750,17 @@ class ServerManagerApp(tk.Tk):
                     cwd=os.getcwd()
                 )
 
-                output_widget.insert("end", result.stdout)
+                if result.stdout:
+                    self.ui_call(self._append_text_widget, output_widget, result.stdout)
                 if result.stderr:
-                    output_widget.insert("end", "\n=== ERRORS ===\n")
-                    output_widget.insert("end", result.stderr)
+                    self.ui_call(self._append_text_widget, output_widget, "\n=== ERRORS ===\n")
+                    self.ui_call(self._append_text_widget, output_widget, result.stderr)
 
-                output_widget.insert("end", "\n" + "=" * 60 + "\n")
-                output_widget.insert("end", f"Exit code: {result.returncode}\n")
-                output_widget.see("end")
+                self.ui_call(self._append_text_widget, output_widget, "\n" + "=" * 60 + "\n")
+                self.ui_call(self._append_text_widget, output_widget, f"Exit code: {result.returncode}\n")
 
             except Exception as e:
-                output_widget.insert("end", f"\nError: {e}\n")
-                output_widget.see("end")
+                self.ui_call(self._append_text_widget, output_widget, f"\nError: {e}\n")
 
         threading.Thread(target=run, daemon=True).start()
 
@@ -586,15 +770,12 @@ class ServerManagerApp(tk.Tk):
 
         def backup():
             try:
-                # Read database config
-                with open('eqemu_config.json', 'r') as f:
-                    config = json.load(f)
-
-                db_host = config['server']['database']['host']
-                db_port = config['server']['database']['port']
-                db_user = config['server']['database']['username']
-                db_pass = config['server']['database']['password']
-                db_name = config['server']['database']['db']
+                db_cfg = self._load_db_config()
+                db_host = db_cfg["host"]
+                db_port = db_cfg["port"]
+                db_user = db_cfg["user"]
+                db_pass = db_cfg["password"]
+                db_name = db_cfg["database"]
 
                 # Create backup directory
                 backup_dir = "backups"
@@ -605,8 +786,7 @@ class ServerManagerApp(tk.Tk):
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 backup_file = os.path.join(backup_dir, f"eqemu_backup_{timestamp}.sql")
 
-                self.db_output.delete(1.0, "end")
-                self.db_output.insert("end", f"Backing up database to: {backup_file}\n")
+                self.ui_call(self._set_text_widget, self.db_output, f"Backing up database to: {backup_file}\n")
 
                 # Run mysqldump
                 cmd = [
@@ -623,17 +803,14 @@ class ServerManagerApp(tk.Tk):
 
                 if result.returncode == 0:
                     file_size = os.path.getsize(backup_file) / (1024 * 1024)  # MB
-                    self.db_output.insert("end", f"Backup completed successfully!\n")
-                    self.db_output.insert("end", f"File size: {file_size:.2f} MB\n")
+                    self.ui_call(self._append_text_widget, self.db_output, "Backup completed successfully!\n")
+                    self.ui_call(self._append_text_widget, self.db_output, f"File size: {file_size:.2f} MB\n")
                     self.log(f"Database backed up to {backup_file}")
                 else:
-                    self.db_output.insert("end", f"Backup failed:\n{result.stderr}\n")
-
-                self.db_output.see("end")
+                    self.ui_call(self._append_text_widget, self.db_output, f"Backup failed:\n{result.stderr}\n")
 
             except Exception as e:
-                self.db_output.insert("end", f"Error: {e}\n")
-                self.db_output.see("end")
+                self.ui_call(self._append_text_widget, self.db_output, f"Error: {e}\n")
 
         threading.Thread(target=backup, daemon=True).start()
 
@@ -658,17 +835,14 @@ class ServerManagerApp(tk.Tk):
 
         def restore():
             try:
-                with open('eqemu_config.json', 'r') as f:
-                    config = json.load(f)
+                db_cfg = self._load_db_config()
+                db_host = db_cfg["host"]
+                db_port = db_cfg["port"]
+                db_user = db_cfg["user"]
+                db_pass = db_cfg["password"]
+                db_name = db_cfg["database"]
 
-                db_host = config['server']['database']['host']
-                db_port = config['server']['database']['port']
-                db_user = config['server']['database']['username']
-                db_pass = config['server']['database']['password']
-                db_name = config['server']['database']['db']
-
-                self.db_output.delete(1.0, "end")
-                self.db_output.insert("end", f"Restoring database from: {filename}\n")
+                self.ui_call(self._set_text_widget, self.db_output, f"Restoring database from: {filename}\n")
 
                 cmd = [
                     "mysql",
@@ -683,16 +857,13 @@ class ServerManagerApp(tk.Tk):
                     result = subprocess.run(cmd, stdin=f, stderr=subprocess.PIPE, text=True)
 
                 if result.returncode == 0:
-                    self.db_output.insert("end", "Restore completed successfully!\n")
+                    self.ui_call(self._append_text_widget, self.db_output, "Restore completed successfully!\n")
                     self.log("Database restored successfully")
                 else:
-                    self.db_output.insert("end", f"Restore failed:\n{result.stderr}\n")
-
-                self.db_output.see("end")
+                    self.ui_call(self._append_text_widget, self.db_output, f"Restore failed:\n{result.stderr}\n")
 
             except Exception as e:
-                self.db_output.insert("end", f"Error: {e}\n")
-                self.db_output.see("end")
+                self.ui_call(self._append_text_widget, self.db_output, f"Error: {e}\n")
 
         threading.Thread(target=restore, daemon=True).start()
 
@@ -762,13 +933,11 @@ class ServerManagerApp(tk.Tk):
             conn.close()
             self.log(f"Exported spells to {dest}")
             if hasattr(self, "db_output"):
-                self.db_output.insert("end", f"Exported spells to {dest}\n")
-                self.db_output.see("end")
+                self.ui_call(self._append_text_widget, self.db_output, f"Exported spells to {dest}\n")
         except Exception as e:
             self.log(f"Spell export failed: {e}")
             if hasattr(self, "db_output"):
-                self.db_output.insert("end", f"Spell export failed: {e}\n")
-                self.db_output.see("end")
+                self.ui_call(self._append_text_widget, self.db_output, f"Spell export failed: {e}\n")
 
     def export_dbstr(self):
         dest = os.path.join(self.eq_dir_var.get(), "dbstr_us.txt")
@@ -793,13 +962,11 @@ class ServerManagerApp(tk.Tk):
             conn.close()
             self.log(f"Exported dbstr to {dest}")
             if hasattr(self, "db_output"):
-                self.db_output.insert("end", f"Exported dbstr to {dest}\n")
-                self.db_output.see("end")
+                self.ui_call(self._append_text_widget, self.db_output, f"Exported dbstr to {dest}\n")
         except Exception as e:
             self.log(f"dbstr export failed: {e}")
             if hasattr(self, "db_output"):
-                self.db_output.insert("end", f"dbstr export failed: {e}\n")
-                self.db_output.see("end")
+                self.ui_call(self._append_text_widget, self.db_output, f"dbstr export failed: {e}\n")
 
     def _dll_candidates(self):
         path = os.path.join(self.extra_dll_dir, "dinput8.dll")
@@ -850,6 +1017,51 @@ class ServerManagerApp(tk.Tk):
         dbstr_ok, dbstr_msg = check_file(dbstr_path, "dbstr_us", dbstr_rows)
         return spells_ok, spells_msg, dbstr_ok, dbstr_msg
 
+    def _find_msbuild(self):
+        # 1) PATH
+        found = shutil.which("msbuild")
+        if found and os.path.exists(found):
+            return found
+
+        # 2) vswhere (most reliable on modern VS installs)
+        vswhere = r"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
+        if os.path.exists(vswhere):
+            try:
+                result = subprocess.run(
+                    [
+                        vswhere,
+                        "-latest",
+                        "-products",
+                        "*",
+                        "-requires",
+                        "Microsoft.Component.MSBuild",
+                        "-find",
+                        r"MSBuild\**\Bin\MSBuild.exe",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                candidate = (result.stdout or "").strip().splitlines()
+                if candidate:
+                    msbuild = candidate[0].strip()
+                    if os.path.exists(msbuild):
+                        return msbuild
+            except Exception:
+                pass
+
+        # 3) common fixed paths
+        fixed = [
+            r"C:\Program Files\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe",
+            r"C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe",
+            r"C:\Program Files\Microsoft Visual Studio\2022\Professional\MSBuild\Current\Bin\MSBuild.exe",
+            r"C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe",
+        ]
+        for path in fixed:
+            if os.path.exists(path):
+                return path
+        return None
+
     def run_build_eqcore_thread(self):
         threading.Thread(target=self.build_eqcore_and_copy, daemon=True).start()
 
@@ -858,12 +1070,11 @@ class ServerManagerApp(tk.Tk):
         try:
             self.log("Building eq-core DLL (MSBuild)...")
 
-            # Use MSBuild directly - this matches the VS Code task
-            msbuild = r"C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe"
+            msbuild = self._find_msbuild()
             sln_path = os.path.join("extras", "eq-core-dll-main", "eq-core-dll-visualstudio2022.sln")
 
-            if not os.path.exists(msbuild):
-                self.log(f"MSBuild not found at {msbuild}")
+            if not msbuild:
+                self.log("MSBuild not found. Install VS Build Tools or add msbuild to PATH.")
                 return
 
             if not os.path.exists(sln_path):
@@ -901,7 +1112,7 @@ class ServerManagerApp(tk.Tk):
             # search for dll in extras/eq-core-dll-main/bin only
             candidates = self._dll_candidates()
             if not candidates:
-                messagebox.showerror("Error", f"No dinput8.dll found in {self.extra_dll_dir}")
+                self.ui_call(messagebox.showerror, "Error", f"No dinput8.dll found in {self.extra_dll_dir}")
                 return
             src = max(candidates, key=os.path.getmtime)
             dest_dir = self.eq_dir_var.get()
@@ -989,21 +1200,19 @@ class ServerManagerApp(tk.Tk):
             msg = spells_msg + "\n" + dbstr_msg
             self.log(msg)
             if hasattr(self, "db_output"):
-                self.db_output.insert("end", msg + "\n")
-                self.db_output.see("end")
+                self.ui_call(self._append_text_widget, self.db_output, msg + "\n")
         except Exception as e:
             self.log(f"Export status failed: {e}")
             if hasattr(self, "db_output"):
-                self.db_output.insert("end", f"Export status failed: {e}\n")
-                self.db_output.see("end")
+                self.ui_call(self._append_text_widget, self.db_output, f"Export status failed: {e}\n")
 
     # ==================== Quick Action Methods ====================
 
     def quick_build(self, target):
         """Quick build a specific target without reconfiguring"""
         def do_build():
-            self.build_btn.config(state="disabled")
-            self.build_status_lbl.config(text=f"Building {target}...")
+            self.ui_call(self._set_build_controls_enabled, False)
+            self.ui_call(self._set_build_status, f"Building {target}...")
 
             cmd = ["cmake", "--build", "build", "--target", target, "--config", "RelWithDebInfo", "--parallel"]
             proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
@@ -1019,13 +1228,13 @@ class ServerManagerApp(tk.Tk):
 
             if proc.returncode == 0:
                 self.log(f"Build {target} complete.")
-                self.build_status_lbl.config(text="Build Complete")
+                self.ui_call(self._set_build_status, "Build Complete")
                 self.bin_dir = self.find_bin_dir()
             else:
                 self.log(f"Build {target} failed.")
-                self.build_status_lbl.config(text="Build Failed")
+                self.ui_call(self._set_build_status, "Build Failed")
 
-            self.build_btn.config(state="normal")
+            self.ui_call(self._set_build_controls_enabled, True)
 
         threading.Thread(target=do_build, daemon=True).start()
 
@@ -1046,8 +1255,8 @@ class ServerManagerApp(tk.Tk):
             self.log("=== Full Rebuild and Restart ===")
 
             # Build zone
-            self.build_btn.config(state="disabled")
-            self.build_status_lbl.config(text="Building zone...")
+            self.ui_call(self._set_build_controls_enabled, False)
+            self.ui_call(self._set_build_status, "Building zone...")
 
             cmd = ["cmake", "--build", "build", "--target", "zone", "--config", "RelWithDebInfo", "--parallel"]
             proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
@@ -1063,32 +1272,24 @@ class ServerManagerApp(tk.Tk):
 
             if proc.returncode != 0:
                 self.log("Build failed, aborting restart.")
-                self.build_status_lbl.config(text="Build Failed")
-                self.build_btn.config(state="normal")
+                self.ui_call(self._set_build_status, "Build Failed")
+                self.ui_call(self._set_build_controls_enabled, True)
                 return
 
-            self.build_status_lbl.config(text="Restarting...")
+            self.ui_call(self._set_build_status, "Restarting...")
             self.bin_dir = self.find_bin_dir()
 
-            # Kill zones
-            try:
-                subprocess.run(["taskkill", "/F", "/IM", "zone.exe"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                subprocess.run(["taskkill", "/F", "/IM", "eqlaunch.exe"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            except Exception:
-                pass
-
-            if "eqlaunch" in self.processes:
-                del self.processes["eqlaunch"]
-            if "zone" in self.processes:
-                del self.processes["zone"]
+            # Stop managed zone stack only (safer than image-wide taskkill).
+            self._stop_managed_process("zone")
+            self._stop_managed_process("eqlaunch")
 
             time.sleep(1)
 
             # Restart eqlaunch
             self.after(0, lambda: self.start_process("eqlaunch"))
 
-            self.build_status_lbl.config(text="Ready")
-            self.build_btn.config(state="normal")
+            self.ui_call(self._set_build_status, "Ready")
+            self.ui_call(self._set_build_controls_enabled, True)
             self.log("=== Rebuild and Restart Complete ===")
 
         threading.Thread(target=do_full, daemon=True).start()
@@ -1111,9 +1312,9 @@ class ServerManagerApp(tk.Tk):
 
         # Run in new console
         if sys.platform == "win32":
-            subprocess.Popen(f'start cmd /k python "{script_name}"', shell=True)
+            subprocess.Popen(["cmd", "/k", sys.executable, script_name], creationflags=subprocess.CREATE_NEW_CONSOLE)
         else:
-            subprocess.Popen(["python", script_name])
+            subprocess.Popen([sys.executable, script_name])
 
     def log(self, message):
         def _do_log():
@@ -1126,6 +1327,215 @@ class ServerManagerApp(tk.Tk):
             self.after(0, _do_log)
         except Exception:
             pass
+
+    def _get_logs_dir(self):
+        return os.path.join(os.getcwd(), "logs")
+
+    def _friendly_log_label(self, path):
+        base = os.path.basename(path).lower()
+        if base.startswith("zone"):
+            return f"ZONE | {os.path.basename(path)}"
+        if base.startswith("world"):
+            return f"WORLD | {os.path.basename(path)}"
+        if base.startswith("loginserver"):
+            return f"LOGIN | {os.path.basename(path)}"
+        if base.startswith("ucs"):
+            return f"UCS | {os.path.basename(path)}"
+        if base.startswith("queryserv"):
+            return f"QUERYSERV | {os.path.basename(path)}"
+        if base.startswith("eqlaunch"):
+            return f"EQLAUNCH | {os.path.basename(path)}"
+        return os.path.basename(path)
+
+    def _latest_log_for_prefix(self, prefix):
+        logs_dir = self._get_logs_dir()
+        if not os.path.isdir(logs_dir):
+            return None
+        matches = glob.glob(os.path.join(logs_dir, f"{prefix}*.log"))
+        matches = [p for p in matches if os.path.isfile(p)]
+        if not matches:
+            return None
+        return max(matches, key=os.path.getmtime)
+
+    def refresh_runtime_log_files(self):
+        logs_dir = self._get_logs_dir()
+        if not os.path.isdir(logs_dir):
+            self.log_source_var.set(f"Source: missing {logs_dir}")
+            self.log_file_entries = {}
+            self.runtime_log_combo["values"] = []
+            self.selected_log_path_var.set("")
+            return
+
+        patterns = [
+            "zone*.log",
+            "world*.log",
+            "loginserver*.log",
+            "ucs*.log",
+            "queryserv*.log",
+            "eqlaunch*.log",
+            "shared_memory*.log",
+            "dinput8_debug.log",
+            "stats_debug.log",
+            "*.log",
+        ]
+
+        found = []
+        for pattern in patterns:
+            found.extend(glob.glob(os.path.join(logs_dir, pattern)))
+
+        # unique + existing
+        paths = sorted(
+            {p for p in found if os.path.isfile(p)},
+            key=lambda p: os.path.getmtime(p),
+            reverse=True,
+        )
+
+        entries = {}
+        labels = []
+        for p in paths:
+            label = self._friendly_log_label(p)
+            # keep labels unique
+            unique = label
+            n = 2
+            while unique in entries:
+                unique = f"{label} ({n})"
+                n += 1
+            entries[unique] = p
+            labels.append(unique)
+
+        self.log_file_entries = entries
+        self.runtime_log_combo["values"] = labels
+
+        # keep currently selected if still present
+        current_path = self.selected_log_path_var.get()
+        if current_path and current_path in entries.values():
+            for lbl, p in entries.items():
+                if p == current_path:
+                    self.runtime_log_combo.set(lbl)
+                    break
+        elif labels:
+            self.runtime_log_combo.set(labels[0])
+            self.selected_log_path_var.set(entries[labels[0]])
+            self._load_selected_log_initial()
+        else:
+            self.selected_log_path_var.set("")
+            self.log_source_var.set("Source: no logs found")
+
+    def _latest_zone_log(self):
+        return self._latest_log_for_prefix("zone")
+
+    def _select_runtime_log_path(self, path):
+        if not path:
+            return
+        for lbl, entry_path in self.log_file_entries.items():
+            if entry_path == path:
+                self.runtime_log_combo.set(lbl)
+                break
+        self.selected_log_path_var.set(path)
+        self._load_selected_log_initial()
+
+    def select_active_zone_log(self):
+        self.refresh_runtime_log_files()
+        zone_path = self._latest_zone_log()
+        if not zone_path:
+            self.log("No zone log found in /logs.")
+            return
+        self._select_runtime_log_path(zone_path)
+
+    def select_active_world_log(self):
+        self.refresh_runtime_log_files()
+        world_path = self._latest_log_for_prefix("world")
+        if not world_path:
+            self.log("No world log found in /logs.")
+            return
+        self._select_runtime_log_path(world_path)
+
+    def select_most_recent_runtime_log(self):
+        self.refresh_runtime_log_files()
+        if not self.log_file_entries:
+            self.log("No runtime logs found in /logs.")
+            return
+        newest = max(self.log_file_entries.values(), key=os.path.getmtime)
+        self._select_runtime_log_path(newest)
+
+    def on_runtime_log_selected(self, _event=None):
+        label = self.runtime_log_combo.get()
+        path = self.log_file_entries.get(label, "")
+        self.selected_log_path_var.set(path)
+        self._load_selected_log_initial()
+
+    def _load_selected_log_initial(self):
+        path = self.selected_log_path_var.get()
+        if not path or not os.path.isfile(path):
+            self.log_source_var.set("Source: none")
+            self.runtime_log_text.config(state="normal")
+            self.runtime_log_text.delete("1.0", "end")
+            self.runtime_log_text.insert("end", "No log selected.\n")
+            self.runtime_log_text.config(state="disabled")
+            self._log_tail_pos = 0
+            return
+
+        self.log_source_var.set(f"Source: {os.path.basename(path)}")
+        # Show last ~400 lines for immediate context.
+        try:
+            with open(path, "r", encoding="utf-8", errors="ignore") as f:
+                data = f.read()
+            lines = data.splitlines()
+            tail = "\n".join(lines[-400:]) + ("\n" if lines else "")
+            self.runtime_log_text.config(state="normal")
+            self.runtime_log_text.delete("1.0", "end")
+            self.runtime_log_text.insert("end", tail)
+            self.runtime_log_text.see("end")
+            self.runtime_log_text.config(state="disabled")
+            self._log_tail_pos = os.path.getsize(path)
+        except Exception as e:
+            self.runtime_log_text.config(state="normal")
+            self.runtime_log_text.delete("1.0", "end")
+            self.runtime_log_text.insert("end", f"Failed to read log: {e}\n")
+            self.runtime_log_text.config(state="disabled")
+            self._log_tail_pos = 0
+
+    def runtime_log_follow_loop(self):
+        try:
+            path = self.selected_log_path_var.get()
+            if self.log_follow_var.get() and path and os.path.isfile(path):
+                size = os.path.getsize(path)
+                # rotated/truncated
+                if size < self._log_tail_pos:
+                    self._log_tail_pos = 0
+                if size > self._log_tail_pos:
+                    with open(path, "r", encoding="utf-8", errors="ignore") as f:
+                        f.seek(self._log_tail_pos)
+                        chunk = f.read()
+                    self._log_tail_pos = size
+                    if chunk:
+                        self.runtime_log_text.config(state="normal")
+                        self.runtime_log_text.insert("end", chunk)
+                        # keep widget bounded
+                        max_lines = 3000
+                        current_lines = int(self.runtime_log_text.index("end-1c").split(".")[0])
+                        if current_lines > max_lines:
+                            self.runtime_log_text.delete("1.0", f"{current_lines - max_lines}.0")
+                        self.runtime_log_text.see("end")
+                        self.runtime_log_text.config(state="disabled")
+        except Exception:
+            pass
+        finally:
+            self.after(1000, self.runtime_log_follow_loop)
+
+    def _refresh_process_overview(self):
+        total = len(self.process_info)
+        running = 0
+        external = 0
+        for info in self.process_info:
+            name = info["name"]
+            managed_running = name in self.processes and self.processes[name].poll() is None
+            is_external = hasattr(self, "_external_state") and bool(self._external_state.get(name, False))
+            if managed_running or is_external:
+                running += 1
+            if is_external:
+                external += 1
+        self.process_summary_var.set(f"Running: {running}/{total}  |  External: {external}")
 
     def set_status_label(self, key, ok, msg):
         if key not in self.status_labels:
@@ -1171,14 +1581,13 @@ class ServerManagerApp(tk.Tk):
         threading.Thread(target=self.run_build, daemon=True).start()
 
     def run_build(self):
-        self.build_btn.config(state="disabled")
-        self.clean_btn.config(state="disabled")
+        self.ui_call(self._set_build_controls_enabled, False)
         build_target = (self.build_target_var.get() or "all").strip()
-        self.build_status_lbl.config(text=f"Building ({build_target})...")
+        self.ui_call(self._set_build_status, f"Building ({build_target})...")
 
         # Automatically stop all server processes to release file locks
         self.log("Pre-build maintenance: Stopping all server processes...")
-        self._kill_all_server_processes()
+        self._kill_all_server_processes(include_external=False)
         time.sleep(2)
 
         # Automatically clean up corrupted PDBs before buildup to prevent LNK1318/C2471 errors
@@ -1212,7 +1621,7 @@ class ServerManagerApp(tk.Tk):
 
             if proc.returncode != 0:
                 self.log("CMake Configure Failed.")
-                self.build_status_lbl.config(text="Configure Failed")
+                self.ui_call(self._set_build_status, "Configure Failed")
                 return
 
             self.log("Running CMake Build...")
@@ -1237,18 +1646,17 @@ class ServerManagerApp(tk.Tk):
 
             if proc.returncode != 0:
                 self.log("Build Failed.")
-                self.build_status_lbl.config(text="Build Failed")
+                self.ui_call(self._set_build_status, "Build Failed")
             else:
                 self.log("Build Successful.")
-                self.build_status_lbl.config(text="Build Complete")
+                self.ui_call(self._set_build_status, "Build Complete")
                 self.bin_dir = self.find_bin_dir()
 
         except Exception as e:
             self.log(f"Build Error: {e}")
-            self.build_status_lbl.config(text="Error")
+            self.ui_call(self._set_build_status, "Error")
         finally:
-            self.build_btn.config(state="normal")
-            self.clean_btn.config(state="normal")
+            self.ui_call(self._set_build_controls_enabled, True)
 
     def run_shared_memory_thread(self):
         threading.Thread(target=self.run_shared_memory, daemon=True).start()
@@ -1318,6 +1726,96 @@ class ServerManagerApp(tk.Tk):
         self.log("All start commands issued.")
         self.after(0, lambda: self.start_all_btn.config(state="normal"))
 
+    def open_process_options(self, name):
+        if name not in self.proc_widgets:
+            return
+
+        widgets = self.proc_widgets[name]
+        top = tk.Toplevel(self)
+        top.title(f"Process Options - {name}")
+        top.resizable(False, False)
+        top.transient(self)
+        top.grab_set()
+
+        frame = ttk.Frame(top, padding=10)
+        frame.pack(fill="both", expand=True)
+
+        ttk.Label(frame, text="Arguments:").grid(row=0, column=0, sticky="w", padx=(0, 6), pady=4)
+        args_entry = ttk.Entry(frame, textvariable=widgets["args_var"], width=50)
+        args_entry.grid(row=0, column=1, sticky="ew", pady=4)
+
+        ttk.Checkbutton(frame, text="Start in new console window", variable=widgets["console_var"]).grid(
+            row=1, column=0, columnspan=2, sticky="w", pady=4
+        )
+
+        ttk.Label(
+            frame,
+            text="Tip: Use quotes for args with spaces. Example: --name \"Zone Worker 1\"",
+            foreground="gray",
+        ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(0, 8))
+
+        btns = ttk.Frame(frame)
+        btns.grid(row=3, column=0, columnspan=2, sticky="e")
+
+        def reset_default():
+            default_args = ""
+            for info in self.process_info:
+                if info["name"] == name:
+                    default_args = info.get("args", "")
+                    break
+            widgets["args_var"].set(default_args)
+            widgets["console_var"].set(False)
+
+        ttk.Button(btns, text="Reset Defaults", command=reset_default).pack(side="left", padx=4)
+        ttk.Button(btns, text="Close", command=top.destroy).pack(side="left", padx=4)
+
+        frame.grid_columnconfigure(1, weight=1)
+        args_entry.focus_set()
+
+    def _get_exe_name(self, name):
+        return f"{name}.exe" if sys.platform == "win32" else name
+
+    def _is_process_running_system(self, name):
+        exe_name = self._get_exe_name(name)
+        try:
+            if sys.platform == "win32":
+                result = subprocess.run(
+                    ["tasklist", "/FI", f"IMAGENAME eq {exe_name}"],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                return exe_name.lower() in (result.stdout or "").lower()
+            result = subprocess.run(["pgrep", "-f", exe_name], capture_output=True, text=True, check=False)
+            return result.returncode == 0 and bool((result.stdout or "").strip())
+        except Exception:
+            return False
+
+    def _taskkill_image(self, exe_name, force=False):
+        if sys.platform != "win32":
+            return
+        cmd = ["taskkill", "/IM", exe_name]
+        if force:
+            cmd.insert(1, "/F")
+        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+
+    def _stop_managed_process(self, name):
+        if name not in self.processes:
+            return
+        proc = self.processes[name]
+        try:
+            if proc.poll() is None:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+        except Exception:
+            pass
+        self.processes.pop(name, None)
+        self._set_external_state(name, False)
+        self.ui_call(self.update_ui_state, name, False, False)
+
     def _launch_process(self, name):
         """Launch a process (thread-safe). Can be called from any thread.
         Performs the actual Popen and dispatches UI updates to the main thread."""
@@ -1325,14 +1823,18 @@ class ServerManagerApp(tk.Tk):
             self.log(f"{name} is already running.")
             return
 
-        exe_name = f"{name}.exe" if sys.platform == "win32" else name
+        exe_name = self._get_exe_name(name)
         exe_path = os.path.join(self.bin_dir, exe_name)
 
         if not os.path.exists(exe_path):
             self.log(f"Executable not found: {exe_path}")
             return
 
-        args = self.proc_widgets[name]["args_var"].get().split()
+        try:
+            args = shlex.split(self.proc_widgets[name]["args_var"].get(), posix=False)
+        except ValueError as e:
+            self.log(f"Invalid arguments for {name}: {e}")
+            return
 
         try:
             cwd = os.getcwd()
@@ -1348,6 +1850,7 @@ class ServerManagerApp(tk.Tk):
             )
 
             self.processes[name] = proc
+            self._set_external_state(name, False)
             self.after(0, lambda: self.update_ui_state(name, True))
             self.log(f"Started {name} (PID {proc.pid})")
         except Exception as e:
@@ -1359,14 +1862,18 @@ class ServerManagerApp(tk.Tk):
             self.log(f"{name} is already running.")
             return
 
-        exe_name = f"{name}.exe" if sys.platform == "win32" else name
+        exe_name = self._get_exe_name(name)
         exe_path = os.path.join(self.bin_dir, exe_name)
 
         if not os.path.exists(exe_path):
             self.log(f"Executable not found: {exe_path}")
             return
 
-        args = self.proc_widgets[name]["args_var"].get().split()
+        try:
+            args = shlex.split(self.proc_widgets[name]["args_var"].get(), posix=False)
+        except ValueError as e:
+            self.log(f"Invalid arguments for {name}: {e}")
+            return
         new_console = self.proc_widgets[name]["console_var"].get()
 
         try:
@@ -1376,11 +1883,7 @@ class ServerManagerApp(tk.Tk):
 
             if new_console:
                 creationflags = subprocess.CREATE_NEW_CONSOLE if sys.platform == "win32" else 0
-                if sys.platform == "win32":
-                    cmd_str = f'cmd /c ""{exe_path}" {" ".join(args)} & pause"'
-                    proc = subprocess.Popen(cmd_str, cwd=cwd, creationflags=creationflags, env=env)
-                else:
-                    proc = subprocess.Popen([exe_path] + args, cwd=cwd, env=env)
+                proc = subprocess.Popen([exe_path] + args, cwd=cwd, creationflags=creationflags, env=env)
             else:
                 proc = subprocess.Popen(
                     [exe_path] + args,
@@ -1390,6 +1893,7 @@ class ServerManagerApp(tk.Tk):
                 )
 
             self.processes[name] = proc
+            self._set_external_state(name, False)
             self.update_ui_state(name, True)
             self.log(f"Started {name} (PID {proc.pid})")
         except Exception as e:
@@ -1408,6 +1912,22 @@ class ServerManagerApp(tk.Tk):
                 self.log(f"{name} stopped.")
             del self.processes[name]
             self.update_ui_state(name, False)
+            return
+
+        # If not managed but currently running, offer to stop external instance.
+        if self._is_process_running_system(name):
+            exe_name = self._get_exe_name(name)
+            if messagebox.askyesno("Stop External Process", f"{exe_name} appears to be running outside this manager.\nStop it now?"):
+                self._taskkill_image(exe_name, force=False)
+                time.sleep(0.2)
+                if self._is_process_running_system(name):
+                    self._taskkill_image(exe_name, force=True)
+                self.log(f"Stopped external {name}.")
+                self._set_external_state(name, False)
+                self.update_ui_state(name, False, external=False)
+            else:
+                self._set_external_state(name, True)
+                self.update_ui_state(name, True, external=True)
 
     def stop_all_processes(self):
         self.log("Stopping all managed processes...")
@@ -1416,42 +1936,48 @@ class ServerManagerApp(tk.Tk):
 
     def force_kill_all(self):
         if messagebox.askyesno("Force Kill", "This will forcefully terminate all server processes (taskkill). Continue?"):
-            self._kill_all_server_processes()
+            include_external = messagebox.askyesno(
+                "Include External Instances?",
+                "Also kill matching server processes not started by this manager?\n\n"
+                "Yes = kill all by image name.\n"
+                "No = kill only managed PIDs."
+            )
+            self._kill_all_server_processes(include_external=include_external)
 
-    def _kill_all_server_processes(self):
+    def _kill_all_server_processes(self, include_external=True):
         """Kill all server processes without confirmation"""
         self.log("Force killing all server processes...")
-        targets = ["loginserver.exe", "world.exe", "ucs.exe", "queryserv.exe", "eqlaunch.exe", "zone.exe", "shared_memory.exe"]
-        for target in targets:
+
+        # 1) Kill managed processes by PID first (safest scope).
+        for name, proc in list(self.processes.items()):
             try:
-                subprocess.run(["taskkill", "/F", "/IM", target], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                if proc.poll() is None:
+                    proc.kill()
             except Exception:
                 pass
+
+        # 2) Optionally kill external instances by image name.
+        if include_external and sys.platform == "win32":
+            targets = ["loginserver.exe", "world.exe", "ucs.exe", "queryserv.exe", "eqlaunch.exe", "zone.exe", "shared_memory.exe"]
+            for target in targets:
+                try:
+                    subprocess.run(["taskkill", "/F", "/IM", target], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                except Exception:
+                    pass
 
         # Clear internal state
         self.processes.clear()
         for name in self.proc_widgets:
-            self.update_ui_state(name, False)
+            self.update_ui_state(name, False, external=False)
         self.log("All processes killed.")
 
     def restart_zones(self):
         """Quick restart: kill zone processes and restart eqlaunch for rapid testing"""
         def do_restart():
             self.log("Restarting zones...")
-            # Kill zone and eqlaunch
-            try:
-                subprocess.run(["taskkill", "/F", "/IM", "zone.exe"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                subprocess.run(["taskkill", "/F", "/IM", "eqlaunch.exe"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            except Exception:
-                pass
-
-            # Update UI state
-            if "eqlaunch" in self.processes:
-                del self.processes["eqlaunch"]
-            if "zone" in self.processes:
-                del self.processes["zone"]
-            self.after(0, lambda: self.update_ui_state("zone", False) if "zone" in self.proc_widgets else None)
-            self.after(0, lambda: self.update_ui_state("eqlaunch", False) if "eqlaunch" in self.proc_widgets else None)
+            # Stop managed zone stack only.
+            self._stop_managed_process("zone")
+            self._stop_managed_process("eqlaunch")
 
             time.sleep(2)
 
@@ -1461,26 +1987,61 @@ class ServerManagerApp(tk.Tk):
 
         threading.Thread(target=do_restart, daemon=True).start()
 
-    def update_ui_state(self, name, is_running):
+    def update_ui_state(self, name, is_running, external=None):
         widgets = self.proc_widgets[name]
-        if is_running:
+        if external is None:
+            external = False
+            if hasattr(self, "_external_state") and name in self._external_state:
+                external = self._external_state[name]
+
+        if is_running and external:
+            widgets["status_lbl"].config(text="Running (External)", foreground="orange")
+            widgets["start_btn"].config(state="disabled")
+            widgets["stop_btn"].config(state="normal")
+            if "card" in widgets:
+                widgets["card"].config(style="ProcessExternal.TFrame")
+        elif is_running:
             widgets["status_lbl"].config(text="Running", foreground="green")
             widgets["start_btn"].config(state="disabled")
             widgets["stop_btn"].config(state="normal")
+            if "card" in widgets:
+                widgets["card"].config(style="ProcessRunning.TFrame")
         else:
             widgets["status_lbl"].config(text="Stopped", foreground="red")
             widgets["start_btn"].config(state="normal")
             widgets["stop_btn"].config(state="disabled")
+            if "card" in widgets:
+                widgets["card"].config(style="ProcessStopped.TFrame")
+        self._update_process_hint(name)
+        self._refresh_process_overview()
+
+    def _set_external_state(self, name, external):
+        if not hasattr(self, "_external_state"):
+            self._external_state = {}
+        self._external_state[name] = external
 
     def update_status_loop(self):
         for name, proc in list(self.processes.items()):
             if proc.poll() is not None:
                 self.log(f"{name} exited with code {proc.returncode}")
                 del self.processes[name]
+                self._set_external_state(name, False)
                 self.update_ui_state(name, False)
+
+        # Reconcile external/manual processes so status reflects reality.
+        for info in self.process_info:
+            name = info["name"]
+            managed_running = name in self.processes and self.processes[name].poll() is None
+            if managed_running:
+                self._set_external_state(name, False)
+                continue
+            external_running = self._is_process_running_system(name)
+            self._set_external_state(name, external_running)
+            self.update_ui_state(name, external_running)
         self.after(1000, self.update_status_loop)
 
     def on_closing(self):
+        self._save_manager_settings()
         if self.processes:
             if messagebox.askokcancel("Quit", "Running processes will be stopped. Do you want to quit?"):
                 self.stop_all_processes()

@@ -135,9 +135,7 @@ RULE_INT(Custom, MulticlassMaxClasses, 3, "Maximum classes allowed (includes bas
 RULE_STRING(Custom, MulticlassBucketKey, "GestaltClasses", "Data bucket key for class bitmask")
 RULE_BOOL(Custom, ServerAuthStats, true, "Server-authoritative stats for DLL integration")
 RULE_BOOL(Custom, UseDynamicAATimers, true, "Dynamic AA timers (deconflict multiclass)")
-RULE_BOOL(Custom, BypassMulticlassStackConflict, false, "Allow cross-class buff stacking")
 RULE_BOOL(Custom, MulticlassDebug, false, "Debug logging")
-RULE_INT(Custom, MulticlassDebugVerbosity, 0, "Debug verbosity (0=off, 1=verbose)")
 RULE_CATEGORY_END()
 ```
 

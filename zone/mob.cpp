@@ -599,7 +599,7 @@ Mob::~Mob()
 			GetPet()->BuffFadeByEffect(SpellEffect::Charm);
 		}
 		else {
-			SetPet(0);
+			SetPet(static_cast<uint16>(0));
 		}
 	}
 
@@ -8348,7 +8348,7 @@ void Mob::SetFeigned(bool in_feigned) {
 	if (in_feigned)	{
 		if (IsClient()) {
 			if (RuleB(Character, FeignKillsPet)){
-				SetPet(0);
+				SetPet(static_cast<uint16>(0));
 			}
 			CastToClient()->SetHorseId(0);
 		}

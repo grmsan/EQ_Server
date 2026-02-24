@@ -1078,13 +1078,29 @@ public:
 
 	EQ::LightSourceProfile* GetLightProfile() { return &m_Light; }
 
-	Mob* GetPet();
-	void SetPet(Mob* newpet);
+	uint16 GetPetID(uint8 idx = 0) const;
+	Mob* GetPet(uint8 idx = 0);
+	Mob* GetActivePet();
+	std::vector<Mob*> GetAllPets();
+	std::vector<Mob*> GetAllSwarmPets();
+	bool RemovePetByIndex(uint8 idx = 0);
+	bool RemovePet(Mob* pet);
+	bool RemovePet(uint16 pet_id);
+	void RemoveAllPets();
+	bool HasPet(uint8 idx = 0) const;
+	bool AddPet(Mob* newpet);
+	bool AddPet(uint16 pet_id);
+	bool SetPet(Mob* newpet, uint8 idx = 0);
+	bool SetPet(uint16 pet_id, uint8 idx = 0);
+	void ValidatePetList();
+	Mob* GetPetByID(uint16 id);
+	void ConfigurePetWindow(Mob* focused_pet);
+	bool IsPetAllowed(uint16 spell_id);
+	bool IsMyPet(Mob* mob) const;
 	virtual Mob* GetOwner();
 	virtual Mob* GetOwnerOrSelf();
 	Mob* GetUltimateOwner();
 	void SetPetID(uint16 NewPetID);
-	inline uint16 GetPetID() const { return petid; }
 	inline uint8 GetPetType() const { return type_of_pet; }
 	void SetPetType(uint8 pet_type) { type_of_pet = pet_type; }
 	inline int16 GetPetPower() const { return (petpower < 0) ? 0 : petpower; }
@@ -1099,7 +1115,6 @@ public:
 	inline uint16 GetOwnerID() const { return ownerid; }
 	inline virtual bool HasOwner() { if (!GetOwnerID()){ return false; } return entity_list.GetMob(GetOwnerID()) != 0; }
 	inline virtual bool IsPet() { return HasOwner() && !IsMerc(); }
-	bool HasPet() const;
 	virtual bool IsCharmedPet() { return IsPet() && IsCharmed(); }
 	inline bool HasTempPetsActive() const { return(hasTempPet); }
 	inline void SetTempPetsActive(bool i) { hasTempPet = i; }
@@ -1599,6 +1614,8 @@ protected:
 	StatBonuses spellbonuses;
 	StatBonuses aabonuses;
 	uint16 petid;
+	std::vector<uint16> petids;
+	uint16 focused_pet_id;
 	uint16 ownerid;
 	uint8 type_of_pet;
 	int16 petpower;

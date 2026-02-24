@@ -54,8 +54,10 @@
 #include "../common/repositories/trader_repository.h"
 #include "../common/repositories/character_evolving_items_repository.h"
 
+#include <algorithm>
 #include <ctime>
 #include <iostream>
+#include <unordered_map>
 #include <fmt/format.h>
 
 extern Zone* zone;
@@ -3072,109 +3074,78 @@ void ZoneDatabase::LoadAuras(Client *c)
 
 void ZoneDatabase::SavePetInfo(Client *client)
 {
-	PetInfo* p = nullptr;
+	constexpr int32 suspended_pet_id = 100;
+	const auto character_id = client->CharacterID();
 
 	std::vector<CharacterPetInfoRepository::CharacterPetInfo> pet_infos;
-	auto pet_info = CharacterPetInfoRepository::NewEntity();
-
 	std::vector<CharacterPetBuffsRepository::CharacterPetBuffs> pet_buffs;
-	auto pet_buff = CharacterPetBuffsRepository::NewEntity();
-
 	std::vector<CharacterPetInventoryRepository::CharacterPetInventory> inventory;
-	auto item = CharacterPetInventoryRepository::NewEntity();
 
-	for (int pet_info_type = PetInfoType::Current; pet_info_type <= PetInfoType::Suspended; pet_info_type++) {
-		p = client->GetPetInfo(pet_info_type);
-		if (!p) {
-			continue;
+	auto save_pet_info = [&](const PetInfo& p, int32 pet_id, bool save_empty = false) {
+		if (!save_empty && p.SpellID <= 0) {
+			return;
 		}
 
-		pet_info.char_id  = client->CharacterID();
-		pet_info.pet      = pet_info_type;
-		pet_info.petname  = p->Name;
-		pet_info.petpower = p->petpower;
-		pet_info.spell_id = p->SpellID;
-		pet_info.hp       = p->HP;
-		pet_info.mana     = p->Mana;
-		pet_info.size     = p->size;
-		pet_info.taunting = p->taunting ? 1 : 0;
-
+		auto pet_info = CharacterPetInfoRepository::NewEntity();
+		pet_info.char_id  = character_id;
+		pet_info.pet      = pet_id;
+		pet_info.petname  = p.Name;
+		pet_info.petpower = p.petpower;
+		pet_info.spell_id = p.SpellID;
+		pet_info.hp       = p.HP;
+		pet_info.mana     = p.Mana;
+		pet_info.size     = p.size;
+		pet_info.taunting = p.taunting ? 1 : 0;
 		pet_infos.push_back(pet_info);
 
-		uint32 pet_buff_count = 0;
-
-		const uint32 max_slots = (
-			RuleI(Spells, MaxTotalSlotsPET) > PET_BUFF_COUNT ?
-			PET_BUFF_COUNT :
-			RuleI(Spells, MaxTotalSlotsPET)
-		);
-
-		for (int slot_id = 0; slot_id < max_slots; slot_id++) {
-			if (!IsValidSpell(p->Buffs[slot_id].spellid)) {
+		const uint32 max_slots = std::min<uint32>(RuleI(Spells, MaxTotalSlotsPET), PET_BUFF_COUNT);
+		for (int slot_id = 0; slot_id < static_cast<int>(max_slots); ++slot_id) {
+			if (!IsValidSpell(p.Buffs[slot_id].spellid)) {
 				continue;
 			}
 
-			pet_buff_count++;
-		}
-
-		pet_buffs.reserve(pet_buff_count);
-
-		for (int slot_id = 0; slot_id < max_slots; slot_id++) {
-			if (!IsValidSpell(p->Buffs[slot_id].spellid)) {
+			if (IsShortDurationBuff(p.Buffs[slot_id].spellid)) {
 				continue;
 			}
 
-			pet_buff.char_id        = client->CharacterID();
-			pet_buff.pet            = pet_info_type;
+			auto pet_buff = CharacterPetBuffsRepository::NewEntity();
+			pet_buff.char_id        = character_id;
+			pet_buff.pet            = pet_id;
 			pet_buff.slot           = slot_id;
-			pet_buff.spell_id       = p->Buffs[slot_id].spellid;
-			pet_buff.caster_level   = p->Buffs[slot_id].level;
-			pet_buff.ticsremaining  = p->Buffs[slot_id].duration;
-			pet_buff.counters       = p->Buffs[slot_id].counters;
-			pet_buff.instrument_mod = p->Buffs[slot_id].bard_modifier;
-
+			pet_buff.spell_id       = p.Buffs[slot_id].spellid;
+			pet_buff.caster_level   = p.Buffs[slot_id].level;
+			pet_buff.ticsremaining  = p.Buffs[slot_id].duration;
+			pet_buff.counters       = p.Buffs[slot_id].counters;
+			pet_buff.instrument_mod = p.Buffs[slot_id].bard_modifier;
 			pet_buffs.push_back(pet_buff);
 		}
 
-		uint32 pet_inventory_count = 0;
-
-		for (
-			int slot_id = EQ::invslot::EQUIPMENT_BEGIN;
-			slot_id <= EQ::invslot::EQUIPMENT_END;
-			slot_id++
-		) {
-			if (!p->Items[slot_id]) {
+		for (int slot_id = EQ::invslot::EQUIPMENT_BEGIN; slot_id <= EQ::invslot::EQUIPMENT_END; ++slot_id) {
+			if (!p.Items[slot_id]) {
 				continue;
 			}
 
-			pet_inventory_count++;
-		}
-
-		inventory.reserve(pet_inventory_count);
-
-		for (
-			int slot_id = EQ::invslot::EQUIPMENT_BEGIN;
-			slot_id <= EQ::invslot::EQUIPMENT_END;
-			slot_id++
-		) {
-			if (!p->Items[slot_id]) {
-				continue;
-			}
-
-			item.char_id = client->CharacterID();
-			item.pet     = pet_info_type;
+			auto item = CharacterPetInventoryRepository::NewEntity();
+			item.char_id = character_id;
+			item.pet     = pet_id;
 			item.slot    = slot_id;
-			item.item_id = p->Items[slot_id];
-
+			item.item_id = p.Items[slot_id];
 			inventory.push_back(item);
 		}
+	};
+
+	const auto& pets = client->GetPetsInfo();
+	for (size_t i = 0; i < pets.size(); ++i) {
+		save_pet_info(pets[i], static_cast<int32>(i), false);
 	}
+
+	save_pet_info(client->GetSuspendedPetInfo(), suspended_pet_id, true);
 
 	CharacterPetInfoRepository::DeleteWhere(
 		database,
 		fmt::format(
 			"`char_id` = {}",
-			client->CharacterID()
+			character_id
 		)
 	);
 
@@ -3186,7 +3157,7 @@ void ZoneDatabase::SavePetInfo(Client *client)
 		database,
 		fmt::format(
 			"`char_id` = {}",
-			client->CharacterID()
+			character_id
 		)
 	);
 
@@ -3198,7 +3169,7 @@ void ZoneDatabase::SavePetInfo(Client *client)
 		database,
 		fmt::format(
 			"`char_id` = {}",
-			client->CharacterID()
+			character_id
 		)
 	);
 
@@ -3241,18 +3212,21 @@ void ZoneDatabase::DeleteItemRecast(uint32 character_id, uint32 recast_type)
 
 void ZoneDatabase::LoadPetInfo(Client *client)
 {
-	// Load current pet and suspended pet
-	auto pet_info           = client->GetPetInfo(PetInfoType::Current);
-	auto suspended_pet_info = client->GetPetInfo(PetInfoType::Suspended);
+	constexpr int32 suspended_pet_id = 100;
+	const auto character_id = client->CharacterID();
+	auto& pets_info = client->GetPetsInfo();
+	auto& suspended_pet_info = client->GetSuspendedPetInfo();
+	auto* legacy_current_pet_info = client->GetPetInfo(PetInfoType::Current);
 
-	memset(pet_info, 0, sizeof(PetInfo));
-	memset(suspended_pet_info, 0, sizeof(PetInfo));
+	pets_info.clear();
+	memset(&suspended_pet_info, 0, sizeof(PetInfo));
+	memset(legacy_current_pet_info, 0, sizeof(PetInfo));
 
 	const auto& info = CharacterPetInfoRepository::GetWhere(
 		database,
 		fmt::format(
-			"`char_id` = {}",
-			client->CharacterID()
+			"`char_id` = {} ORDER BY `pet` ASC",
+			character_id
 		)
 	);
 
@@ -3260,42 +3234,64 @@ void ZoneDatabase::LoadPetInfo(Client *client)
 		return;
 	}
 
-	PetInfo* p;
+	std::unordered_map<int32, size_t> pet_index_map;
+	bool has_suspended_marker = false;
+	for (const auto& e : info) {
+		if (e.pet == suspended_pet_id) {
+			has_suspended_marker = true;
+			break;
+		}
+	}
+
+	const bool use_legacy_suspended_slot = !has_suspended_marker;
 
 	for (const auto& e : info) {
-		if (e.pet == PetInfoType::Current) {
-			p = pet_info;
-		} else if (e.pet == PetInfoType::Suspended) {
-			p = suspended_pet_info;
-		} else {
+		PetInfo p{};
+		memset(&p, 0, sizeof(PetInfo));
+
+		strn0cpy(p.Name, e.petname.c_str(), sizeof(p.Name));
+		p.petpower = e.petpower;
+		p.SpellID  = e.spell_id;
+		p.HP       = e.hp;
+		p.Mana     = e.mana;
+		p.size     = e.size;
+		p.taunting = e.taunting;
+
+		if (e.pet == suspended_pet_id || (use_legacy_suspended_slot && e.pet == PetInfoType::Suspended)) {
+			suspended_pet_info = p;
 			continue;
 		}
 
-		strn0cpy(p->Name, e.petname.c_str(), sizeof(p->Name));
+		pet_index_map[e.pet] = pets_info.size();
+		pets_info.emplace_back(p);
+	}
 
-		p->petpower = e.petpower;
-		p->SpellID  = e.spell_id;
-		p->HP       = e.hp;
-		p->Mana     = e.mana;
-		p->size     = e.size;
-		p->taunting = e.taunting;
+	if (!pets_info.empty()) {
+		*legacy_current_pet_info = pets_info.front();
 	}
 
 	const auto& buffs = CharacterPetBuffsRepository::GetWhere(
 		database,
 		fmt::format(
-			"`char_id` = {}",
-			client->CharacterID()
+			"`char_id` = {} ORDER BY `pet` ASC, `slot` ASC",
+			character_id
 		)
 	);
 
 	if (!buffs.empty()) {
 		for (const auto& e : buffs) {
-			if (e.pet == PetInfoType::Current) {
-				p = pet_info;
-			} else if (e.pet == PetInfoType::Suspended) {
-				p = suspended_pet_info;
+			PetInfo* p = nullptr;
+			if (e.pet == suspended_pet_id || (use_legacy_suspended_slot && e.pet == PetInfoType::Suspended)) {
+				p = &suspended_pet_info;
 			} else {
+				auto it = pet_index_map.find(e.pet);
+				if (it == pet_index_map.end() || it->second >= pets_info.size()) {
+					continue;
+				}
+				p = &pets_info[it->second];
+			}
+
+			if (!p) {
 				continue;
 			}
 
@@ -3320,18 +3316,25 @@ void ZoneDatabase::LoadPetInfo(Client *client)
 	const auto& inventory = CharacterPetInventoryRepository::GetWhere(
 		database,
 		fmt::format(
-			"`char_id` = {}",
-			client->CharacterID()
+			"`char_id` = {} ORDER BY `pet` ASC, `slot` ASC",
+			character_id
 		)
 	);
 
 	if (!inventory.empty()) {
 		for (const auto& e : inventory) {
-			if (e.pet == PetInfoType::Current) {
-				p = pet_info;
-			} else if (e.pet == PetInfoType::Suspended) {
-				p = suspended_pet_info;
+			PetInfo* p = nullptr;
+			if (e.pet == suspended_pet_id || (use_legacy_suspended_slot && e.pet == PetInfoType::Suspended)) {
+				p = &suspended_pet_info;
 			} else {
+				auto it = pet_index_map.find(e.pet);
+				if (it == pet_index_map.end() || it->second >= pets_info.size()) {
+					continue;
+				}
+				p = &pets_info[it->second];
+			}
+
+			if (!p) {
 				continue;
 			}
 

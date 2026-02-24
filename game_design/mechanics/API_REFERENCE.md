@@ -502,7 +502,6 @@ RULE_INT(Combat, TigerClawBaseDamage, 4, "Tiger Claw base damage, default is 4")
 ### Mitigation Rules
 
 ```cpp
-RULE_BOOL(Combat, UseIntervalAC, true, "Switch whether bonuses, armour class, multipliers, classes and caps should be considered")
 RULE_INT(Combat, LevelDifferenceRollCheck, -1, "Level Difference to enable LevelDifferenceRollBonus (-1 = disabled)")
 RULE_REAL(Combat, LevelDifferenceRollBonus, 0.5, "Roll Bonus/Detriment if using LevelDifferenceRollCheck")
 ```

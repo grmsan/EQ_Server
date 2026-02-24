@@ -1009,8 +1009,14 @@ bool Mob::SpellEffect(Mob* caster, uint16 spell_id, float partial, int level_ove
 					break;
 				}
 
+				if (caster->IsClient() && !caster->IsPetAllowed(spell_id)) {
+					caster->Message(Chat::SpellFailure, "You may not charm an additional creature with this spell.");
+					break;
+				}
+
 				if (IsNPC()) {
 					CastToNPC()->SaveGuardSpotCharm();
+					CastToNPC()->SetPetSpellID(spell_id);
 				}
 				InterruptSpell();
 				entity_list.RemoveDebuffs(this);
@@ -1023,7 +1029,7 @@ bool Mob::SpellEffect(Mob* caster, uint16 spell_id, float partial, int level_ove
 					my_pet->Kill();
 				}
 
-				caster->SetPet(this);
+				caster->AddPet(this);
 				SetOwnerID(caster->GetID());
 				SetPetOrder(PetOrder::Follow);
 				SetAppearance(eaStanding);
@@ -1060,7 +1066,7 @@ bool Mob::SpellEffect(Mob* caster, uint16 spell_id, float partial, int level_ove
 				if (IsClient()) {
 					CastToClient()->AI_Start();
 				} else if (IsNPC()) {
-					CastToNPC()->SetPetSpellID(0);    //not a pet spell.
+					CastToNPC()->SetPetSpellID(spell_id);
 					CastToNPC()->ModifyStatsOnCharm(false, caster);
 				}
 
@@ -1516,32 +1522,29 @@ bool Mob::SpellEffect(Mob* caster, uint16 spell_id, float partial, int level_ove
 #ifdef SPELL_EFFECT_SPAM
 				snprintf(effect_desc, _EDLEN, "Summon %s: %s", (effect==SE_Familiar)?"Familiar":"Pet", spell.teleport_zone);
 #endif
-				if(GetPet())
-				{
-					MessageString(Chat::Shout, ONLY_ONE_PET);
+				if (petids.size() >= RuleI(Custom, AbsolutePetLimit) || !IsPetAllowed(spell_id)) {
+					return false;
 				}
-				else
-				{
-					MakePet(spell_id, spell.teleport_zone);
-					// TODO: we need to sync the states for these clients ...
-					// Will fix buttons for now
-					Mob *pet=GetPet();
-					if (IsClient() && pet) {
-						auto c = CastToClient();
-						if (c->ClientVersionBit() & EQ::versions::maskUFAndLater) {
-							c->SetPetCommandState(PetButton::Sit, PetButtonState::Off);
-							c->SetPetCommandState(PetButton::Stop, PetButtonState::Off);
-							c->SetPetCommandState(PetButton::Regroup, PetButtonState::Off);
-							c->SetPetCommandState(PetButton::Follow, PetButtonState::On);
-							c->SetPetCommandState(PetButton::Guard, PetButtonState::Off);
-							// Creating pet from spell - taunt always false
-							// If suspended pet - that will be restore there
-							// If logging in, client will send toggle
-							c->SetPetCommandState(PetButton::Hold, PetButtonState::Off);
-							c->SetPetCommandState(PetButton::GreaterHold, PetButtonState::Off);
-							c->SetPetCommandState(PetButton::Focus, PetButtonState::Off);
-							c->SetPetCommandState(PetButton::SpellHold, PetButtonState::Off);
-						}
+
+				MakePet(spell_id, spell.teleport_zone);
+				// TODO: we need to sync the states for these clients ...
+				// Will fix buttons for now
+				Mob *pet = GetActivePet();
+				if (IsClient() && pet) {
+					auto c = CastToClient();
+					if (c->ClientVersionBit() & EQ::versions::maskUFAndLater) {
+						c->SetPetCommandState(PetButton::Sit, PetButtonState::Off);
+						c->SetPetCommandState(PetButton::Stop, PetButtonState::Off);
+						c->SetPetCommandState(PetButton::Regroup, PetButtonState::Off);
+						c->SetPetCommandState(PetButton::Follow, PetButtonState::On);
+						c->SetPetCommandState(PetButton::Guard, PetButtonState::Off);
+						// Creating pet from spell - taunt always false
+						// If suspended pet - that will be restore there
+						// If logging in, client will send toggle
+						c->SetPetCommandState(PetButton::Hold, PetButtonState::Off);
+						c->SetPetCommandState(PetButton::GreaterHold, PetButtonState::Off);
+						c->SetPetCommandState(PetButton::Focus, PetButtonState::Off);
+						c->SetPetCommandState(PetButton::SpellHold, PetButtonState::Off);
 					}
 				}
 				break;
@@ -1855,8 +1858,9 @@ bool Mob::SpellEffect(Mob* caster, uint16 spell_id, float partial, int level_ove
 
 				caster->SetMana(caster->GetMana() + pet_ActSpellCost);
 
-					if(caster->IsClient())
-						caster->CastToClient()->SetPet(0);
+					if (caster->IsClient()) {
+						caster->RemovePet(this);
+					}
 
 					SetOwnerID(0);	// this will kill the pet
 				}
@@ -4723,11 +4727,16 @@ void Mob::BuffFadeBySlot(int slot, bool iRecalcBonuses)
 
 			case SpellEffect::Familiar:
 			{
-				Mob *mypet = GetPet();
-				if (mypet){
-					if(mypet->IsNPC())
-						mypet->CastToNPC()->Depop();
-					SetPetID(0);
+				for (auto pet : GetAllPets()) {
+					if (!pet || !pet->IsFamiliar()) {
+						continue;
+					}
+
+					if (pet->IsNPC()) {
+						pet->CastToNPC()->Depop();
+					}
+
+					RemovePet(pet);
 				}
 				break;
 			}
@@ -4758,7 +4767,8 @@ void Mob::BuffFadeBySlot(int slot, bool iRecalcBonuses)
 				SetPetRegroup(false);
 				if(owner)
 				{
-					owner->SetPet(0);
+					owner->RemovePet(this);
+					owner->ValidatePetList();
 				}
 
 				// Any client that has a previous charmed pet targetted shouldo
@@ -10316,7 +10326,13 @@ bool Mob::PassCharmTargetRestriction(Mob *target) {
 		return false;
 	}
 
-	if (target->IsClient() && IsClient()) {
+	for (auto pet : GetAllPets()) {
+		if (pet && pet->GetID() == target->GetID()) {
+			return true;
+		}
+	}
+
+	if (target->IsClient()) {
 		MessageString(Chat::Red, CANNOT_AFFECT_PC);
 		LogSpells("Spell casting canceled: Can not cast charm on a client.");
 		return false;
@@ -10325,12 +10341,12 @@ bool Mob::PassCharmTargetRestriction(Mob *target) {
 		LogSpells("Spell casting canceled: Can not cast charm on a corpse.");
 		return false;
 	}
-	else if (GetPet() && IsClient()) {
-		MessageString(Chat::Red, ONLY_ONE_PET);
-		LogSpells("Spell casting canceled: Can not cast charm if you have a pet.");
+	else if (petids.size() >= RuleI(Custom, AbsolutePetLimit) && IsClient()) {
+		LogSpells("Spell casting canceled: You cannot control an additional pet");
+		Message(Chat::SpellFailure, "You cannot control an additional pet.");
 		return false;
 	}
-	else if (target->GetOwner()) {
+	else if (target->GetOwner() && !target->IsCharmed()) {
 		MessageString(Chat::Red, CANNOT_CHARM);
 		LogSpells("Spell casting canceled: Can not cast charm on a pet.");
 		return false;

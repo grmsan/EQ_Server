@@ -74,7 +74,6 @@ Files that control item class restrictions.
 - THJServer uses rules for enabling and for special handling:
   - `Custom:MulticlassingEnabled`
   - `Custom:UseDynamicAATimers`
-  - `Custom:BypassMulticlassStackConflict`
 
 ---
 

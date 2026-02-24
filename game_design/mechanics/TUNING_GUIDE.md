@@ -110,7 +110,6 @@ void Mob::MeleeMitigation(Mob *attacker, DamageHitInfo &hit, ExtraAttackOptions 
 **Related Rules:**
 ```cpp
 // common/ruletypes.h lines 566-570
-RULE_BOOL(Combat, UseIntervalAC, true, "Switch whether bonuses, armour class, multipliers...")
 RULE_INT(Combat, LevelDifferenceRollCheck, -1, "Level Difference to enable LeverDifferenceRollBonus...")
 RULE_REAL(Combat, LevelDifferenceRollBonus, 0.5, "Roll Bonus/Detrement if using LevelDifferenceRollCheck")
 ```

@@ -79,7 +79,6 @@ Custom:MulticlassMaxClasses   3       // Max classes allowed
 Custom:MulticlassBucketKey    "GestaltClasses"  // Data bucket key
 Custom:ServerAuthStats        true    // Enable EdgeStatLabel
 Custom:UseDynamicAATimers     true    // Deconflict AA timers
-Custom:BypassMulticlassStackConflict  false  // Cross-class buff stacking
 ```
 
 ---

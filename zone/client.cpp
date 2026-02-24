@@ -1060,17 +1060,37 @@ bool Client::Save(uint8 iCommitNow) {
 
 	m_pp.lastlogin = time(nullptr);
 
-	if (GetPet() && GetPet()->CastToNPC()->GetPetSpellID() && !dead) {
-		NPC *pet = GetPet()->CastToNPC();
-		m_petinfo.SpellID = pet->CastToNPC()->GetPetSpellID();
-		m_petinfo.HP = pet->GetHP();
-		m_petinfo.Mana = pet->GetMana();
-		pet->GetPetState(m_petinfo.Buffs, m_petinfo.Items, m_petinfo.Name);
-		m_petinfo.petpower = pet->GetPetPower();
-		m_petinfo.size = pet->GetSize();
-		m_petinfo.taunting = pet->CastToNPC()->IsTaunting();
+	if (!dead) {
+		m_petinfomulti.clear();
+		for (auto mob : GetAllPets()) {
+			if (!mob || !mob->IsNPC()) {
+				continue;
+			}
+
+			auto pet = mob->CastToNPC();
+			if (!pet || !pet->GetPetSpellID()) {
+				continue;
+			}
+
+			PetInfo pet_info{};
+			memset(&pet_info, 0, sizeof(PetInfo));
+			pet_info.SpellID  = pet->GetPetSpellID();
+			pet_info.HP       = pet->GetHP();
+			pet_info.Mana     = pet->GetMana();
+			pet_info.petpower = pet->GetPetPower();
+			pet_info.size     = pet->GetSize();
+			pet_info.taunting = pet->IsTaunting();
+			pet->GetPetState(pet_info.Buffs, pet_info.Items, pet_info.Name);
+			m_petinfomulti.push_back(pet_info);
+		}
 	} else {
-		memset(&m_petinfo, 0, sizeof(struct PetInfo));
+		m_petinfomulti.clear();
+	}
+
+	if (!m_petinfomulti.empty()) {
+		m_petinfo = m_petinfomulti.front();
+	} else {
+		memset(&m_petinfo, 0, sizeof(PetInfo));
 	}
 	database.SavePetInfo(this);
 
@@ -11207,6 +11227,44 @@ void Client::RemoveItem(uint32 item_id, uint32 quantity)
 			}
 		}
 	}
+}
+
+void Client::SetWeaponAppearance()
+{
+	auto get_weapon_material = [](const EQ::ItemInstance* item_instance) -> uint32 {
+		if (!item_instance || !item_instance->GetItem()) {
+			return 0;
+		}
+
+		return item_instance->GetItem()->Material;
+	};
+
+	if (GetAttackMode() == AttackMode::RANGED &&
+		m_inv.GetItem(EQ::invslot::slotRange) &&
+		m_inv.GetItem(EQ::invslot::slotRange)->GetItemType() == EQ::item::ItemTypeBow) {
+		SendTextureWC(EQ::textures::TextureSlot::weaponPrimary, 0);
+		SendTextureWC(EQ::textures::TextureSlot::weaponSecondary, get_weapon_material(m_inv.GetItem(EQ::invslot::slotRange)));
+	}
+	else {
+		SendTextureWC(EQ::textures::TextureSlot::weaponPrimary, get_weapon_material(m_inv.GetItem(EQ::invslot::slotPrimary)));
+		SendTextureWC(EQ::textures::TextureSlot::weaponSecondary, get_weapon_material(m_inv.GetItem(EQ::invslot::slotSecondary)));
+	}
+}
+
+const Client::AttackMode Client::GetAttackMode()
+{
+	if (m_attack_mode <= UNDEFINED || m_attack_mode > RANGED) {
+		m_attack_mode = static_cast<AttackMode>(Strings::ToInt(GetBucket("attack_mode"), 1));
+	}
+
+	return m_attack_mode;
+}
+
+void Client::SetAttackMode(Client::AttackMode mode)
+{
+	m_attack_mode = mode;
+	SetBucket("attack_mode", std::to_string(static_cast<int>(mode)));
+	SetWeaponAppearance();
 }
 
 void Client::SetGMStatus(int new_status) {

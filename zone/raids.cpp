@@ -675,8 +675,12 @@ void Raid::CastGroupSpell(Mob* caster, uint16 spellid, uint32 gid)
 		if (m.member == caster) {
 			caster->SpellOnTarget(spellid, caster);
 #ifdef GROUP_BUFF_PETS
-			if (spells[spellid].target_type != ST_GroupNoPets && caster->GetPet() && caster->HasPetAffinity() && !caster->GetPet()->IsCharmed()) {
-				caster->SpellOnTarget(spellid, caster->GetPet());
+			if (spells[spellid].target_type != ST_GroupNoPets && caster->GetPet() && caster->HasPetAffinity()) {
+				for (auto pet : caster->GetAllPets()) {
+					if (!pet->IsCharmed()) {
+						caster->SpellOnTarget(spellid, pet);
+					}
+				}
 			}
 #endif
 		}
@@ -686,9 +690,12 @@ void Raid::CastGroupSpell(Mob* caster, uint16 spellid, uint32 gid)
 				caster->SpellOnTarget(spellid, m.member);
 
 #ifdef GROUP_BUFF_PETS
-				if (spells[spellid].target_type != ST_GroupNoPets && m.member->GetPet() && m.member->HasPetAffinity() &&
-					!m.member->GetPet()->IsCharmed()) {
-					caster->SpellOnTarget(spellid, m.member->GetPet());
+				if (spells[spellid].target_type != ST_GroupNoPets && m.member->GetPet() && m.member->HasPetAffinity()) {
+					for (auto pet : m.member->GetAllPets()) {
+						if (!pet->IsCharmed()) {
+							caster->SpellOnTarget(spellid, pet);
+						}
+					}
 				}
 #endif
 			}

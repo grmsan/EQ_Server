@@ -32,6 +32,7 @@
 #include "zonedb.h"
 
 #include <string>
+#include <algorithm>
 
 #include "bot.h"
 
@@ -418,66 +419,443 @@ bool ZoneDatabase::GetPoweredPetEntry(const std::string& pet_type, int16 pet_pow
 	return true;
 }
 
-Mob* Mob::GetPet() {
-	if (!GetPetID()) {
+uint16 Mob::GetPetID(uint8 idx) const
+{
+	if (idx < petids.size()) {
+		return petids[idx];
+	}
+
+	if (idx == 0) {
+		return petid;
+	}
+
+	return 0;
+}
+
+bool Mob::IsPetAllowed(uint16 spell_id)
+{
+	ValidatePetList();
+	const int pet_count = static_cast<int>(petids.size());
+	int cumulative_bitmask = 0;
+
+	if (pet_count >= RuleI(Custom, AbsolutePetLimit)) {
+		Message(Chat::SpellFailure, "You may not control any additional pets.");
+		return false;
+	}
+
+	for (auto pet : GetAllPets()) {
+		if (!pet) {
+			continue;
+		}
+
+		uint16 origin_spell = 0;
+		auto pet_buffs = pet->GetBuffs();
+
+		for (int i = 0; i < pet->GetMaxTotalSlots(); i++) {
+			if (IsCharmSpell(pet_buffs[i].spellid)) {
+				origin_spell = pet_buffs[i].spellid;
+				break;
+			}
+		}
+
+		if (!origin_spell && pet->IsNPC()) {
+			origin_spell = pet->CastToNPC()->GetPetSpellID();
+		}
+
+		if (origin_spell == spell_id) {
+			Message(Chat::SpellFailure, "You may not control any additional pets of this type (%s).", spells[spell_id].name);
+			return false;
+		}
+
+		for (int i = Class::Warrior; i <= Class::Berserker; i++) {
+			if (GetSpellLevel(origin_spell, i) < UINT8_MAX) {
+				cumulative_bitmask |= (1 << i);
+			}
+		}
+	}
+
+	for (int i = Class::Warrior; i <= Class::Berserker; i++) {
+		if (GetSpellLevel(spell_id, i) < UINT8_MAX) {
+			if (cumulative_bitmask & (1 << i)) {
+				Message(Chat::SpellFailure, "You may not control any additional pets for this class (%s).", GetClassIDName(i));
+				return false;
+			}
+		}
+	}
+
+	return true;
+}
+
+void Mob::ValidatePetList()
+{
+	for (auto it = petids.begin(); it != petids.end();) {
+		auto pet = entity_list.GetMob(*it);
+		if (!pet || pet->GetOwnerID() != GetID()) {
+			it = petids.erase(it);
+		} else {
+			++it;
+		}
+	}
+
+	if (petid != 0) {
+		auto legacy_pet = entity_list.GetMob(petid);
+		if (!legacy_pet || legacy_pet->GetOwnerID() != GetID()) {
+			petid = 0;
+		}
+	}
+
+	if (petid != 0) {
+		if (std::find(petids.begin(), petids.end(), petid) == petids.end()) {
+			petids.insert(petids.begin(), petid);
+		}
+	} else if (!petids.empty()) {
+		petid = petids.front();
+	}
+
+	if (focused_pet_id && std::find(petids.begin(), petids.end(), focused_pet_id) == petids.end()) {
+		focused_pet_id = 0;
+	}
+}
+
+Mob* Mob::GetPet(uint8 idx)
+{
+	ValidatePetList();
+	auto id = GetPetID(idx);
+	if (!id) {
 		return nullptr;
 	}
 
-	const auto m = entity_list.GetMob(GetPetID());
-	if (!m) {
-		SetPetID(0);
-		return nullptr;
-	}
-
-	if (m->GetOwnerID() != GetID()) {
-		SetPetID(0);
+	auto m = entity_list.GetMob(id);
+	if (!m || m->GetOwnerID() != GetID()) {
+		ValidatePetList();
 		return nullptr;
 	}
 
 	return m;
 }
 
-bool Mob::HasPet() const {
-	if (GetPetID() == 0) {
+Mob* Mob::GetActivePet()
+{
+	if (!IsClient()) {
+		return GetPet();
+	}
+
+	if (!focused_pet_id) {
+		return GetPet();
+	}
+
+	auto focused = GetPetByID(focused_pet_id);
+	return focused ? focused : GetPet();
+}
+
+std::vector<Mob*> Mob::GetAllPets()
+{
+	ValidatePetList();
+	std::vector<Mob*> pets;
+	pets.reserve(petids.size());
+	for (auto id : petids) {
+		auto pet = entity_list.GetMob(id);
+		if (pet && pet->GetOwnerID() == GetID()) {
+			pets.push_back(pet);
+		}
+	}
+	return pets;
+}
+
+std::vector<Mob*> Mob::GetAllSwarmPets()
+{
+	std::vector<Mob*> swarm_list;
+	for (auto e : entity_list.GetNPCList()) {
+		if (e.second && e.second->GetSwarmOwner() == GetID() && e.second->GetSwarmInfo()) {
+			swarm_list.push_back(e.second);
+		}
+	}
+
+	return swarm_list;
+}
+
+Mob* Mob::GetPetByID(uint16 id)
+{
+	ValidatePetList();
+	for (uint16 pet_id : petids) {
+		if (pet_id == id) {
+			auto pet = entity_list.GetMob(pet_id);
+			if (pet && pet->GetOwnerID() == GetID()) {
+				return pet;
+			}
+			RemovePet(pet_id);
+			break;
+		}
+	}
+
+	return nullptr;
+}
+
+bool Mob::RemovePetByIndex(uint8 idx)
+{
+	if (idx >= petids.size()) {
 		return false;
 	}
 
-	const auto m = entity_list.GetMob(GetPetID());
-	if (!m) {
-		return false;
+	auto m = entity_list.GetMob(GetPetID(idx));
+	if (m) {
+		m->SetOwnerID(0);
 	}
 
-	if (m->GetOwnerID() != GetID()) {
-		return false;
+	petids.erase(petids.begin() + idx);
+	petid = petids.empty() ? 0 : petids.front();
+	if (focused_pet_id && std::find(petids.begin(), petids.end(), focused_pet_id) == petids.end()) {
+		focused_pet_id = 0;
 	}
 
 	return true;
 }
 
-void Mob::SetPet(Mob* newpet) {
-	Mob* oldpet = GetPet();
-	if (oldpet) {
-		oldpet->SetOwnerID(0);
+bool Mob::RemovePet(Mob* pet)
+{
+	if (!pet) {
+		return false;
 	}
-	if (newpet == nullptr) {
-		SetPetID(0);
-	} else {
-		SetPetID(newpet->GetID());
-		Mob* oldowner = entity_list.GetMob(newpet->GetOwnerID());
-		if (oldowner)
-			oldowner->SetPetID(0);
-		newpet->SetOwnerID(GetID());
+
+	return RemovePet(pet->GetID());
+}
+
+bool Mob::RemovePet(uint16 pet_id_to_remove)
+{
+	for (auto it = petids.begin(); it != petids.end(); ++it) {
+		if (*it == pet_id_to_remove) {
+			auto pet = entity_list.GetMob(pet_id_to_remove);
+			if (pet) {
+				pet->SetOwnerID(0);
+				pet->SendAppearancePacket(AppearanceType::Pet, 0, true, true);
+			}
+			petids.erase(it);
+			break;
+		}
+	}
+
+	petid = petids.empty() ? 0 : petids.front();
+	if (focused_pet_id == pet_id_to_remove) {
+		focused_pet_id = 0;
+	}
+
+	return true;
+}
+
+void Mob::RemoveAllPets()
+{
+	for (auto pet_id_to_remove : petids) {
+		auto pet = entity_list.GetMob(pet_id_to_remove);
+		if (pet) {
+			pet->SetOwnerID(0);
+		}
+	}
+	petids.clear();
+	petid = 0;
+	focused_pet_id = 0;
+}
+
+bool Mob::HasPet(uint8 idx) const
+{
+	if (petids.empty() || idx >= petids.size()) {
+		if (idx == 0 && petid) {
+			auto m = entity_list.GetMob(petid);
+			return m && m->GetOwnerID() == GetID();
+		}
+		return false;
+	}
+
+	auto m = entity_list.GetMob(petids[idx]);
+	return m && m->GetOwnerID() == GetID();
+}
+
+bool Mob::AddPet(Mob* newpet)
+{
+	return newpet && AddPet(newpet->GetID());
+}
+
+bool Mob::AddPet(uint16 new_pet_id)
+{
+	ValidatePetList();
+	auto newpet = entity_list.GetMob(new_pet_id);
+	if (!newpet) {
+		return false;
+	}
+
+	if (petids.size() >= RuleI(Custom, AbsolutePetLimit)) {
+		return false;
+	}
+
+	if (std::find(petids.begin(), petids.end(), new_pet_id) != petids.end()) {
+		return true;
+	}
+
+	petids.push_back(new_pet_id);
+	newpet->SetOwnerID(GetID());
+	petid = petids.front();
+	focused_pet_id = new_pet_id;
+	ConfigurePetWindow(newpet);
+	return true;
+}
+
+bool Mob::SetPet(Mob* newpet, uint8 idx)
+{
+	return SetPet(newpet ? newpet->GetID() : 0, idx);
+}
+
+bool Mob::SetPet(uint16 new_pet_id, uint8 idx)
+{
+	ValidatePetList();
+
+	if (idx >= RuleI(Custom, AbsolutePetLimit)) {
+		return false;
+	}
+
+	if (new_pet_id == 0) {
+		if (idx < petids.size()) {
+			return RemovePetByIndex(idx);
+		}
+		if (idx == 0) {
+			petid = 0;
+			return true;
+		}
+		return false;
+	}
+
+	auto newpet = entity_list.GetMob(new_pet_id);
+	if (!newpet) {
+		return false;
+	}
+
+	if (idx >= petids.size()) {
+		petids.resize(idx + 1, 0);
+	}
+
+	if (petids[idx] == new_pet_id) {
+		return true;
+	}
+
+	Mob* oldowner = entity_list.GetMob(newpet->GetOwnerID());
+	if (oldowner && oldowner != this) {
+		oldowner->ValidatePetList();
+		for (auto it = oldowner->petids.begin(); it != oldowner->petids.end(); ++it) {
+			if (*it == new_pet_id) {
+				oldowner->petids.erase(it);
+				break;
+			}
+		}
+		oldowner->petid = oldowner->petids.empty() ? 0 : oldowner->petids.front();
+	}
+
+	if (petids[idx]) {
+		auto existing = entity_list.GetMob(petids[idx]);
+		if (existing && existing->GetOwnerID() == GetID()) {
+			existing->SetOwnerID(0);
+		}
+	}
+
+	petids[idx] = new_pet_id;
+	newpet->SetOwnerID(GetID());
+	petid = petids.empty() ? 0 : petids.front();
+	focused_pet_id = new_pet_id;
+	ConfigurePetWindow(newpet);
+	return true;
+}
+
+void Mob::ConfigurePetWindow(Mob* selected_pet)
+{
+	if (!IsClient()) {
+		return;
+	}
+
+	if (!selected_pet || selected_pet->GetOwnerID() != GetID() || !selected_pet->IsNPC()) {
+		return;
+	}
+
+	auto this_client = CastToClient();
+	auto pet_npc = selected_pet->CastToNPC();
+	auto outapp = new EQApplicationPacket;
+	auto outapp2 = new EQApplicationPacket;
+
+	focused_pet_id = pet_npc->GetID();
+
+	pet_npc->CreateDespawnPacket(outapp, false);
+	pet_npc->CreateSpawnPacket(outapp2, this);
+
+	this_client->QueuePacket(outapp);
+	this_client->QueuePacket(outapp2);
+
+	pet_npc->SendAppearancePacket(AppearanceType::Pet, GetID(), true, true);
+
+	for (auto pet_iter : GetAllPets()) {
+		if (pet_iter && pet_iter->GetID() != pet_npc->GetID()) {
+			pet_iter->SendAppearancePacket(AppearanceType::Pet, GetID(), true, true);
+		}
+	}
+
+	if (GetTarget() && GetTarget()->GetID() == pet_npc->GetID()) {
+		pet_npc->SendBuffsToClient(this_client);
+	}
+
+	pet_npc->SendPetBuffsToClient();
+
+	this_client->SetPetCommandState(PetButton::Sit, pet_npc->GetPetOrder() == SPO_Sit);
+	this_client->SetPetCommandState(PetButton::Stop, pet_npc->IsPetStop());
+	this_client->SetPetCommandState(PetButton::Regroup, pet_npc->IsPetRegroup());
+	this_client->SetPetCommandState(PetButton::Follow, pet_npc->GetPetOrder() == SPO_Follow);
+	this_client->SetPetCommandState(PetButton::Guard, pet_npc->GetPetOrder() == SPO_Guard);
+	this_client->SetPetCommandState(PetButton::Taunt, pet_npc->IsTaunting());
+	this_client->SetPetCommandState(PetButton::Hold, pet_npc->IsHeld());
+	this_client->SetPetCommandState(PetButton::GreaterHold, pet_npc->IsGHeld());
+	this_client->SetPetCommandState(PetButton::Focus, pet_npc->IsFocused());
+	this_client->SetPetCommandState(PetButton::SpellHold, pet_npc->IsNoCast());
+
+	safe_delete(outapp);
+	safe_delete(outapp2);
+
+	if (GetTarget()) {
+		auto app = new EQApplicationPacket(OP_PetHoTT, sizeof(ClientTarget_Struct));
+		auto ct = (ClientTarget_Struct*)app->pBuffer;
+		ct->new_target = pet_npc->GetTarget() ? pet_npc->GetTarget()->GetID() : 0;
+		this_client->FastQueuePacket(&app);
 	}
 }
 
-void Mob::SetPetID(uint16 NewPetID) {
-	if (NewPetID == GetID() && NewPetID != 0)
-		return;
-	petid = NewPetID;
+bool Mob::IsMyPet(Mob* mob) const
+{
+	if (!mob) {
+		return false;
+	}
 
-	if(IsClient())
-	{
-		Mob* NewPet = entity_list.GetMob(NewPetID);
+	if (mob->GetOwnerID() != GetID()) {
+		return false;
+	}
+
+	for (auto id : petids) {
+		if (id == mob->GetID()) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+void Mob::SetPetID(uint16 NewPetID)
+{
+	if (NewPetID == GetID() && NewPetID != 0) {
+		return;
+	}
+
+	if (NewPetID == 0) {
+		RemovePetByIndex(0);
+	} else {
+		SetPet(NewPetID, 0);
+	}
+
+	petid = petids.empty() ? 0 : petids.front();
+
+	if (IsClient()) {
+		Mob* NewPet = entity_list.GetMob(GetPetID());
 		CastToClient()->UpdateXTargetType(MyPet, NewPet);
 	}
 }

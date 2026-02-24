@@ -18,6 +18,7 @@ class ServerManagerApp(tk.Tk):
 
         self.title("EQEmu Server Manager")
         self.geometry("1100x850")
+        self.portrait_breakpoint = 1300
 
         self.processes = {}
         self.settings_path = os.path.join(os.getcwd(), ".server_manager_settings.json")
@@ -42,17 +43,22 @@ class ServerManagerApp(tk.Tk):
         # Default EQ client directory for exports/copies
         self.eq_dir_var = tk.StringVar(value=self._settings.get("eq_dir", r"D:\Rof2"))
         self.build_target_var = tk.StringVar(value=self._settings.get("build_target", "all"))
+        self.layout_mode_var = tk.StringVar(value=self._settings.get("layout_mode", "auto"))
         self.log_follow_var = tk.BooleanVar(value=True)
         self.selected_log_path_var = tk.StringVar(value="")
         self.log_source_var = tk.StringVar(value="Source: none")
         self.process_summary_var = tk.StringVar(value="Running: 0/0  |  External: 0")
         self.log_file_entries = {}
         self._log_tail_pos = 0
+        self._active_layout_mode = None
+        self._active_proc_cols = None
 
         self.create_widgets()
         self._apply_saved_process_settings()
         self.eq_dir_var.trace_add("write", self._on_setting_changed)
         self.build_target_var.trace_add("write", self._on_setting_changed)
+        self.layout_mode_var.trace_add("write", self._on_layout_mode_changed)
+        self.bind("<Configure>", self._on_window_configure)
         self.update_status_loop()
 
     def find_bin_dir(self):
@@ -109,6 +115,7 @@ class ServerManagerApp(tk.Tk):
             data = {
                 "eq_dir": self.eq_dir_var.get(),
                 "build_target": self.build_target_var.get(),
+                "layout_mode": self.layout_mode_var.get(),
                 "process_args": {},
                 "process_console": {},
             }
@@ -123,6 +130,10 @@ class ServerManagerApp(tk.Tk):
 
     def _on_setting_changed(self, *_):
         self._save_manager_settings()
+
+    def _on_layout_mode_changed(self, *_):
+        self._save_manager_settings()
+        self._apply_main_layout(force=True)
 
     def _apply_saved_process_settings(self):
         saved_args = self._settings.get("process_args", {})
@@ -214,18 +225,16 @@ class ServerManagerApp(tk.Tk):
     def create_main_tab(self):
         shell = ttk.Frame(self.main_tab, style="Shell.TFrame", padding=(10, 8, 10, 8))
         shell.pack(fill="both", expand=True)
-        shell.grid_columnconfigure(0, weight=0, minsize=360)
-        shell.grid_columnconfigure(1, weight=1)
-        shell.grid_rowconfigure(0, weight=1)
+        self.main_shell = shell
 
         ops_rail = ttk.Frame(shell, style="OpsRail.TFrame", padding=(8, 8, 8, 8))
-        ops_rail.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
         ops_rail.grid_columnconfigure(0, weight=1)
+        self.ops_rail = ops_rail
 
         workspace = ttk.Frame(shell, style="Workspace.TFrame")
-        workspace.grid(row=0, column=1, sticky="nsew")
         workspace.grid_columnconfigure(0, weight=1)
         workspace.grid_rowconfigure(2, weight=1)
+        self.workspace = workspace
 
         build_card = ttk.LabelFrame(ops_rail, text="Build & Deploy", padding=8)
         build_card.grid(row=0, column=0, sticky="ew", pady=(0, 8))
@@ -306,24 +315,29 @@ class ServerManagerApp(tk.Tk):
         overview.grid(row=0, column=0, sticky="ew", pady=(0, 8))
         overview.grid_columnconfigure(0, weight=1)
         overview.grid_columnconfigure(1, weight=0)
+        overview.grid_columnconfigure(2, weight=0)
 
         ttk.Label(overview, text="Live Server Workspace", style="OverviewTitle.TLabel").grid(row=0, column=0, sticky="w")
         ttk.Label(overview, textvariable=self.process_summary_var, style="OverviewValue.TLabel").grid(row=1, column=0, sticky="w", pady=(2, 0))
         ttk.Button(overview, text="Refresh Logs", command=self.refresh_runtime_log_files).grid(row=0, column=1, rowspan=2, padx=(10, 0), sticky="e")
+        layout_selector = ttk.Combobox(
+            overview,
+            textvariable=self.layout_mode_var,
+            width=10,
+            state="readonly",
+            values=["auto", "landscape", "portrait"],
+        )
+        layout_selector.grid(row=0, column=2, rowspan=2, padx=(8, 0), sticky="e")
 
         proc_frame = ttk.LabelFrame(workspace, text="Service Grid", padding=8)
         proc_frame.grid(row=1, column=0, sticky="ew", pady=(0, 8))
-        for c in range(3):
-            proc_frame.grid_columnconfigure(c, weight=1)
+        self.proc_frame = proc_frame
 
         self.proc_widgets = {}
         for i, info in enumerate(self.process_info):
-            row = i // 3
-            col = i % 3
             name = info["name"]
 
             card = ttk.Frame(proc_frame, style="ProcessCard.TFrame", padding=(10, 8, 10, 8))
-            card.grid(row=row, column=col, padx=5, pady=5, sticky="nsew")
             card.grid_columnconfigure(0, weight=1)
 
             ttk.Label(card, text=info["display"], style="ProcessTitle.TLabel").grid(row=0, column=0, sticky="w")
@@ -350,6 +364,7 @@ class ServerManagerApp(tk.Tk):
             opts_btn.grid(row=0, column=2, padx=(3, 0), sticky="ew")
 
             self.proc_widgets[name] = {
+                "index": i,
                 "card": card,
                 "status_lbl": status_lbl,
                 "start_btn": start_btn,
@@ -398,8 +413,73 @@ class ServerManagerApp(tk.Tk):
         self.runtime_log_text.pack(fill="both", expand=True, padx=5, pady=5)
 
         self._refresh_process_overview()
+        self._apply_main_layout(force=True)
         self.after(200, self.refresh_runtime_log_files)
         self.after(1000, self.runtime_log_follow_loop)
+
+    def _on_window_configure(self, event=None):
+        if event is not None and event.widget is not self:
+            return
+        if self.layout_mode_var.get() == "auto":
+            self._apply_main_layout()
+
+    def _effective_layout_mode(self):
+        selected_mode = self.layout_mode_var.get()
+        if selected_mode in ("landscape", "portrait"):
+            return selected_mode
+        width = self.winfo_width()
+        if width <= 1:
+            width = self.winfo_reqwidth()
+        return "portrait" if width < self.portrait_breakpoint else "landscape"
+
+    def _reflow_process_cards(self, columns):
+        columns = max(1, int(columns))
+        if self._active_proc_cols == columns:
+            return
+
+        for col in range(6):
+            self.proc_frame.grid_columnconfigure(col, weight=0)
+        for col in range(columns):
+            self.proc_frame.grid_columnconfigure(col, weight=1)
+
+        sorted_items = sorted(self.proc_widgets.items(), key=lambda item: item[1]["index"])
+        for idx, (_, widgets) in enumerate(sorted_items):
+            row = idx // columns
+            col = idx % columns
+            widgets["card"].grid(row=row, column=col, padx=5, pady=5, sticky="nsew")
+
+        self._active_proc_cols = columns
+
+    def _apply_main_layout(self, force=False):
+        if not hasattr(self, "main_shell"):
+            return
+
+        mode = self._effective_layout_mode()
+        if not force and self._active_layout_mode == mode:
+            return
+
+        shell = self.main_shell
+        for col in range(2):
+            shell.grid_columnconfigure(col, weight=0, minsize=0)
+        for row in range(2):
+            shell.grid_rowconfigure(row, weight=0)
+
+        if mode == "portrait":
+            shell.grid_columnconfigure(0, weight=1)
+            shell.grid_rowconfigure(0, weight=0)
+            shell.grid_rowconfigure(1, weight=1)
+            self.ops_rail.grid(row=0, column=0, sticky="ew", padx=0, pady=(0, 10))
+            self.workspace.grid(row=1, column=0, sticky="nsew")
+            self._reflow_process_cards(columns=2)
+        else:
+            shell.grid_columnconfigure(0, weight=0, minsize=360)
+            shell.grid_columnconfigure(1, weight=1)
+            shell.grid_rowconfigure(0, weight=1)
+            self.ops_rail.grid(row=0, column=0, sticky="nsew", padx=(0, 10), pady=0)
+            self.workspace.grid(row=0, column=1, sticky="nsew")
+            self._reflow_process_cards(columns=3)
+
+        self._active_layout_mode = mode
 
     def create_database_tab(self):
         """Create database management tools"""

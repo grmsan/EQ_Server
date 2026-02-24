@@ -988,7 +988,7 @@ void Client::CompleteConnect()
 
 	// TODO: load these states
 	// We at least will set them to the correct state for now
-	if (m_ClientVersionBit & EQ::versions::maskUFAndLater && GetPet()) {
+	if (m_ClientVersionBit & EQ::versions::maskUFAndLater && GetActivePet()) {
 		SetPetCommandState(PetButton::Sit, PetButtonState::Off);
 		SetPetCommandState(PetButton::Stop, PetButtonState::Off);
 		SetPetCommandState(PetButton::Regroup, PetButtonState::Off);
@@ -1867,27 +1867,45 @@ SendServerStatsUpdate();
 	}
 
 	if (RuleB(NPC, PetZoneWithOwner)) {
-		/* Load Pet */
+		/* Load Pets */
 		database.LoadPetInfo(this);
-		if (m_petinfo.SpellID > 1 && !GetPet() && m_petinfo.SpellID <= SPDAT_RECORDS) {
-			MakePoweredPet(m_petinfo.SpellID, spells[m_petinfo.SpellID].teleport_zone, m_petinfo.petpower,
-						   m_petinfo.Name, m_petinfo.size);
-			if (GetPet() && GetPet()->IsNPC()) {
-				NPC *pet = GetPet()->CastToNPC();
-				pet->SetPetState(m_petinfo.Buffs, m_petinfo.Items);
-				pet->CalcBonuses();
-				pet->SetHP(m_petinfo.HP);
-				pet->SetMana(m_petinfo.Mana);
+		for (int i = 0; i < static_cast<int>(m_petinfomulti.size()); ++i) {
+			auto& pet_info = m_petinfomulti[i];
+			if (
+				pet_info.SpellID > 1 &&
+				GetAllPets().size() < RuleI(Custom, AbsolutePetLimit) &&
+				pet_info.SpellID <= SPDAT_RECORDS &&
+				IsPetAllowed(pet_info.SpellID)
+			) {
+				MakePoweredPet(
+					pet_info.SpellID,
+					spells[pet_info.SpellID].teleport_zone,
+					pet_info.petpower,
+					pet_info.Name,
+					pet_info.size
+				);
 
-				// Taunt persists when zoning on newer clients, overwrite default.
-				if (m_ClientVersionBit & EQ::versions::maskUFAndLater) {
-					if (!ingame) {
-						pet->SetTaunting(m_petinfo.taunting);
+				if (GetPet(i) && GetPet(i)->IsNPC()) {
+					NPC *pet = GetPet(i)->CastToNPC();
+					pet->SetPetState(pet_info.Buffs, pet_info.Items);
+					pet->CalcBonuses();
+					pet->SetHP(pet_info.HP);
+					pet->SetMana(pet_info.Mana);
+
+					// Taunt persists when zoning on newer clients, overwrite default.
+					if ((m_ClientVersionBit & EQ::versions::maskUFAndLater) && !ingame) {
+						pet->SetTaunting(pet_info.taunting);
 					}
 				}
+
+				pet_info.SpellID = 0;
 			}
-			m_petinfo.SpellID = 0;
 		}
+	}
+
+	if (GetPet(0)) {
+		focused_pet_id = petids[0];
+		ConfigurePetWindow(GetPet(0));
 	}
 	/* Moved here so it's after where we load the pet data. */
 	if (!aabonuses.ZoneSuspendMinion && !spellbonuses.ZoneSuspendMinion && !itembonuses.ZoneSuspendMinion) {
@@ -3674,6 +3692,7 @@ void Client::Handle_OP_AutoAttack(const EQApplicationPacket *app)
 		attack_timer.Disable();
 		ranged_timer.Disable();
 		attack_dw_timer.Disable();
+		attack_autoskill_timer.Disable();
 
 		m_AutoAttackPosition       = glm::vec4();
 		m_AutoAttackTargetLocation = glm::vec3();
@@ -3682,6 +3701,7 @@ void Client::Handle_OP_AutoAttack(const EQApplicationPacket *app)
 	else if (app->pBuffer[0] == 1) {
 		auto_attack = true;
 		auto_fire   = false;
+		SetAttackMode(AttackMode::MELEE);
 		if (IsAIControlled()) {
 			return;
 		}
@@ -3729,6 +3749,9 @@ void Client::Handle_OP_AutoFire(const EQApplicationPacket *app)
 		auto_fire = false;
 
 	auto_attack = false;
+	if (auto_fire) {
+		SetAttackMode(AttackMode::RANGED);
+	}
 	SetAttackTimer();
 }
 
@@ -11225,7 +11248,7 @@ void Client::Handle_OP_PetCommands(const EQApplicationPacket *app)
 	}
 	char val1[20] = { 0 };
 	PetCommand_Struct* pet = (PetCommand_Struct*)app->pBuffer;
-	Mob* mypet = GetPet();
+	Mob* mypet = GetActivePet();
 	Mob *target = entity_list.GetMob(pet->target);
 
 	if (!mypet || pet->command == PET_LEADER) {
@@ -11251,6 +11274,11 @@ void Client::Handle_OP_PetCommands(const EQApplicationPacket *app)
 	// just let the command "/pet get lost" work for familiars
 	if (mypet->GetPetType() == petFamiliar && pet->command != PET_GETLOST)
 		return;
+
+	// This can be echoed by the client when changing focused pets.
+	if (pet->target == mypet->GetID()) {
+		return;
+	}
 
 	uint32 PetCommand = pet->command;
 
@@ -11411,7 +11439,7 @@ void Client::Handle_OP_PetCommands(const EQApplicationPacket *app)
 			break;
 		}
 		else {
-			SetPet(nullptr);
+			RemovePet(mypet);
 		}
 
 		mypet->SayString(this, Chat::PetResponse, PET_GETLOST_STRING);

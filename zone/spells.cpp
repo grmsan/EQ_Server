@@ -2094,6 +2094,18 @@ bool Mob::DetermineSpellTargets(uint16 spell_id, Mob *&spell_target, Mob *&ae_ce
 	if (isproc && IsNPC() && CastToNPC()->GetInnateProcSpellID() == spell_id)
 		targetType = ST_Target;
 
+	if (RuleB(Custom, DisablePetGroupSpells) && GetOwner() && GetOwner()->IsClient()) {
+		switch (targetType) {
+		case ST_Group:
+		case ST_GroupClientAndPet:
+		case ST_GroupNoPets:
+			targetType = ST_Self;
+			break;
+		default:
+			break;
+		}
+	}
+
 	switch (targetType)
 	{
 // single target spells
@@ -2158,7 +2170,7 @@ bool Mob::DetermineSpellTargets(uint16 spell_id, Mob *&spell_target, Mob *&ae_ce
 
 		case ST_SummonedPet:
 		{
-			if(!spell_target || (spell_target != GetPet()) ||
+			if(!spell_target || !GetPetByID(spell_target->GetID()) ||
 				(mob_body != BodyType::Summoned && mob_body != BodyType::Summoned2 && mob_body != BodyType::Summoned3 && mob_body != BodyType::Animal))
 			{
 				LogSpells("Spell [{}] canceled: invalid target of body type [{}] (summoned pet)",
@@ -2766,33 +2778,45 @@ bool Mob::SpellFinished(uint16 spell_id, Mob *spell_target, CastingSlot slot, in
 					break;
 			}
 
-			if(spell_target == nullptr) {
-				LogSpells("Spell [{}]: Targeted spell, but we have no target", spell_id);
-				return(false);
-			}
-			if (isproc) {
-				SpellOnTarget(spell_id, spell_target, 0, true, resist_adjust, true, level_override);
-			} else {
-				if (spells[spell_id].target_type == ST_TargetOptional){
-					if (!TrySpellProjectile(spell_target, spell_id))
-						return false;
+			if (spells[spell_id].target_type == ST_Pet || spells[spell_id].target_type == ST_SummonedPet) {
+				if (spell_target && GetTarget() == spell_target && IsEffectInSpell(spell_id, SpellEffect::Illusion) && IsMyPet(spell_target)) {
+					SpellOnTarget(spell_id, spell_target, -1, true, resist_adjust, true, level_override);
 				}
-
-				else if(!SpellOnTarget(spell_id, spell_target, 0, true, resist_adjust, false, level_override)) {
-					if(IsBuffSpell(spell_id) && IsBeneficialSpell(spell_id)) {
-						return false;
+				else {
+					for (const auto& pet : GetAllPets()) {
+						SpellOnTarget(spell_id, pet, -1, true, resist_adjust, true, level_override);
 					}
 				}
 			}
+			else {
+				if(spell_target == nullptr) {
+					LogSpells("Spell [{}]: Targeted spell, but we have no target", spell_id);
+					return(false);
+				}
+				if (isproc) {
+					SpellOnTarget(spell_id, spell_target, RuleI(Custom, ProcReflectPercentage), true, resist_adjust, true, level_override);
+				} else {
+					if (spells[spell_id].target_type == ST_TargetOptional){
+						if (!TrySpellProjectile(spell_target, spell_id))
+							return false;
+					}
 
-			if(IsIllusionSpell(spell_id)
-			&& IsOfClientBot()
-			&& (HasProjectIllusion())){
-				LogAA("Effect Project Illusion for [{}] on spell id: [{}] was ON", GetName(), spell_id);
-				SetProjectIllusion(false);
-			}
-			else{
-				LogAA("Effect Project Illusion for [{}] on spell id: [{}] was OFF", GetName(), spell_id);
+					else if(!SpellOnTarget(spell_id, spell_target, 0, true, resist_adjust, false, level_override)) {
+						if(IsBuffSpell(spell_id) && IsBeneficialSpell(spell_id)) {
+							return false;
+						}
+					}
+				}
+
+				if(IsIllusionSpell(spell_id)
+				&& IsOfClientBot()
+				&& (HasProjectIllusion())){
+					LogAA("Effect Project Illusion for [{}] on spell id: [{}] was ON", GetName(), spell_id);
+					SetProjectIllusion(false);
+				}
+				else{
+					LogAA("Effect Project Illusion for [{}] on spell id: [{}] was OFF", GetName(), spell_id);
+				}
 			}
 			break;
 		}
@@ -2889,21 +2913,29 @@ bool Mob::SpellFinished(uint16 spell_id, Mob *spell_target, CastingSlot slot, in
 
 					if (spell_target != this) {
 						SpellOnTarget(spell_id, this);
-	#ifdef GROUP_BUFF_PETS
+#ifdef GROUP_BUFF_PETS
 						//pet too
-						if (spells[spell_id].target_type != ST_GroupNoPets && GetPet() && HasPetAffinity() && !GetPet()->IsCharmed()) {
-							SpellOnTarget(spell_id, GetPet());
+						if (spells[spell_id].target_type != ST_GroupNoPets && GetPet() && HasPetAffinity()) {
+							for (auto pet : GetAllPets()) {
+								if (!pet->IsCharmed()) {
+									SpellOnTarget(spell_id, pet);
+								}
+							}
 						}
-	#endif
+#endif
 					}
 
 					SpellOnTarget(spell_id, spell_target);
-	#ifdef GROUP_BUFF_PETS
+#ifdef GROUP_BUFF_PETS
 					//pet too
-					if (spells[spell_id].target_type != ST_GroupNoPets && spell_target->GetPet() && spell_target->HasPetAffinity() && !spell_target->GetPet()->IsCharmed()) {
-						SpellOnTarget(spell_id, spell_target->GetPet());
+					if (spells[spell_id].target_type != ST_GroupNoPets && spell_target->GetPet() && spell_target->HasPetAffinity()) {
+						for (auto pet : spell_target->GetAllPets()) {
+							if (!pet->IsCharmed()) {
+								SpellOnTarget(spell_id, pet);
+							}
+						}
 					}
-	#endif
+#endif
 				}
 			}
 			break;
@@ -3289,6 +3321,42 @@ int Mob::CheckStackConflict(uint16 spellid1, int caster_level1, uint16 spellid2,
 
 	if (IsResurrectionEffects(spellid1)) {
 		return 0;
+	}
+
+	if (RuleB(Custom, BypassMulticlassStackConflict)) {
+		auto check_class_overlap = [&](int old_spell_id, int new_spell_id) -> bool {
+			if (old_spell_id == new_spell_id) {
+				return true;
+			}
+
+			unsigned int spell_mask1 = 0;
+			unsigned int spell_mask2 = 0;
+
+			for (int class_id = 0; class_id < Class::PLAYER_CLASS_COUNT; class_id++) {
+				if (spells[old_spell_id].classes[class_id] <= RuleI(Character, MaxLevel)) {
+					spell_mask1 |= (1 << class_id);
+				}
+				if (spells[new_spell_id].classes[class_id] <= RuleI(Character, MaxLevel)) {
+					spell_mask2 |= (1 << class_id);
+				}
+			}
+
+			if (spell_mask1 == spell_mask2) {
+				return true;
+			}
+
+			return (spell_mask1 & spell_mask2) != 0;
+		};
+
+		auto is_same_caster = [&](Mob* a, Mob* b) {
+			return (a && b && a->GetID() == b->GetID()) ||
+				(a && a->GetID() == GetID()) ||
+				(b && b->GetID() == GetID());
+		};
+
+		if (!check_class_overlap(spellid1, spellid2) && is_same_caster(caster1, caster2)) {
+			return 0;
+		}
 	}
 
 	if (spellbonuses.CompleteHealBuffBlocker && IsEffectInSpell(spellid2, SpellEffect::CompleteHeal)) {

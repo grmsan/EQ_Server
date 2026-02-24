@@ -2002,7 +2002,7 @@ bool Client::Death(Mob* killer_mob, int64 damage, uint16 spell, EQ::skills::Skil
 	InterruptSpell();
 
 	Mob* m_pet = GetPet();
-	SetPet(0);
+	SetPet(static_cast<uint16>(0));
 	SetHorseId(0);
 	ShieldAbilityClearVariables();
 	dead = true;
@@ -2638,7 +2638,7 @@ bool NPC::Death(Mob* killer_mob, int64 damage, uint16 spell, EQ::skills::SkillTy
 	ShieldAbilityClearVariables();
 
 	SetHP(0);
-	SetPet(0);
+	SetPet(static_cast<uint16>(0));
 
 	if (GetSwarmOwner()) {
 		Mob* owner = entity_list.GetMobID(GetSwarmOwner());
@@ -5257,6 +5257,9 @@ void Mob::TryWeaponProc(const EQ::ItemInstance *inst, const EQ::ItemData *weapon
 	int ourlevel = GetLevel();
 	float ProcBonus = static_cast<float>(aabonuses.ProcChanceSPA +
 		spellbonuses.ProcChanceSPA + itembonuses.ProcChanceSPA);
+	if (RuleB(Custom, ExcludeTempPetsFromProcChanceSPA) && IsValidSpell(weapon->Proc.Effect) && IsEffectInSpell(weapon->Proc.Effect, SpellEffect::TemporaryPets)) {
+		ProcBonus = 0.0f;
+	}
 	ProcBonus += static_cast<float>(itembonuses.ProcChance) / 10.0f; // Combat Effects
 	float ProcChance = GetProcChances(ProcBonus, hand);
 
@@ -5280,8 +5283,10 @@ void Mob::TryWeaponProc(const EQ::ItemInstance *inst, const EQ::ItemData *weapon
 	};
 
 	if (weapon->Proc.Type == EQ::item::ItemEffectCombatProc && IsValidSpell(weapon->Proc.Effect)) {
-		float WPC = ProcChance * (100.0f + // Proc chance for this weapon
-			static_cast<float>(weapon->ProcRate)) / 100.0f;
+		int item_proc_chance = (RuleI(Custom, PetProcRateCap) && (IsPet() || (IsNPC() && CastToNPC()->GetSwarmInfo())))
+			? std::min(RuleI(Custom, PetProcRateCap), weapon->ProcRate)
+			: weapon->ProcRate;
+		float WPC = ProcChance * (100.0f + static_cast<float>(item_proc_chance)) / 100.0f;
 		if (zone->random.Roll(WPC)) {	// 255 dex = 0.084 chance of proc. No idea what this number should be really.
 			if (weapon->Proc.Level2 > ourlevel) {
 				LogCombat("Tried to proc ([{}]), but our level ([{}]) is lower than required ([{}])",
@@ -5303,9 +5308,12 @@ void Mob::TryWeaponProc(const EQ::ItemInstance *inst, const EQ::ItemData *weapon
 			}
 		}
 	}
-	//If OneProcPerWeapon is not enabled, we reset the try for that weapon regardless of if we procced or not.
-	//This is for some servers that may want to have as many procs triggering from weapons as possible in a single round.
-	if (!RuleB(Combat, OneProcPerWeapon))
+	if (RuleB(Custom, MultipleTwoHandedProcs) && (weapon->IsType2HWeapon() || weapon->ItemType == EQ::item::ItemTypeBow)) {
+		proced = false;
+	}
+	// If OneProcPerWeapon is not enabled, we reset the try for that weapon regardless of if we procced or not.
+	// This is for some servers that may want to have as many procs triggering from weapons as possible in a single round.
+	else if (!RuleB(Combat, OneProcPerWeapon))
 		proced = false;
 
 	if (!proced && inst) {
@@ -5318,8 +5326,10 @@ void Mob::TryWeaponProc(const EQ::ItemInstance *inst, const EQ::ItemData *weapon
 				continue;
 
 			if (aug->Proc.Type == EQ::item::ItemEffectCombatProc && IsValidSpell(aug->Proc.Effect)) {
-				float APC = ProcChance * (100.0f + // Proc chance for this aug
-					static_cast<float>(aug->ProcRate)) / 100.0f;
+				int item_proc_chance = (RuleI(Custom, PetProcRateCap) && IsPet())
+					? std::min(RuleI(Custom, PetProcRateCap), aug->ProcRate)
+					: aug->ProcRate;
+				float APC = ProcChance * (100.0f + static_cast<float>(item_proc_chance)) / 100.0f;
 				if (zone->random.Roll(APC)) {
 					if (aug->Proc.Level2 > ourlevel) {
 						if (IsPet()) {
@@ -5394,7 +5404,7 @@ void Mob::TrySpellProc(const EQ::ItemInstance *inst, const EQ::ItemData *weapon,
 		}
 
 		// Not ranged
-		if (!rangedattk) {
+		if (!rangedattk || RuleB(Custom, MulticlassingEnabled)) {
 			// Perma procs (Not used for AA, they are handled below)
 			if (IsValidSpell(PermaProcs[i].spellID)) {
 				if (zone->random.Roll(PermaProcs[i].chance)) { // TODO: Do these get spell bonus?
@@ -5462,7 +5472,7 @@ void Mob::TrySpellProc(const EQ::ItemInstance *inst, const EQ::ItemData *weapon,
 			uint32 aa_proc_reuse_timer = 0;
 			int proc_type = 0; //used to deterimne which timer array is used.
 
-			if (!rangedattk) {
+			if (!rangedattk || RuleB(Custom, MulticlassingEnabled)) {
 
 				aa_rank_id = aabonuses.SpellProc[i + SBIndex::COMBAT_PROC_ORIGIN_ID];
 				aa_spell_id = aabonuses.SpellProc[i + SBIndex::COMBAT_PROC_SPELL_ID];
@@ -6940,6 +6950,7 @@ void Client::SetAttackTimer()
 	//default value for attack timer in case they have
 	//an invalid weapon equipped:
 	attack_timer.SetAtTrigger(4000, true);
+	attack_autoskill_timer.SetAtTrigger(500, true);
 
 	Timer *TimerToUse = nullptr;
 

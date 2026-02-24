@@ -362,6 +362,7 @@ bool Client::Process() {
 		}
 
 		bool may_use_attacks = false;
+		bool may_use_autoskills = false;
 		/*
 			Things which prevent us from attacking:
 				- being under AI control, the AI does attacks
@@ -371,7 +372,7 @@ bool Client::Process() {
 				- being stunned or mezzed
 				- having used a ranged weapon recently
 		*/
-		if (auto_attack) {
+		if (AutoAttackEnabled() || AutoFireEnabled()) {
 			if (!IsAIControlled() && !dead
 				&& !(spellend_timer.Enabled() && casting_spell_id && !IsBardSong(casting_spell_id))
 				&& !IsStunned() && !IsFeared() && !IsMezzed() && GetAppearance() != eaDead && !IsMeleeDisabled()
@@ -387,7 +388,28 @@ bool Client::Process() {
 			}
 		}
 
-		if (AutoFireEnabled()) {
+		// Autoskills (kick/bash/etc.) are melee-only checks in DoClassAttacks(),
+		// but triggering is allowed from either auto-attack or auto-fire state.
+		if ((auto_attack || AutoFireEnabled()) && !IsAIControlled() && !dead
+			&& !(spellend_timer.Enabled() && casting_spell_id && !IsBardSong(casting_spell_id))
+			&& !IsStunned() && !IsFeared() && !IsMezzed() && GetAppearance() != eaDead && !IsMeleeDisabled()) {
+			may_use_autoskills = true;
+		}
+
+		if (GetPet()) {
+			if (!GetPetByID(focused_pet_id)) {
+				ValidatePetList();
+				if (!petids.empty()) {
+					focused_pet_id = petids[0];
+					auto focused_pet = GetPetByID(focused_pet_id);
+					if (focused_pet) {
+						ConfigurePetWindow(focused_pet);
+					}
+				}
+			}
+		}
+
+		if ((AutoFireEnabled() || (AutoAttackEnabled() && GetAttackMode() == AttackMode::RANGED)) && may_use_attacks) {
 			if (GetTarget() == this) {
 				MessageString(Chat::TooFarAway, TRY_ATTACKING_SOMEONE);
 				auto_fire = false;
@@ -400,8 +422,18 @@ bool Client::Process() {
 							if (GetTarget()->InFrontMob(this, GetTarget()->GetX(), GetTarget()->GetY())) {
 								if (CheckLosFN(GetTarget()) && CheckWaterAutoFireLoS(GetTarget())) {
 									//client has built in los check, but auto fire does not.. done last.
-									if (RangedAttack(GetTarget()) && CheckDoubleRangedAttack()) {
+									RangedAttack(GetTarget());
+									if (CheckDoubleRangedAttack() || (RuleB(Custom, DoubleAttackSkillRanged) && CanThisClassDoubleAttack() && CheckDoubleAttack())) {
 										RangedAttack(GetTarget(), true);
+									}
+									if (RuleB(Custom, DoubleAttackSkillRanged) && CanThisClassTripleAttack() && CheckTripleAttack()) {
+										RangedAttack(GetTarget(), true);
+									}
+									if (RuleB(Custom, DoubleAttackSkillRanged) && CanThisClassDoubleAttack()) {
+										CheckIncreaseSkill(EQ::skills::SkillDoubleAttack, GetTarget());
+									}
+									if (RuleB(Custom, DoubleAttackSkillRanged) && CanThisClassTripleAttack()) {
+										CheckIncreaseSkill(EQ::skills::SkillTripleAttack, GetTarget());
 									}
 								} else {
 									ranged_timer.Start();
@@ -412,6 +444,7 @@ bool Client::Process() {
 						} else {
 							ranged_timer.Start();
 						}
+						ranged_timer.Start();
 					}
 				} else if (ranged->GetItem() && (ranged->GetItem()->ItemType == EQ::item::ItemTypeLargeThrowing || ranged->GetItem()->ItemType == EQ::item::ItemTypeSmallThrowing)) {
 					if (ranged_timer.Check(false)) {
@@ -420,6 +453,18 @@ bool Client::Process() {
 								if (CheckLosFN(GetTarget()) && CheckWaterAutoFireLoS(GetTarget())) {
 									//client has built in los check, but auto fire does not.. done last.
 									ThrowingAttack(GetTarget());
+									if (CheckDoubleRangedAttack() || (RuleB(Custom, DoubleAttackSkillRanged) && CanThisClassDoubleAttack() && CheckDoubleAttack())) {
+										ThrowingAttack(GetTarget(), true);
+									}
+									if (RuleB(Custom, DoubleAttackSkillRanged) && CanThisClassTripleAttack() && CheckTripleAttack()) {
+										ThrowingAttack(GetTarget(), true);
+									}
+									if (RuleB(Custom, DoubleAttackSkillRanged) && CanThisClassDoubleAttack()) {
+										CheckIncreaseSkill(EQ::skills::SkillDoubleAttack, GetTarget());
+									}
+									if (RuleB(Custom, DoubleAttackSkillRanged) && CanThisClassTripleAttack()) {
+										CheckIncreaseSkill(EQ::skills::SkillTripleAttack, GetTarget());
+									}
 								} else {
 									ranged_timer.Start();
 								}
@@ -429,13 +474,35 @@ bool Client::Process() {
 						} else {
 							ranged_timer.Start();
 						}
+						ranged_timer.Start();
+					}
+				}
+			}
+
+			if (GetTarget() && IsAttackAllowed(GetTarget())) {
+				for (auto pet : GetAllPets()) {
+					if (
+						pet &&
+						pet->IsNPC() &&
+						!pet->GetTarget() &&
+						pet->GetPetOrder() != SPO_Sit &&
+						!pet->IsHeld() &&
+						!pet->IsPetStop()
+					) {
+						pet->AddToHateList(GetTarget(), 1, 0, true, false, false, SPELL_UNKNOWN, true);
+					}
+				}
+
+				for (auto swarm_member : GetAllSwarmPets()) {
+					if (swarm_member && swarm_member->IsNPC() && !swarm_member->GetTarget()) {
+						swarm_member->AddToHateList(GetTarget(), 1, 0, true, false, false, SPELL_UNKNOWN, true);
 					}
 				}
 			}
 		}
 
 		Mob *auto_attack_target = GetTarget();
-		if (auto_attack && auto_attack_target != nullptr && may_use_attacks && attack_timer.Check()) {
+		if ((auto_attack && GetAttackMode() == AttackMode::MELEE) && auto_attack_target != nullptr && may_use_attacks && attack_timer.Check()) {
 			//check if change
 			//only check on primary attack.. sorry offhand you gotta wait!
 			if (aa_los_them_mob) {
@@ -492,6 +559,27 @@ bool Client::Process() {
 					entity_list.AEAttack(this, 40);
 				}
 			}
+
+			if (auto_attack_target && IsAttackAllowed(auto_attack_target)) {
+				for (auto pet : GetAllPets()) {
+					if (
+						pet &&
+						pet->IsNPC() &&
+						!pet->GetTarget() &&
+						pet->GetPetOrder() != SPO_Sit &&
+						!pet->IsHeld() &&
+						!pet->IsPetStop()
+					) {
+						pet->AddToHateList(auto_attack_target, 1, 0, true, false, false, SPELL_UNKNOWN, true);
+					}
+				}
+
+				for (auto swarm_member : GetAllSwarmPets()) {
+					if (swarm_member && swarm_member->IsNPC() && !swarm_member->GetTarget()) {
+						swarm_member->AddToHateList(auto_attack_target, 1, 0, true, false, false, SPELL_UNKNOWN, true);
+					}
+				}
+			}
 		}
 
 		if (GetClass() == Class::Warrior || GetClass() == Class::Berserker) {
@@ -505,7 +593,7 @@ bool Client::Process() {
 			}
 		}
 
-		if (auto_attack && may_use_attacks && auto_attack_target != nullptr
+		if ((auto_attack && GetAttackMode() == AttackMode::MELEE) && may_use_attacks && auto_attack_target != nullptr
 			&& CanThisClassDualWield() && attack_dw_timer.Check())
 		{
 			// Range check
@@ -532,10 +620,39 @@ bool Client::Process() {
 			}
 		}
 
-		if (auto_attack && auto_attack_target != nullptr && may_use_attacks && attack_autoskill_timer.Check() && !auto_attack_target->IsClient()) {
+		if ((auto_attack || AutoFireEnabled()) &&
+			auto_attack_target != nullptr &&
+			may_use_autoskills &&
+			attack_autoskill_timer.Check() &&
+			!auto_attack_target->IsClient()) {
 			for (const auto& skill : GetAutoSkillsList()) {
 				if (GetAutoSkillStatus(skill)) {
+					if (skill == EQ::skills::SkillTaunt) {
+						if (!p_timers.Expired(&database, pTimerTaunt, false)) {
+							continue;
+						}
+
+						auto target = GetTarget();
+						if (!target) {
+							continue;
+						}
+
+						auto hate_top = target->GetHateTop();
+						if (!hate_top) {
+							continue;
+						}
+
+						if (hate_top->GetID() != GetID()) {
+							auto outapp = new EQApplicationPacket(OP_Taunt);
+							QueuePacket(outapp);
+							safe_delete(outapp);
+						}
+						continue;
+					}
+
+					SetEntityVariable("auto_skill", "enabled");
 					DoClassAttacks(auto_attack_target, skill, false);
+					DeleteEntityVariable("auto_skill");
 				}
 			}
 		}
@@ -563,6 +680,16 @@ bool Client::Process() {
 		// this is independent of the tick timer
 		if (consume_food_timer.Check())
 			DoStaminaHungerUpdate();
+
+		if (!focused_pet_id || !entity_list.GetNPCByID(focused_pet_id)) {
+			if (GetPet()) {
+				ValidatePetList();
+				if (GetPet()) {
+					focused_pet_id = GetPet()->GetID();
+					ConfigurePetWindow(GetPet());
+				}
+			}
+		}
 
 		if (tic_timer.Check() && !dead) {
 			CalcMaxHP();

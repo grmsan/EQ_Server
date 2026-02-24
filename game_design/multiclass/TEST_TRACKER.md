@@ -6,6 +6,29 @@
 
 ## Recent Implementation Updates
 
+- **2026-02-24**: THJ combat/pet parity port (autoskills, multi-pet runtime, multi-pet persistence, proc parity alignment).
+  - Combat ability/autoskill flow updated to THJ-style call path:
+    - `Client::DoClassAttacks` now routes through `OPCombatAbility(...)` with autoskill/riposte-aware timer behavior.
+    - `OPCombatAbility` now suppresses recovery spam for autoskill-triggered calls and supports ranged double/triple checks via `DoubleAttackSkillRanged`.
+  - Attack mode support added (`MELEE` / `RANGED`) and wired into auto-attack + autofire processing.
+  - Multi-pet runtime behavior expanded:
+    - `GetAllPets()`, `GetAllSwarmPets()`, focused pet handling, and active pet command routing.
+    - Pet command window refresh now follows THJ-style focused pet sync (`ConfigurePetWindow`).
+  - Spell/charm/summon flow updated for THJ-style multi-pet control:
+    - Charm now adds to pet list (`AddPet`) when allowed.
+    - Pet summon/charm checks now honor `Custom:AbsolutePetLimit` and `IsPetAllowed(...)`.
+    - `PassCharmTargetRestriction` updated for multi-pet ownership/cap behavior.
+  - Group/raid pet spell propagation updated to iterate all owned pets (non-charmed).
+  - Proc/stacking related parity hooks enabled:
+    - `Custom:ProcReflectPercentage` used for proc reflection path.
+    - `Custom:BypassMulticlassStackConflict` used in spell stack-conflict logic.
+    - `Custom:MultipleTwoHandedProcs` and `Custom:DoubleAttackSkillRanged` aligned with THJ behavior paths.
+  - Multi-pet persistence completed:
+    - Save/load now persists all active permanent pets plus suspended minion.
+    - Legacy suspended slot compatibility added.
+    - SQL migration added and executed locally:
+      - `utils/sql/custom/2026_02_24_multipet_suspended_slot_migration.sql`
+
 - **2026-02-21**: THJ parity follow-up for profile class hydration.
   - `zone/client_packet.cpp::CompleteConnect()` now seeds `m_pp.classes` directly from `GestaltClasses` and primes `m_classes_bits_cache` (THJ-style).
   - `zone/client.cpp::GetClassesBits()` now prefers `m_pp.classes` when present before bucket fallback, matching THJ runtime behavior and reducing stale bucket-path reads.
@@ -243,6 +266,21 @@ If a temporary inventory resync message appears, source/destination slot states 
 **Status**: [ ] Pass  [ ] Fail
 **Comments**: __________________________________________________
 
+### 1.5 Multi-Pet Persistence (Zone/Camp/Relog)
+
+**Goal**: Verify all permanent pets persist, not just one.
+**Procedure**:
+
+1. Set `Custom:AbsolutePetLimit` to at least `2`.
+2. Create a character with multiple pet-capable classes (example: Mage + Necromancer, or class set matching your server spell setup).
+3. Summon two distinct permanent pets.
+4. Confirm both pets are active before zoning.
+5. Zone to another zone and verify both pets are restored.
+6. Camp to character select and log back in; verify both pets restore again.
+**Expected**: All active permanent pets restore with HP/mana/buffs/items state, and pet command UI focuses correctly on an owned pet.
+**Status**: [ ] Pass  [ ] Fail
+**Comments**: __________________________________________________
+
 ---
 
 ## 2. Spells & Casting
@@ -447,6 +485,46 @@ If a temporary inventory resync message appears, source/destination slot states 
 3. `#addclass 1` (Warrior).
 4. Hit dummy.
 **Expected**: Max damage potential increases (Warrior table vs Cleric table).
+**Status**: [ ] Pass  [ ] Fail
+**Comments**: __________________________________________________
+
+### 3.8 Autoskills on Melee Auto-Attack
+
+**Goal**: Verify enabled autoskills trigger from melee auto-attack.
+**Procedure**:
+
+1. Use a character with `Kick` access and skill trained.
+2. Enable autoskill (`#autoskill set 30 on` or equivalent command flow).
+3. Enable auto-attack on a valid NPC target and stay in melee range.
+4. Observe combat messages/log over multiple attack rounds.
+**Expected**: `Kick` triggers automatically at reuse intervals while melee auto-attack is active.
+**Status**: [ ] Pass  [ ] Fail
+**Comments**: __________________________________________________
+
+### 3.9 Autoskills During Autofire
+
+**Goal**: Verify autoskill loop runs while autofire is active (THJ parity behavior).
+**Procedure**:
+
+1. Equip bow + arrows and enable autofire on a valid target.
+2. Keep at least one autoskill enabled (`Kick` recommended for regression check).
+3. Observe server/client combat output during sustained autofire.
+**Expected**: Autoskill timer loop executes while autofire is active; no recovery-time spam from autoskill context.
+**Status**: [ ] Pass  [ ] Fail
+**Comments**: __________________________________________________
+
+### 3.10 Proc Parity (2H and Bow)
+
+**Goal**: Verify THJ-aligned proc behavior for two-handed weapons and bows.
+**Procedure**:
+
+1. Enable/verify `Custom:MultipleTwoHandedProcs = true`.
+2. Equip a 2H weapon with at least one augment proc and attack test targets for enough swings.
+3. Repeat with a bow setup that has ranged proc sources.
+4. Capture logs for proc trigger frequency/pattern.
+**Expected**:
+- Two-handed weapons can trigger multiple proc sources per eligible round (not blocked by one-proc short-circuit when rule allows).
+- Bow/ranged proc paths use ranged checks and respect configured proc rules.
 **Status**: [ ] Pass  [ ] Fail
 **Comments**: __________________________________________________
 

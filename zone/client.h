@@ -532,7 +532,19 @@ public:
 	inline EQ::InventoryProfile& GetInv() { return m_inv; }
 	inline const EQ::InventoryProfile& GetInv() const { return m_inv; }
 	const std::vector<int16>& GetInventorySlots();
-	inline PetInfo* GetPetInfo(int pet_info_type) { return pet_info_type == PetInfoType::Suspended ? &m_suspendedminion : &m_petinfo; }
+	inline std::vector<PetInfo>& GetPetsInfo() { return m_petinfomulti; }
+	inline const std::vector<PetInfo>& GetPetsInfo() const { return m_petinfomulti; }
+	inline PetInfo& GetSuspendedPetInfo() { return m_suspendedminion; }
+	inline void SetSuspendedPetInfo(const PetInfo& info) { m_suspendedminion = info; }
+	inline PetInfo* GetPetInfo(int pet_info_type)
+	{
+		if (pet_info_type == PetInfoType::Suspended) {
+			return &m_suspendedminion;
+		}
+
+		// Legacy accessor for single-pet callsites
+		return &m_petinfo;
+	}
 	inline InspectMessage_Struct& GetInspectMessage() { return m_inspect_message; }
 	inline const InspectMessage_Struct& GetInspectMessage() const { return m_inspect_message; }
 	void ReloadExpansionProfileSetting();
@@ -1861,6 +1873,13 @@ public:
 	void Consume(const EQ::ItemData *item, uint8 type, int16 slot, bool auto_consume);
 	void PlayMP3(const char* fname);
 	void ExpeditionSay(const char *str, int ExpID);
+	void SetWeaponAppearance();
+
+	enum AttackMode {
+		UNDEFINED, MELEE, RANGED
+	};
+	void SetAttackMode(Client::AttackMode mode);
+	const Client::AttackMode GetAttackMode();
 
 	inline int32 GetEnvironmentDamageModifier() const { return environment_damage_modifier; }
 	void SetEnvironmentDamageModifier(int32 val) { environment_damage_modifier = val; }
@@ -2035,7 +2054,7 @@ private:
 	void OPGMEndTraining(const EQApplicationPacket *app);
 	void OPGMTrainSkill(const EQApplicationPacket *app);
 	void OPGMSummon(const EQApplicationPacket *app);
-	void OPCombatAbility(const CombatAbility_Struct *ca_atk);
+	void OPCombatAbility(const CombatAbility_Struct *ca_atk, bool is_riposte = false);
 
 	// Bandolier Methods
 	void CreateBandolier(const EQApplicationPacket *app);
@@ -2109,6 +2128,7 @@ private:
 	bool m_is_manual_afk = false;
 	bool auto_attack;
 	bool auto_fire;
+	Client::AttackMode m_attack_mode = AttackMode::UNDEFINED;
 	bool runmode;
 	uint8 gmspeed;
 	bool gminvul;
@@ -2180,6 +2200,7 @@ private:
 	Object* m_tradeskill_object;
 	PetInfo m_petinfo; // current pet data, used while loading from and saving to DB
 	PetInfo m_suspendedminion; // pet data for our suspended minion.
+	std::vector<PetInfo> m_petinfomulti;
 	MercInfo m_mercinfo[MAXMERCS]; // current mercenary
 	InspectMessage_Struct m_inspect_message;
 	bool temp_pvp;

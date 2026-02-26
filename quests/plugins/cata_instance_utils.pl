@@ -8,7 +8,7 @@ sub OfferStandardInstance {
 	my $text = plugin::val('$text');
 	my $zonesn = plugin::val('$zonesn');
 	my $dz_version = 254;
-	my $non_respawning_duration = 14 * 60 * 60; # 14 Hours
+	my $non_respawning_duration = 24 * 60 * 60; # 24 Hours (once per day)
 	my $respawning_duration =  30 * 60; # 30 minutes
 	my $dz_lifetime = 7 * 24 * 60 * 60; # 7 Days
 	my ($expedition_name, $min_players, $max_players, $dz_zone, $x, $y, $z, $heading) = @_;
@@ -40,7 +40,7 @@ sub OfferStandardInstance {
 
 			if (plugin::IsTHJ()) {
 				plugin::YellowText("Notice: Instances will become more difficult for each player in your group beyond the second.");
-				plugin::YellowText("[$non_respawning_link] will not repopulate over time, and the most powerful enemies may be found within.");
+				plugin::YellowText("[$non_respawning_link] will not repopulate over time, and the most powerful enemies may be found within. This request has a 24 hour lockout.");
 				plugin::YellowText("[$respawning_link] will repopulate over time, but many rare enemies may not be found inside.");
 			} else {
 				plugin::YellowText("You can select from [$respawning_link] or [$non_respawning_link] versions.");

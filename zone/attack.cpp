@@ -111,6 +111,60 @@ static float CalcDexSkillMultiBonus(const Mob* mob, float divisor) {
 	return CalcDexMeleeBonus(mob, divisor, CombatBalance::DEX_MULTI_HIT_SKILL_MAX);
 }
 
+static float HeroicSTRScale(float str) {
+	int base_cap = RuleI(Custom, ScaleAutoAttackHStrSoftCap);
+	float scale_floor = RuleR(Custom, ScaleAutoAttackHStrScaleFloor);
+	float scale_factor = RuleR(Custom, ScaleAutoAttackHStrScaleFactor);
+	if (scale_factor <= 0.0f) {
+		return str / 100.0f;
+	}
+
+	int high_cap = static_cast<int>(base_cap + ((1.0f - scale_floor) / scale_factor));
+	if (str <= base_cap) {
+		return str / 100.0f;
+	}
+
+	float scaler_start = 1.0f;
+	int capped_str = std::min(high_cap, static_cast<int>(str));
+	int count = capped_str - base_cap;
+	float sum_scaler = count * scaler_start - scale_factor * (count * (count + 1)) / 2.0f;
+	float scaled_str = static_cast<float>(base_cap) + std::max(sum_scaler, 0.0f);
+	if (str > high_cap) {
+		scaled_str += (str - high_cap) * std::max(scaler_start - scale_factor * count, 0.0f);
+	}
+
+	return scaled_str / 100.0f;
+}
+
+static float HeroicDexScale(float dex) {
+	int base_cap = RuleI(Custom, ScaleBowHDexSoftCap);
+	float scale_floor = RuleR(Custom, ScaleBowHDexScaleFloor);
+	float scale_factor = RuleR(Custom, ScaleBowHDexScaleFactor);
+	float scale_divide = RuleR(Custom, ScaleBowByHDexDivide);
+	if (scale_divide <= 0.0f) {
+		scale_divide = 1.0f;
+	}
+	if (scale_factor <= 0.0f) {
+		return dex / 100.0f / scale_divide;
+	}
+
+	int high_cap = static_cast<int>(base_cap + ((1.0f - scale_floor) / scale_factor));
+	if (dex <= base_cap) {
+		return dex / 100.0f / scale_divide;
+	}
+
+	float scaler_start = 1.0f;
+	int capped_dex = std::min(high_cap, static_cast<int>(dex));
+	int count = capped_dex - base_cap;
+	float sum_scaler = count * scaler_start - scale_factor * (count * (count + 1)) / 2.0f;
+	float scaled_dex = static_cast<float>(base_cap) + std::max(sum_scaler, 0.0f);
+	if (dex > high_cap) {
+		scaled_dex += (dex - high_cap) * std::max(scaler_start - scale_factor * count, 0.0f);
+	}
+
+	return scaled_dex / 100.0f / scale_divide;
+}
+
 //SYNC WITH: tune.cpp, mob.h TuneAttackAnimation
 EQ::skills::SkillType Mob::AttackAnimation(int Hand, const EQ::ItemInstance* weapon, EQ::skills::SkillType skillinuse)
 {
@@ -1850,6 +1904,12 @@ bool Mob::Attack(Mob* other, int Hand, bool bRiposte, bool IsStrikethrough, bool
 		}
 	}
 
+	// THJ-style heroic STR scaling for auto attacks, kept off the new STR formula path.
+	if (my_hit.damage_done > 0 && !RuleB(Combat, UseNewStrDamageFormula) && RuleR(Custom, ScaleAutoAttackByHStr)) {
+		float bonus = HeroicSTRScale(GetHeroicSTR());
+		my_hit.damage_done += my_hit.damage_done * (RuleR(Custom, ScaleAutoAttackByHStr) * bonus);
+	}
+
 	///////////////////////////////////////////////////////////
 	////// Send Attack Damage
 	///////////////////////////////////////////////////////////
@@ -2346,10 +2406,17 @@ bool NPC::Attack(Mob* other, int Hand, bool bRiposte, bool IsStrikethrough, bool
 
 	//figure out what weapon they are using, if any
 	const EQ::ItemData *weapon = nullptr;
+	const EQ::ItemInstance *weapon_instance = nullptr;
 	if (Hand == EQ::invslot::slotPrimary && equipment[EQ::invslot::slotPrimary] > 0) {
 		weapon = database.GetItem(equipment[EQ::invslot::slotPrimary]);
+		weapon_instance = GetInv().GetItem(EQ::invslot::slotPrimary);
 	} else if (equipment[EQ::invslot::slotSecondary]) {
 		weapon = database.GetItem(equipment[EQ::invslot::slotSecondary]);
+		weapon_instance = GetInv().GetItem(EQ::invslot::slotSecondary);
+	}
+
+	if (weapon_instance) {
+		weapon = weapon_instance->GetItem();
 	}
 
 	//We dont factor much from the weapon into the attack.
@@ -2458,9 +2525,21 @@ bool NPC::Attack(Mob* other, int Hand, bool bRiposte, bool IsStrikethrough, bool
 		otherlevel = otherlevel ? otherlevel : 1;
 		mylevel = mylevel ? mylevel : 1;
 
-		my_hit.base_damage = GetBaseDamage() + eleBane;
+		my_hit.base_damage = GetBaseDamage();
 		my_hit.min_damage = GetMinDamage();
 		int32 hate = my_hit.base_damage + my_hit.min_damage;
+
+		// THJ parity: pet-owned NPC attacks use weapon instance normalization and weapon damage.
+		if (GetOwner() && weapon_instance) {
+			int weapon_item_damage = weapon_instance->GetItemWeaponDamage(true);
+			int weapon_delay = weapon_instance->GetItem()->Delay;
+
+			float normalized_max_damage = GetBaseDamage() * (static_cast<float>(weapon_delay) / (attack_delay / 100.0f));
+			float normalized_min_damage = GetMinDamage() * (static_cast<float>(weapon_delay) / (attack_delay / 100.0f));
+
+			my_hit.base_damage = normalized_max_damage + weapon_item_damage + eleBane;
+			my_hit.min_damage = normalized_min_damage + weapon_item_damage + eleBane;
+		}
 
 		int hit_chance_bonus = 0;
 
@@ -2513,10 +2592,10 @@ bool NPC::Attack(Mob* other, int Hand, bool bRiposte, bool IsStrikethrough, bool
 
 	bool has_hit = my_hit.damage_done > 0;
 	if (has_hit && !bRiposte && !other->HasDied()) {
-		TryWeaponProc(nullptr, weapon, other, Hand);
+		TryWeaponProc(weapon_instance, weapon, other, Hand);
 
 		if (!other->HasDied()) {
-			TrySpellProc(nullptr, weapon, other, Hand);
+			TrySpellProc(weapon_instance, weapon, other, Hand);
 		}
 
 		if (HasSkillProcSuccess() && !other->HasDied()) {
@@ -5393,8 +5472,9 @@ void Mob::TrySpellProc(const EQ::ItemInstance *inst, const EQ::ItemData *weapon,
 	}
 
 	int16 poison_slot=-1;
+	int procCount = 0;
 
-	for (uint32 i = 0; i < m_max_procs; i++) {
+	for (uint32 i = 0; i < MAX_PROCS; i++) {
 		if (IsPet() && hand != EQ::invslot::slotPrimary) //Pets can only proc spell procs from their primay hand (ie; beastlord pets)
 			continue; // If pets ever can proc from off hand, this will need to change
 
@@ -5433,6 +5513,11 @@ void Mob::TrySpellProc(const EQ::ItemInstance *inst, const EQ::ItemData *weapon,
 						ExecWeaponProc(nullptr, SpellProcs[i].spellID, on, SpellProcs[i].level_override);
 						SetProcLimitTimer(SpellProcs[i].base_spellID, SpellProcs[i].proc_reuse_time, ProcType::MELEE_PROC);
 						CheckNumHitsRemaining(NumHit::OffensiveSpellProcs, 0, SpellProcs[i].base_spellID);
+
+						procCount++;
+						if (procCount >= m_max_procs) {
+							break;
+						}
 					}
 					else {
 						LogCombat("Spell proc [{}] failed to proc [{}] ([{}] percent chance)", i, SpellProcs[i].spellID, chance);
@@ -5453,6 +5538,11 @@ void Mob::TrySpellProc(const EQ::ItemInstance *inst, const EQ::ItemData *weapon,
 						ExecWeaponProc(nullptr, RangedProcs[i].spellID, on);
 						CheckNumHitsRemaining(NumHit::OffensiveSpellProcs, 0, RangedProcs[i].base_spellID);
 						SetProcLimitTimer(RangedProcs[i].base_spellID, RangedProcs[i].proc_reuse_time, ProcType::RANGED_PROC);
+
+						procCount++;
+						if (procCount >= m_max_procs) {
+							break;
+						}
 					}
 					else {
 						LogCombat("Ranged proc [{}] failed to proc [{}] ([{}] percent chance)", i, RangedProcs[i].spellID, chance);
@@ -5463,7 +5553,7 @@ void Mob::TrySpellProc(const EQ::ItemInstance *inst, const EQ::ItemData *weapon,
 	}
 
 	//AA Melee and Ranged Procs
-	if (IsOfClientBot()) {
+	if (IsOfClientBot() && procCount < m_max_procs) {
 		for (int i = 0; i < MAX_AA_PROCS; i += 4) {
 
 			int32 aa_rank_id = 0;
@@ -5498,6 +5588,11 @@ void Mob::TrySpellProc(const EQ::ItemInstance *inst, const EQ::ItemData *weapon,
 						LogCombat("AA proc [{}] procing spell [{}] ([{}] percent chance)", aa_rank_id, aa_spell_id, chance);
 						ExecWeaponProc(nullptr, aa_spell_id, on);
 						SetProcLimitTimer(-aa_rank_id, aa_proc_reuse_timer, proc_type);
+
+						procCount++;
+						if (procCount >= m_max_procs) {
+							break;
+						}
 					}
 					else {
 						LogCombat("AA proc [{}] failed to proc [{}] ([{}] percent chance)", aa_rank_id, aa_spell_id, chance);
@@ -5594,8 +5689,11 @@ void Mob::TryPetCriticalHit(Mob *defender, DamageHitInfo &hit)
 	if (!owner)
 		return;
 
-	int CritPetChance =
-		owner->aabonuses.PetCriticalHit + owner->itembonuses.PetCriticalHit + owner->spellbonuses.PetCriticalHit;
+	int CritPetChance = owner->itembonuses.PetCriticalHit + owner->spellbonuses.PetCriticalHit;
+
+	if (RuleB(Custom, ApplyPetAAToSwarm)) {
+		CritPetChance += owner->aabonuses.PetCriticalHit;
+	}
 
 	if (CritPetChance || critChance)
 		// For pets use PetCriticalHit for base chance, pets do not innately critical with without it
@@ -5728,108 +5826,134 @@ void Mob::TryCriticalHit(Mob *defender, DamageHitInfo &hit, ExtraAttackOptions *
 
 	// 2: Try Melee Critical
 	// a lot of good info: http://giline.versus.jp/shiden/damage_e.htm, http://giline.versus.jp/shiden/su.htm
+	int crit_chance_percent = 0;
+	{
+		bool innate_crit = false;
+		int crit_chance = GetCriticalChanceBonus(hit.skill);
 
-	// We either require an innate crit chance or some SPA 169 to crit
-	bool innate_crit = false;
-	int crit_chance = GetCriticalChanceBonus(hit.skill);
-	if ((HasClass(Class::Warrior) || HasClass(Class::Berserker)) && GetLevel() >= 12) {
-		innate_crit = true;
-	} else if (HasClass(Class::Ranger) && GetLevel() >= 12 && hit.skill == EQ::skills::SkillArchery) {
-		innate_crit = true;
-	} else if (HasClass(Class::Rogue) && GetLevel() >= 12 && hit.skill == EQ::skills::SkillThrowing) {
-		innate_crit = true;
-	}
-
-	// we have a chance to crit!
-	if (innate_crit || crit_chance) {
-		int difficulty = 0;
-
-		if (hit.skill == EQ::skills::SkillArchery) {
-			difficulty = RuleI(Combat, ArcheryCritDifficulty);
-		} else if (hit.skill == EQ::skills::SkillThrowing) {
-			difficulty = RuleI(Combat, ThrowingCritDifficulty);
-		} else {
-			difficulty = RuleI(Combat, MeleeCritDifficulty);
+		if ((HasClass(Class::Warrior) || HasClass(Class::Berserker)) && GetLevel() >= 12) {
+			innate_crit = true;
+		}
+		else if (HasClass(Class::Ranger) && GetLevel() >= 12 && hit.skill == EQ::skills::SkillArchery) {
+			innate_crit = true;
+		}
+		else if (HasClass(Class::Rogue) && GetLevel() >= 12 && hit.skill == EQ::skills::SkillThrowing) {
+			innate_crit = true;
 		}
 
-		int roll = zone->random.Int(1, difficulty);
-		int dex_bonus = GetDEX();
+		if (innate_crit || crit_chance) {
+			int difficulty = 0;
 
-		if (dex_bonus > 255) {
-			dex_bonus = 255 + ((dex_bonus - 255) / 5);
-		}
-
-		dex_bonus += 45; // chances did not match live without a small boost
-
-						 // so if we have an innate crit we have a better chance, except for ber throwing
-		if (!innate_crit || (HasClass(Class::Berserker) && hit.skill == EQ::skills::SkillThrowing)) {
-			dex_bonus = dex_bonus * 3 / 5;
-		}
-
-		if (crit_chance) {
-			dex_bonus += dex_bonus * crit_chance / 100;
-		}
-
-		// check if we crited
-		if (roll < dex_bonus) {
-			// step 1: check for finishing blow
-			if (TryFinishingBlow(defender, hit.damage_done)) {
-				return;
+			if (hit.skill == EQ::skills::SkillArchery) {
+				difficulty = RuleI(Combat, ArcheryCritDifficulty);
+			}
+			else if (hit.skill == EQ::skills::SkillThrowing) {
+				difficulty = RuleI(Combat, ThrowingCritDifficulty);
+			}
+			else {
+				difficulty = RuleI(Combat, MeleeCritDifficulty);
 			}
 
-			// step 2: calculate damage
-			hit.damage_done = std::max(hit.damage_done, hit.base_damage) + 5;
-			int og_damage = hit.damage_done;
-			int crit_mod = 170 + GetCritDmgMod(hit.skill);
+			int dex_bonus = GetDEX();
+			if (dex_bonus > 255) {
+				dex_bonus = 255 + ((dex_bonus - 255) / 5);
+			}
+			dex_bonus += 45; // chances did not match live without a small boost
 
-			if (crit_mod < 100) {
-				crit_mod = 100;
+			// if we don't have innate crit chance we use the lower dex curve
+			if (!innate_crit) {
+				dex_bonus = dex_bonus * 3 / 5;
 			}
 
-			hit.damage_done = hit.damage_done * crit_mod / 100;
-			LogCombatDetail("Crit success roll [{}] dex chance [{}] og dmg [{}] crit_mod [{}] new dmg [{}]", roll, dex_bonus, og_damage, crit_mod, hit.damage_done);
+			if (crit_chance) {
+				dex_bonus += dex_bonus * crit_chance / 100;
+			}
 
-			// step 3: check deadly strike
-			if (HasClass(Class::Rogue) && hit.skill == EQ::skills::SkillThrowing) {
-				if (BehindMob(defender, GetX(), GetY())) {
-					int chance = GetLevel() * 12;
-					if (zone->random.Int(1, 1000) < chance) {
-						// step 3a: check assassinate
-						int assassinate_damage = TryAssassinate(defender, hit.skill); // I don't think this is right
-						if (assassinate_damage) {
-							hit.damage_done = assassinate_damage;
-							return;
-						}
-						hit.damage_done = hit.damage_done * 200 / 100;
+			if (dex_bonus > 0) {
+				if (dex_bonus > difficulty) {
+					crit_chance_percent = 100;
+				}
+				else {
+					int64 calc = static_cast<int64>(dex_bonus - 1) * 100;
+					crit_chance_percent = static_cast<int>(calc / difficulty);
 
-						entity_list.FilteredMessageCloseString(
-							this, /* Sender */
-							false, /* Skip Sender */
-							RuleI(Range, CriticalDamage),
-							Chat::MeleeCrit, /* Type: 301 */
-							FilterMeleeCrits, /* FilterType: 12 */
-							DEADLY_STRIKE, /* MessageFormat: %1 scores a Deadly Strike!(%2) */
-							0,
-							GetCleanName(), /* Message1 */
-							itoa(hit.damage_done + hit.min_damage) /* Message2 */
-						);
-						return;
+					int64 remainder = calc % difficulty;
+					if (remainder >= difficulty / 2) {
+						crit_chance_percent++;
 					}
 				}
 			}
+		}
+	}
 
-			// step 4: check crips
-			// this SPA was reused on live ...
-			bool berserk = spellbonuses.BerserkSPA || itembonuses.BerserkSPA || aabonuses.BerserkSPA;
-			if (!berserk) {
-				if (zone->random.Roll(GetCrippBlowChance())) {
-					berserk = true;
+	if (crit_chance_percent <= 0) {
+		return;
+	}
+
+	int roll = zone->random.Int(1, 100);
+
+	// Match THJ behavior for frenzy crit scaling by target HP
+	if (GetLevel() >= 51 && hit.skill == EQ::skills::SkillFrenzy) {
+		roll *= (defender->GetHPRatio() / 100);
+	}
+
+	if (roll > crit_chance_percent) {
+		return;
+	}
+
+	// step 1: check for finishing blow
+	if (TryFinishingBlow(defender, hit.damage_done)) {
+		return;
+	}
+
+	// step 2: calculate damage
+	hit.damage_done = std::max(hit.damage_done, hit.base_damage) + 5;
+	int og_damage = hit.damage_done;
+	int crit_mod = 170 + GetCritDmgMod(hit.skill);
+
+	if (crit_mod < 100) {
+		crit_mod = 100;
+	}
+
+	hit.damage_done = hit.damage_done * crit_mod / 100;
+	LogCombatDetail("Crit success roll [{}] crit chance [{}] og dmg [{}] crit_mod [{}] new dmg [{}]", roll, crit_chance_percent, og_damage, crit_mod, hit.damage_done);
+
+	// THJ-style Devastating Frenzy scaling on legacy crit path.
+	if (RuleR(Custom, DevastatingFrenzyDamageMultiplier) > 0 &&
+		HasClass(Class::Berserker) &&
+		GetLevel() >= 50 &&
+		hit.skill == EQ::skills::SkillFrenzy) {
+		int target_hp_ratio = defender->GetHPRatio();
+		uint64 scale = RuleR(Custom, DevastatingFrenzyDamageMultiplier) * ((100 - target_hp_ratio) / 20);
+
+		hit.damage_done = hit.damage_done + (hit.damage_done * scale);
+		hit.min_damage = hit.min_damage + (hit.min_damage + scale);
+
+		entity_list.FilteredMessageClose(
+			this,
+			false,
+			RuleI(Range, CriticalDamage),
+			Chat::MeleeCrit,
+			FilterMeleeCrits,
+			"%s lands a Cleaving Blow! (%i)",
+			GetCleanName(),
+			hit.damage_done + hit.min_damage
+		);
+		return;
+	}
+
+	// step 3: check deadly strike
+	if (HasClass(Class::Rogue) && hit.skill == EQ::skills::SkillThrowing) {
+		if (BehindMob(defender, GetX(), GetY())) {
+			int chance = GetLevel() * 12;
+			if (zone->random.Int(1, 1000) < chance) {
+				// step 3a: check assassinate
+				int assassinate_damage = TryAssassinate(defender, hit.skill); // I don't think this is right
+				if (assassinate_damage) {
+					hit.damage_done = assassinate_damage;
+					return;
 				}
-			}
-
-			if (IsBerserk() || berserk) {
-				hit.damage_done += og_damage * 119 / 100;
-				LogCombat("Crip damage [{}]", hit.damage_done);
+				hit.damage_done = hit.damage_done * 200 / 100;
 
 				entity_list.FilteredMessageCloseString(
 					this, /* Sender */
@@ -5837,43 +5961,70 @@ void Mob::TryCriticalHit(Mob *defender, DamageHitInfo &hit, ExtraAttackOptions *
 					RuleI(Range, CriticalDamage),
 					Chat::MeleeCrit, /* Type: 301 */
 					FilterMeleeCrits, /* FilterType: 12 */
-					CRIPPLING_BLOW, /* MessageFormat: %1 lands a Crippling Blow!(%2) */
+					DEADLY_STRIKE, /* MessageFormat: %1 scores a Deadly Strike!(%2) */
 					0,
 					GetCleanName(), /* Message1 */
 					itoa(hit.damage_done + hit.min_damage) /* Message2 */
 				);
-
-				// Crippling blows also have a chance to stun
-				// Kayen: Crippling Blow would cause a chance to interrupt for npcs < 55, with a
-				// staggers message.
-				if (defender->GetLevel() <= 55 && !defender->GetSpecialAbility(SpecialAbility::StunImmunity)) {
-					entity_list.MessageCloseString(
-						defender,
-						true,
-						RuleI(Range, Emote),
-						Chat::Emote,
-						STAGGERS,
-						GetName()
-					);
-					defender->Stun(RuleI(Combat, StunDuration));
-				}
 				return;
 			}
-
-			/* Normal Critical hit message */
-			entity_list.FilteredMessageCloseString(
-				this, /* Sender */
-				false, /* Skip Sender */
-				RuleI(Range, CriticalDamage),
-				Chat::MeleeCrit, /* Type: 301 */
-				FilterMeleeCrits, /* FilterType: 12 */
-				CRITICAL_HIT, /* MessageFormat: %1 scores a critical hit! (%2) */
-				0,
-				GetCleanName(), /* Message1 */
-				itoa(hit.damage_done + hit.min_damage) /* Message2 */
-			);
 		}
 	}
+
+	// step 4: check crips
+	// this SPA was reused on live ...
+	bool berserk = spellbonuses.BerserkSPA || itembonuses.BerserkSPA || aabonuses.BerserkSPA;
+	if (!berserk) {
+		if (zone->random.Roll(GetCrippBlowChance())) {
+			berserk = true;
+		}
+	}
+
+	if (IsBerserk() || berserk) {
+		hit.damage_done += og_damage * 119 / 100;
+		LogCombat("Crip damage [{}]", hit.damage_done);
+
+		entity_list.FilteredMessageCloseString(
+			this, /* Sender */
+			false, /* Skip Sender */
+			RuleI(Range, CriticalDamage),
+			Chat::MeleeCrit, /* Type: 301 */
+			FilterMeleeCrits, /* FilterType: 12 */
+			CRIPPLING_BLOW, /* MessageFormat: %1 lands a Crippling Blow!(%2) */
+			0,
+			GetCleanName(), /* Message1 */
+			itoa(hit.damage_done + hit.min_damage) /* Message2 */
+		);
+
+		// Crippling blows also have a chance to stun
+		// Kayen: Crippling Blow would cause a chance to interrupt for npcs < 55, with a
+		// staggers message.
+		if (defender->GetLevel() <= 55 && !defender->GetSpecialAbility(SpecialAbility::StunImmunity)) {
+			entity_list.MessageCloseString(
+				defender,
+				true,
+				RuleI(Range, Emote),
+				Chat::Emote,
+				STAGGERS,
+				GetName()
+			);
+			defender->Stun(RuleI(Combat, StunDuration));
+		}
+		return;
+	}
+
+	/* Normal Critical hit message */
+	entity_list.FilteredMessageCloseString(
+		this, /* Sender */
+		false, /* Skip Sender */
+		RuleI(Range, CriticalDamage),
+		Chat::MeleeCrit, /* Type: 301 */
+		FilterMeleeCrits, /* FilterType: 12 */
+		CRITICAL_HIT, /* MessageFormat: %1 scores a critical hit! (%2) */
+		0,
+		GetCleanName(), /* Message1 */
+		itoa(hit.damage_done + hit.min_damage) /* Message2 */
+	);
 }
 
 bool Mob::TryFinishingBlow(Mob *defender, int64 &damage)
@@ -6675,7 +6826,6 @@ void Mob::CommonOutgoingHitSuccess(Mob* defender, DamageHitInfo &hit, ExtraAttac
 
 	if (hit.skill == EQ::skills::SkillArchery) {
 		int bonus = aabonuses.ArcheryDamageModifier + itembonuses.ArcheryDamageModifier + spellbonuses.ArcheryDamageModifier;
-		hit.damage_done += hit.damage_done * bonus / 100;
 		int headshot = TryHeadShot(defender, hit.skill);
 		if (headshot > 0) {
 			hit.damage_done = headshot;
@@ -6689,6 +6839,30 @@ void Mob::CommonOutgoingHitSuccess(Mob* defender, DamageHitInfo &hit, ExtraAttac
 
 		//Scale Factor for Archery Damage Tuning
 		hit.damage_done *= RuleR(Combat, ArcheryBaseDamageBonus);
+
+		// THJ-style bow minimum clamp and heroic DEX scaling on the legacy dex path.
+		if (!RuleB(Combat, UseNewDexFormulas) && IsClient()) {
+			float min_divisor = RuleR(Custom, ScaleBowMinimumDamageDivisor);
+			float min_multiplier = RuleR(Custom, ScaleBowMinimumDamageMultiplier);
+			if (min_divisor > 0.0f && min_multiplier > 0.0f) {
+				int min = (
+					std::max(static_cast<int>(GetHeroicDEX() / min_divisor), 1) *
+					static_cast<int>(hit.base_damage / min_multiplier)
+				);
+				if (hit.damage_done < min) {
+					LogDebug("Archery hit clamped to [{}] from [{}]", min, hit.damage_done);
+					hit.damage_done = min;
+				}
+			}
+
+			if (hit.damage_done > 0 && RuleR(Custom, ScaleBowByHDex)) {
+				float bonus = HeroicDexScale(GetHeroicDEX());
+				hit.damage_done += hit.damage_done * (RuleR(Custom, ScaleBowByHDex) * bonus);
+			}
+			hit.damage_done = DoDamageCaps(hit.damage_done);
+		}
+
+		hit.damage_done += hit.damage_done * bonus / 100;
 	}
 
 	int extra_mincap = 0;
@@ -6734,7 +6908,7 @@ void Mob::CommonOutgoingHitSuccess(Mob* defender, DamageHitInfo &hit, ExtraAttac
 
 	// shielding mod2
 	if (defender->itembonuses.MeleeMitigation)
-		hit.min_damage -= hit.min_damage * defender->itembonuses.MeleeMitigation / 100;
+		hit.min_damage -= hit.min_damage * EQ::ClampUpper(defender->itembonuses.MeleeMitigation, RuleI(Character, ItemShieldingCap)) / 100;
 
 	ApplyMeleeDamageMods(hit.skill, hit.damage_done, defender, opts);
 	min_mod = std::max(min_mod, extra_mincap);
@@ -7091,6 +7265,7 @@ void NPC::SetAttackTimer()
 
 void Client::DoAttackRounds(Mob *target, int hand, bool IsFromSpell)
 {
+	target = GetMeleeImpliedTarget(target);
 	if (!target || (target && target->IsCorpse())) {
 		return;
 	}
@@ -7115,20 +7290,26 @@ void Client::DoAttackRounds(Mob *target, int hand, bool IsFromSpell)
 				if (HasTwoHanderEquipped()) {
 					auto extraattackchance = aabonuses.ExtraAttackChance[SBIndex::EXTRA_ATTACK_CHANCE] + spellbonuses.ExtraAttackChance[SBIndex::EXTRA_ATTACK_CHANCE] +
 											 itembonuses.ExtraAttackChance[SBIndex::EXTRA_ATTACK_CHANCE];
-					if (extraattackchance && zone->random.Roll(extraattackchance)) {
+					if (extraattackchance) {
 						auto extraattackamt = std::max({aabonuses.ExtraAttackChance[SBIndex::EXTRA_ATTACK_NUM_ATKS], spellbonuses.ExtraAttackChance[SBIndex::EXTRA_ATTACK_NUM_ATKS], itembonuses.ExtraAttackChance[SBIndex::EXTRA_ATTACK_NUM_ATKS] });
 						for (int i = 0; i < extraattackamt; i++) {
-							Attack(target, hand, false, false, IsFromSpell);
+							// Roll chance of extra hit per possible extra hit
+							if (zone->random.Roll(extraattackchance)) {
+								Attack(target, hand, false, false, IsFromSpell);
+							}
 						}
 					}
 				}
 				else {
 					auto extraattackchance_primary = aabonuses.ExtraAttackChancePrimary[SBIndex::EXTRA_ATTACK_CHANCE] + spellbonuses.ExtraAttackChancePrimary[SBIndex::EXTRA_ATTACK_CHANCE] +
 													 itembonuses.ExtraAttackChancePrimary[SBIndex::EXTRA_ATTACK_CHANCE];
-					if (extraattackchance_primary && zone->random.Roll(extraattackchance_primary)) {
+					if (extraattackchance_primary) {
 						auto extraattackamt_primary = std::max({aabonuses.ExtraAttackChancePrimary[SBIndex::EXTRA_ATTACK_NUM_ATKS], spellbonuses.ExtraAttackChancePrimary[SBIndex::EXTRA_ATTACK_NUM_ATKS], itembonuses.ExtraAttackChancePrimary[SBIndex::EXTRA_ATTACK_NUM_ATKS] });
 						for (int i = 0; i < extraattackamt_primary; i++) {
-							Attack(target, hand, false, false, IsFromSpell);
+							// Roll chance of extra hit per possible extra hit
+							if (zone->random.Roll(extraattackchance_primary)) {
+								Attack(target, hand, false, false, IsFromSpell);
+							}
 						}
 					}
 				}
@@ -7177,6 +7358,72 @@ void Client::DoAttackRounds(Mob *target, int hand, bool IsFromSpell)
 	}
 }
 
+Mob* Mob::GetMeleeImpliedTarget(Mob* original_target)
+{
+	if (!original_target) {
+		return original_target;
+	}
+
+	// Intended for player and player-pet attack routing.
+	if (!IsClient() && !IsPetOwnerClient()) {
+		return original_target;
+	}
+
+	if (!original_target->IsClient() && !original_target->IsPetOwnerClient()) {
+		return original_target;
+	}
+
+	Mob* candidate_target = nullptr;
+	if (original_target->GetTarget() && !original_target->GetTarget()->IsClient()) {
+		candidate_target = original_target->GetTarget();
+	}
+
+	if (!candidate_target) {
+		return original_target;
+	}
+
+	bool has_aggro = candidate_target->CheckAggro(this);
+	if (!has_aggro) {
+		Client* client = nullptr;
+		if (IsClient()) {
+			client = CastToClient();
+		}
+		else if (GetOwner() && IsPetOwnerClient()) {
+			client = GetOwner()->CastToClient();
+		}
+
+		if (client) {
+			if (client->IsGrouped()) {
+				Group* group = entity_list.GetGroupByClient(client);
+				if (group) {
+					for (const auto& member : group->members) {
+						if (member && candidate_target->CheckAggro(member)) {
+							return candidate_target;
+						}
+					}
+				}
+			}
+
+			if (client->IsRaidGrouped()) {
+				Raid* raid = entity_list.GetRaidByClient(client);
+				if (raid) {
+					for (const auto& member : raid->members) {
+						if (member.member && candidate_target->CheckAggro(member.member)) {
+							return candidate_target;
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if (has_aggro) {
+		return candidate_target;
+	}
+
+	return original_target;
+}
+
 bool Mob::CheckDualWield()
 {
 	// Pets /might/ follow a slightly different progression
@@ -7207,6 +7454,10 @@ bool Client::CheckDualWield()
 
 void Mob::DoMainHandAttackRounds(Mob *target, ExtraAttackOptions *opts, bool rampage)
 {
+	if (IsClient() || IsPetOwnerClient()) {
+		target = GetMeleeImpliedTarget(target);
+	}
+
 	if (!target) {
 		return;
 	}
@@ -7271,6 +7522,10 @@ void Mob::DoMainHandAttackRounds(Mob *target, ExtraAttackOptions *opts, bool ram
 
 void Mob::DoOffHandAttackRounds(Mob *target, ExtraAttackOptions *opts, bool rampage)
 {
+	if (IsClient() || IsPetOwnerClient()) {
+		target = GetMeleeImpliedTarget(target);
+	}
+
 	if (!target) {
 		return;
 	}

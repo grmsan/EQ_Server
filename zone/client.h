@@ -1197,6 +1197,14 @@ public:
 	void DropItem(int16 slot_id, bool recurse = true);
 	bool HasItemOnCorpse(uint32 item_id);
 
+	bool IsPetBagActive();
+	bool IsValidPetBagForClass(int bag_id, int class_id);
+	bool IsValidPetBag(int bag_id);
+	EQ::ItemInstance* GetActivePetBag(int class_id);
+	int16 GetActivePetBagSlot(int class_id);
+	void DoPetBagResync(int class_id);
+	void DoPetBagFlush(Mob* pet);
+
 	bool IsAugmentRestricted(uint8 item_type, uint32 augment_restriction);
 
 	int GetItemLinkHash(const EQ::ItemInstance* inst); // move to ItemData..or make use of the pre-calculated database field

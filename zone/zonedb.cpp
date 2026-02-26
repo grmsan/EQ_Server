@@ -1668,6 +1668,15 @@ const NPCType *ZoneDatabase::LoadNPCTypesData(uint32 npc_type_id, bool bulk_load
 	}
 
 	std::string filter = fmt::format("id = {}", npc_type_id);
+	auto version = zone->GetInstanceVersion();
+
+	if (RuleI(Custom, StaticInstanceVersion) == version) {
+		version = RuleI(Custom, StaticInstanceTemplateVersion);
+	}
+
+	if (RuleI(Custom, FarmingInstanceVersion) == version) {
+		version = RuleI(Custom, FarmingInstanceTemplateVersion);
+	}
 
 	if (bulk_load) {
 		LogDebug("Performing bulk NPC Types load");
@@ -1681,7 +1690,7 @@ const NPCType *ZoneDatabase::LoadNPCTypesData(uint32 npc_type_id, bool bulk_load
 				)
 			),
 			zone->GetShortName(),
-			zone->GetInstanceVersion()
+			version
 		);
 	}
 

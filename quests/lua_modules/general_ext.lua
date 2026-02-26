@@ -254,3 +254,44 @@ function eq.SecondsToClockDays(seconds)
 
 	return string.format("%d days, %d hours, %d minutes, %d seconds.",days,hours,minutes,seconds)
 end
+
+-- THJ quest compatibility aliases for legacy helper names.
+function eq.del_global(name)
+	return eq.delete_global(name)
+end
+
+function eq.depop_withtimer(npc_type)
+	if npc_type ~= nil then
+		return eq.depop_with_timer(npc_type)
+	end
+
+	return eq.depop_with_timer()
+end
+
+function eq.get_globals(...)
+	return eq.get_qglobals(...)
+end
+
+function eq.start_timer(...)
+	return eq.set_timer(...)
+end
+
+function eq.RandomNumber(a, b)
+	if type(a) == "table" then
+		if #a == 0 then
+			return nil
+		end
+
+		return a[math.random(#a)]
+	end
+
+	if b ~= nil then
+		return math.random(a, b)
+	end
+
+	if a ~= nil then
+		return math.random(a)
+	end
+
+	return math.random()
+end

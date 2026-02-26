@@ -4168,6 +4168,21 @@ void NPC::DoNpcToNpcAggroScan()
 	);
 }
 
+int NPC::GetPetOriginClass()
+{
+	if (!GetPetSpellID()) {
+		return Class::None;
+	}
+
+	for (int class_id = Class::Warrior; class_id <= Class::Berserker; class_id++) {
+		if (GetSpellLevel(GetPetSpellID(), class_id) < UINT8_MAX) {
+			return class_id;
+		}
+	}
+
+	return Class::None;
+}
+
 bool NPC::FacesTarget()
 {
 	const std::string& excluded_races_rule = RuleS(NPC, ExcludedFaceTargetRaces);

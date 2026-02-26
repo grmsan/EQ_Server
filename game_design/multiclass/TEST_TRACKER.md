@@ -1,670 +1,627 @@
-# Multiclass Test Tracker & Test Plan
+# Multiclass Test Tracker
 
 **Status**: Active Testing
-**Date**: 2026-02-21
-**Technical Docs**: [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
+**Last Updated**: 2026-02-26
+**Technical Plan**: [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
 
-## Recent Implementation Updates
+## Purpose
 
-- **2026-02-24**: THJ combat/pet parity port (autoskills, multi-pet runtime, multi-pet persistence, proc parity alignment).
-  - Combat ability/autoskill flow updated to THJ-style call path:
-    - `Client::DoClassAttacks` now routes through `OPCombatAbility(...)` with autoskill/riposte-aware timer behavior.
-    - `OPCombatAbility` now suppresses recovery spam for autoskill-triggered calls and supports ranged double/triple checks via `DoubleAttackSkillRanged`.
-  - Attack mode support added (`MELEE` / `RANGED`) and wired into auto-attack + autofire processing.
-  - Multi-pet runtime behavior expanded:
-    - `GetAllPets()`, `GetAllSwarmPets()`, focused pet handling, and active pet command routing.
-    - Pet command window refresh now follows THJ-style focused pet sync (`ConfigurePetWindow`).
-  - Spell/charm/summon flow updated for THJ-style multi-pet control:
-    - Charm now adds to pet list (`AddPet`) when allowed.
-    - Pet summon/charm checks now honor `Custom:AbsolutePetLimit` and `IsPetAllowed(...)`.
-    - `PassCharmTargetRestriction` updated for multi-pet ownership/cap behavior.
-  - Group/raid pet spell propagation updated to iterate all owned pets (non-charmed).
-  - Proc/stacking related parity hooks enabled:
-    - `Custom:ProcReflectPercentage` used for proc reflection path.
-    - `Custom:BypassMulticlassStackConflict` used in spell stack-conflict logic.
-    - `Custom:MultipleTwoHandedProcs` and `Custom:DoubleAttackSkillRanged` aligned with THJ behavior paths.
-  - Multi-pet persistence completed:
-    - Save/load now persists all active permanent pets plus suspended minion.
-    - Legacy suspended slot compatibility added.
-    - SQL migration added and executed locally:
-      - `utils/sql/custom/2026_02_24_multipet_suspended_slot_migration.sql`
+This tracker is structured for fast in-game verification.
 
-- **2026-02-21**: THJ parity follow-up for profile class hydration.
-  - `zone/client_packet.cpp::CompleteConnect()` now seeds `m_pp.classes` directly from `GestaltClasses` and primes `m_classes_bits_cache` (THJ-style).
-  - `zone/client.cpp::GetClassesBits()` now prefers `m_pp.classes` when present before bucket fallback, matching THJ runtime behavior and reducing stale bucket-path reads.
-  - `zone/client_packet.cpp::CompleteConnect()` ordering updated so legacy bucket migration runs before `m_pp.classes` hydration.
-  - DLL fallback hardened: if runtime multiclass mask is still missing, cached char-select multiclass mask (from Deity override) is now used as final fallback for `GetUsableClasses` routing.
+Use it in two modes:
 
-- **2026-02-21**: THJ parity follow-up for char-select multiclass payload shaping.
-  - `world/worlddb.cpp` now queries `GestaltClasses` without extra scope filters (THJ-style lookup behavior).
-  - Char-select class/deity fields are now set from multiclass bits during initial character entry construction (instead of RoF2-only post-pass deity patching).
-  - Start-zone lookup now uses the actual outgoing `cse->Deity` value, matching THJ’s multiclass char-select flow.
+1. `Smoke Run` (15-25 min): critical go/no-go checks.
+2. `Full Regression` (60-120 min): broader multiclass coverage.
 
-- **2026-02-21**: THJ parity alignment for multiclass client data path.
-  - Reverted `zone/client.cpp::SendEdgeStats()` class-key payload so multiclass mask is no longer sent via EdgeStat key `200` (THJ-style behavior).
-  - Updated DLL profile parsing in `extras/eq-core-dll-main/src/eqgame.cpp` to resolve multiclass mask from `OP_PlayerProfile` using THJ-compatible offsets (`19564` primary, `19568` fallback).
-  - Added diagnostics:
-    - `[PLAYER_PROFILE_MASK] ...`
-    - `[PLAYER_PROFILE_MASK_WARN] ...`
-  - `GetUsableClasses` now uses an effective mask (`EdgeStat mask` OR `profile classes mask`) so equip gating works with profile-only multiclass delivery.
+## How To Use
 
-- **2026-02-21**: DLL warning-noise cleanup in `extras/eq-core-dll-main/src/MQ2DataTypes.h`.
-  - Replaced legacy `static enum ...` class declarations with `enum ...` to address repeated MSVC warning `C4091`.
-  - Goal: reduce high-volume compile warning noise so multiclass/debug warnings are easier to spot.
+1. Run tests in ID order.
+2. Mark each test `Pass` or `Fail`.
+3. Add one-line notes with evidence (chat line, behavior, log file).
 
-- **2026-02-21**: DLL debug logging path hardening in `extras/eq-core-dll-main/src/eqgame.cpp`.
-  - `LogDebug` / `LogRawDebug` now mirror writes to both local `dinput8_debug.log` and repo log `logs/dinput8_debug.log`.
-  - Added startup breadcrumb line with multiclass option states to confirm active DLL and loaded toggles at launch.
+## Global Commands
 
-- **2026-02-21**: DLL multiclass equip gating fix in `extras/eq-core-dll-main/src/eqgame.cpp`.
-  - `EQCharacter_GetUsableClasses_Detour` changed from RVA whitelist mode to mask-first mode.
-  - Behavior now returns server multiclass class mask by default for usability/equip checks, with a tiny native-only denylist for display-only context.
-  - Goal: prevent missed equip callsites (RVA drift) that caused client error `"your class isn't right"` for valid multiclass equipment.
-  - Added debug toggle `isMulticlassUsableClassesVerboseLoggingEnabled` (`_options.h`) to dump every `GetUsableClasses` decision to `dinput8_debug.log`.
-  - Added one-time warning log when multiclass override is enabled but server mask is still `0`.
-
-- **2026-02-21**: DLL usable-classes verbose logging noise reduction in `extras/eq-core-dll-main/src/eqgame.cpp`.
-  - `GetUsableClasses` verbose logging now deduplicates identical consecutive decisions and emits a compact `suppressed=<N> repeats` summary.
-  - Added `ctx=<name>` context tag to logs for known RVAs (`equip_validation`, `item_use_check`, `tooltip_classes`, etc.).
-  - Goal: keep `dinput8_debug.log` readable while preserving callsite/debug context.
-
-- **2026-02-21**: DLL usable-classes routing refinement for client equip deny behavior.
-  - `GetUsableClasses` override now applies when native class bits overlap owned multiclass bits (instead of strict base-class-only matching).
-  - Non-overlapping class masks (including non-owned classes like ENC-only) remain native to prevent false client-side allows and inventory desync.
-  - Added log fields: `base_mask` and `apply_multi` to confirm routing decisions during equip checks.
-
-- **2026-02-21**: Ranger archery close-range server check adjustment in `zone/special_attacks.cpp`.
-  - In `Client::RangedAttack`, ranger-class characters now use `0` minimum ranged distance for bow attacks on the server-side validation path.
-  - Goal: allow ranger autofire/bow usage at point-blank range without server-side `RANGED_TOO_CLOSE` rejection.
-
-- **2026-02-21**: THJ-style implied spell targeting port in `zone/spells.cpp` / `zone/mob.h`.
-  - Added `Mob::GetSpellImpliedTargetID(spell_id, target_id)` and invoked it at cast start in `Mob::CastSpell`.
-  - Beneficial spells now smart-reroute to a valid friendly target (`target`, then `target's target`, then self fallback).
-  - Detrimental spells remain hostile-target oriented and may fall through to `target's target` or pet target when appropriate.
-  - Guardrails retained for special spell categories (charm, corpse, PB-AE, cancel magic, alliance/lull, self-target).
-
-- **2026-02-21**: `eqemu_config.json` world TCP port changed `9000 -> 9100`.
-  - Reason: recurring local conflict with VS Code/Jupyter Python kernel binding `127.0.0.1:9000`, causing immediate world startup failure (`World port already in use`).
-  - Action: restart world stack so all services reconnect to world on `9100`.
-
-- **2026-02-21**: `server_manager.py` main UX layout pass (operations rail + live workspace).
-  - Main tab split into a left operations rail (`Build & Deploy`, `Server Actions`, `Client Sync`, `Client Asset Status`) and right live workspace.
-  - Process table replaced with compact service cards (3-column grid) with clear status tinting (`Running`, `External`, `Stopped`).
-  - Per-process arguments/console remain hidden behind `Options`, with in-card hint text showing effective runtime settings.
-  - Runtime log viewer now includes quick-focus buttons: `Active Zone Log`, `Active World Log`, `Most Recent Log`.
-  - Added process summary strip (`Running X/Y | External Z`) for faster state scanning.
-
-- **2026-02-21**: `zone/client_process.cpp` trainer handlers updated for multiclass parity.
-  - `OPGMTraining` now allows opening class trainer windows when the trainer's class is present in `GetClassesBits()` (`HasClass()`), not only base class.
-  - `OPGMEndTraining` now uses the same multiclass-aware class check.
-  - Trainer skill caps in `OPGMTraining` now use the trainer class in multiclass mode (THJ-style behavior), so the window reflects that guild trainer's skill domain.
-
-This document contains detailed step-by-step procedures for every verification point of the Multiclass system.
-
-**Instructions**:
-
-1. Execute the **Procedure** steps in-game.
-2. Mark **[x] Pass** or **[x] Fail**.
-3. Add notes in the **Comments** section if issues arise.
-
----
-
-## 🛠️ Global Testing Commands
-
-- `#addclass <id>` : Add a class (Ids: 1=WAR, 2=CLR, 3=PAL, 4=RNG, 5=SHD, 6=DRU, 7=MNK, 8=BRD, 9=ROG, 10=SHM, 11=NEC, 12=WIZ, 13=MAG, 14=ENC, 15=BST, 16=BER)
+- `#addclass <id>`: Add class (`1=WAR, 2=CLR, 3=PAL, 4=RNG, 5=SHD, 6=DRU, 7=MNK, 8=BRD, 9=ROG, 10=SHM, 11=NEC, 12=WIZ, 13=MAG, 14=ENC, 15=BST, 16=BER`)
 - `#removeclass <id>`
 - `#addclass list`
-- `#level 60` (Recommended for most tests)
+- `#level <n>`
 - `#setskill <id> <value>`
+- `#autoskill list`
+
+## Run Packs
+
+### Smoke Run
+
+Run these first: `C-01, C-02, C-03, I-01, I-02, S-02, P-01, P-02, P-03, P-04, P-11, Z-01, Z-02`
+
+### Full Regression
+
+Run all tests in this document.
 
 ---
 
-## 0. Tooling UX Smoke Test (Server Manager)
+## Session Header
 
-### 0.1 Main Layout Scan
-
-**Goal**: Confirm main tab is visually consolidated and workflow-oriented.
-**Procedure**:
-
-1. Open `server_manager.py` UI.
-2. Go to `Server Control` tab.
-3. Verify the left rail shows grouped cards (`Build & Deploy`, `Server Actions`, `Client Sync`, `Client Asset Status`).
-4. Verify the right side shows `Live Server Workspace`, `Service Grid`, and logs area.
-**Status**: [ ] Pass  [ ] Fail
-**Comments**: __________________________________________________
-
-### 0.2 Process Card Behavior
-
-**Goal**: Confirm process cards reflect state and keep advanced fields hidden by default.
-**Procedure**:
-
-1. Start `world` and `eqlaunch` from the service cards.
-2. Confirm each card changes to running style and Start button disables.
-3. Click `Options` for `eqlaunch`, set custom args, close dialog.
-4. Confirm card hint text updates without exposing full argument fields in the main view.
-**Status**: [ ] Pass  [ ] Fail
-**Comments**: __________________________________________________
-
-### 0.3 Runtime Log Focus
-
-**Goal**: Confirm quick log focus actions work for active debugging.
-**Procedure**:
-
-1. Open `Runtime Log Viewer`.
-2. Click `Active Zone Log` and confirm source updates to a `zone*.log`.
-3. Click `Active World Log` and confirm source updates to a `world*.log`.
-4. Click `Most Recent Log` and confirm source follows latest touched log file.
-**Status**: [ ] Pass  [ ] Fail
-**Comments**: __________________________________________________
-
-### 0.4 DLL Equip Gate (Multiclass)
-
-**Goal**: Confirm client allows equip when item class mask matches any owned multiclass class.
-**Procedure**:
-
-1. Base class Ranger; add Warrior and Mage (`#addclass 1`, `#addclass 13`).
-2. Ensure class list shows Ranger/Warrior/Mage via your class listing command.
-3. Try to equip a Warrior-only item.
-4. Try to equip a Mage-only item.
-**Expected**: Client permits equip attempts for both items (no client-side `"your class isn't right"` block).  
-Server remains final authority for any unrelated equip rules.
-**Status**: [ ] Pass  [ ] Fail
-**Comments**: __________________________________________________
-
-### 0.5 DLL Equip Gate Negative Case
-
-**Goal**: Confirm client still blocks non-owned classes while multiclass allows owned classes.
-**Procedure**:
-
-1. Base class Ranger; add Warrior and Mage (`#addclass 1`, `#addclass 13`).
-2. Attempt to equip an Enchanter-only item.
-3. Watch chat output and inventory slot behavior.
-**Expected**: Client/server denies equip for Enchanter-only item.  
-If a temporary inventory resync message appears, source/destination slot states recover and item remains not equipped.
-**Status**: [ ] Pass  [ ] Fail
-**Comments**: __________________________________________________
-
-### 0.6 Ranger Autofire Point-Blank
-
-**Goal**: Confirm ranger bow/autofire works at close range without server-side min-distance rejection.
-**Procedure**:
-
-1. Use a character with Ranger class access (`HasClass(Ranger)`), equip bow + arrows.
-2. Stand directly next to a valid target (melee distance).
-3. Enable autofire and observe attack attempts.
-**Expected**: Bow/autofire shots execute at point-blank range; no `RANGED_TOO_CLOSE` server rejection for ranger.
-**Status**: [ ] Pass  [ ] Fail
-**Comments**: __________________________________________________
-
-### 0.7 Smart Spell Targeting (THJ-style)
-
-**Goal**: Confirm beneficial spells reroute intelligently when hostile target is selected.
-**Procedure**:
-
-1. Ensure `Spells:UseSpellImpliedTargeting` is enabled.
-2. Target an NPC that is actively targeting you.
-3. Cast a single-target beneficial spell (example: direct heal).
-4. Repeat with no valid target selected and cast the same beneficial spell.
-5. Cast a detrimental spell with the same NPC target to confirm hostile targeting still applies.
-**Expected**:
-- Beneficial cast lands on a valid friendly implied target (self in the common NPC-targeting-you case).
-- Beneficial cast without a valid target falls back to self.
-- Detrimental cast remains on appropriate hostile implied target path and does not reroute to self.
-**Status**: [ ] Pass  [ ] Fail
-**Comments**: __________________________________________________
+**Date**: __________
+**Tester**: __________
+**Build/Branch**: __________
+**Server Rules Snapshot**: `AbsolutePetLimit=__`, `EnablePetBags=__`, `MultipleTwoHandedProcs=__`, `DoubleAttackSkillRanged=__`, `ScaleBowByHDex=__`, `ScaleAutoAttackByHStr=__`, `DevastatingFrenzyDamageMultiplier=__`
+`StaticInstanceVersion=__`, `StaticInstanceTemplateVersion=__`, `FarmingInstanceVersion=__`, `FarmingInstanceTemplateVersion=__`
 
 ---
 
-## 1. Core Logic & Persistence
+## 0) Tooling UX (Optional)
 
-### 1.1 Add/Remove Class
+### [T-01] Server Manager Main Layout
 
-**Goal**: Ensure bitmask updates correctly on command.
-**Procedure**:
+**Goal**: Verify new layout is usable for live operation.
+**Steps**:
 
-1. Create a character or log in.
-2. Type `#addclass 1` (Warrior).
-3. Type `#addclass list` -> Verify "Warrior" is listed.
-4. Type `#removeclass 1`.
-5. Type `#addclass list` -> Verify "Warrior" is NOT listed.
+1. Open `server_manager.py`.
+2. Go to `Server Control`.
+3. Confirm left operations rail + right live workspace are visible.
+4. Confirm service cards and runtime log viewer are usable.
+**Expected**: Layout is coherent and actions are discoverable quickly.
 **Status**: [ ] Pass  [ ] Fail
-**Comments**: __________________________________________________
+**Notes**: ______________________________
 
-### 1.2 Persistence
+### [T-02] Runtime Log Focus Buttons
 
-**Goal**: Ensure class bits survive a session change.
-**Procedure**:
+**Goal**: Verify rapid log targeting.
+**Steps**:
 
-1. `#addclass 1` (Warrior) and `#addclass 2` (Cleric).
-2. Type `#camp` to return to character select.
-3. Log back in to the world.
-4. Type `#addclass list`.
-**Expected**: Both Warrior and Cleric are still listed.
+1. Open Runtime Log Viewer.
+2. Click `Active Zone Log`.
+3. Click `Active World Log`.
+4. Click `Most Recent Log`.
+**Expected**: Log source changes correctly each time.
 **Status**: [ ] Pass  [ ] Fail
-**Comments**: __________________________________________________
-
-### 1.3 Client Sync (Login)
-
-**Goal**: Ensure UI connects correctly on login.
-**Procedure**:
-
-1. Ensure your character has a mana-using class (e.g. `#addclass 12` Wizard).
-2. Camp and log in.
-3. Look at the Player Window.
-**Expected**: You should see a Mana Bar (blue bar) even if your base class is Warrior.
-**Status**: [ ] Pass  [ ] Fail
-**Comments**: __________________________________________________
-
-### 1.4 Hot-Reload
-
-**Goal**: Ensure UI updates immediately without zoning.
-**Procedure**:
-
-1. Start as a Pure Warrior (No Mana Bar).
-2. Type `#addclass 12` (Wizard).
-**Expected**: The Mana Bar should appear instantly on your screen.
-**Status**: [ ] Pass  [ ] Fail
-**Comments**: __________________________________________________
-
-### 1.5 Multi-Pet Persistence (Zone/Camp/Relog)
-
-**Goal**: Verify all permanent pets persist, not just one.
-**Procedure**:
-
-1. Set `Custom:AbsolutePetLimit` to at least `2`.
-2. Create a character with multiple pet-capable classes (example: Mage + Necromancer, or class set matching your server spell setup).
-3. Summon two distinct permanent pets.
-4. Confirm both pets are active before zoning.
-5. Zone to another zone and verify both pets are restored.
-6. Camp to character select and log back in; verify both pets restore again.
-**Expected**: All active permanent pets restore with HP/mana/buffs/items state, and pet command UI focuses correctly on an owned pet.
-**Status**: [ ] Pass  [ ] Fail
-**Comments**: __________________________________________________
+**Notes**: ______________________________
 
 ---
 
-## 2. Spells & Casting
+## 1) Core Multiclass & Persistence
 
-### 2.1 Hybrid Scribing
+### [C-01] Add/Remove Class Bits
 
-**Goal**: Scribe a spell not available to base class.
-**Procedure**:
+**Goal**: Verify class bitmask mutates correctly.
+**Steps**:
 
-1. Be a Warrior (Base).
-2. `#addclass 12` (Wizard). `#level 50`.
-3. `#scribe 12 10` (Scribe 'Frost Shock' or similar Level 12 spell to valid slot).
-   *Alternatively*: Give spell scroll `Item ID: 15212` (Frost Shock) and click to learn.
-**Expected**: System message "You have finished scribing...". Spell appears in book.
+1. `#addclass 1`
+2. `#addclass list`
+3. `#removeclass 1`
+4. `#addclass list`
+**Expected**: Warrior appears after add and disappears after remove.
 **Status**: [ ] Pass  [ ] Fail
-**Comments**: __________________________________________________
+**Notes**: ______________________________
 
-### 2.2 Hybrid Casting
+### [C-02] Session Persistence
 
-**Goal**: Cast a spell from a secondary class.
-**Procedure**:
+**Goal**: Verify multiclass data survives camp/relog.
+**Steps**:
 
-1. Memorize the spell from Test 2.1.
-2. Select a target (yourself works).
-3. Cast.
-**Expected**: Spell lands successfully, consumes mana, and applies effect.
+1. `#addclass 1` and `#addclass 2`
+2. `#camp`, then log back in
+3. `#addclass list`
+**Expected**: Warrior + Cleric still present.
 **Status**: [ ] Pass  [ ] Fail
-**Comments**: __________________________________________________
+**Notes**: ______________________________
 
-### 2.3 Bard Song Pulse (Persistence)
+### [C-03] Client Sync (Mana Bar)
 
-**Goal**: Verify Bard songs re-pulse (refresh) when they hit 0 ticks if still memorized.
-**Procedure**:
+**Goal**: Verify multiclass client state sync.
+**Steps**:
 
-1. Ensure you have the Bard class (`#addclass 8`).
-2. Meditate/Sit to recover mana/endurance.
-3. Memorize a beneficial song (e.g. Hymn of Restoration, lvl 6).
-4. Start singing the song targeting yourself.
-5. Wait for the duration to run out (hit 0 ticks).
-**Expected**: The song should **not fade**. Instead, it should refresh its duration back to full (3 ticks) automatically, simulating a continuous "pulse".
+1. Base Warrior.
+2. `#addclass 12`
+3. Check Player Window immediately and after relog.
+**Expected**: Mana bar is visible and behaves correctly.
 **Status**: [ ] Pass  [ ] Fail
-**Comments**: __________________________________________________
+**Notes**: ______________________________
 
-### 2.4 Infinite Buffs (Non-Bard)
+### [C-04] Smart Spell Targeting
 
-**Goal**: Verify beneficial buffs do not expire on multiclass characters.
-**Procedure**:
+**Goal**: Verify implied targeting behavior.
+**Steps**:
 
-1. Cast a standard beneficial buff on yourself (e.g. skin/symbol/spirit of wolf).
-2. Wait for ticks to count down.
-**Expected**: The duration counter should either stop decreasing or reset, effectively making the buff permanent until cancelled or dispelled.
+1. Ensure implied targeting rule is enabled.
+2. Target hostile NPC targeting you.
+3. Cast beneficial single-target spell.
+4. Cast detrimental spell on same setup.
+**Expected**: Beneficial reroutes to valid friendly implied target; detrimental remains hostile.
 **Status**: [ ] Pass  [ ] Fail
-**Comments**: __________________________________________________
-2. Target self or valid target.
-3. Cast the spell.
-**Expected**: Spell casts, consumes mana, and applies effect.
+**Notes**: ______________________________
+
+### [C-05] Smart Melee Implied Targeting
+
+**Goal**: Verify melee implied targeting redirects correctly for player/player-pet attacks.
+**Steps**:
+
+1. Target a group member (or their pet) who is actively targeting a hostile NPC.
+2. Enter melee range and attack.
+3. Repeat while the hostile has no aggro on you/group.
+**Expected**: Melee swings redirect to the hostile only when aggro checks pass; otherwise attacks remain on original target.
 **Status**: [ ] Pass  [ ] Fail
-**Comments**: __________________________________________________
-
-### 2.3 Bard Song Casting
-
-**Goal**: Verify access to Bard songs.
-**Procedure**:
-
-1. Base Class: Paladin.
-2. `#addclass 8` (Bard). `#level 50`.
-3. `#scribe 120` (Selo's Accelerando). Memorize it.
-4. Cast Selo's Accelerando.
-**Expected**: Cast completes, buff icon appears. Duration should be > 1 tick (scaled to Level 50).
-**Status**: [ ] Pass  [ ] Fail
-**Comments**: __________________________________________________
-
-### 2.4 Bard Song (Melee Checking)
-
-**Goal**: Verify songs do not stop melee combat (Cast-While-Moving logic).
-**Procedure**:
-
-1. Engage a combat dummy/target with Auto-Attack ON.
-2. Cast Selo's Accelerando (Bard Song).
-**Expected**: Auto-attack continues swinging *during* the cast bar. Combat does not stop.
-**Status**: [ ] Pass  [ ] Fail
-**Comments**: __________________________________________________
-
-### 2.5 Standard Casting (Melee Checking)
-
-**Goal**: Verify standard spells DO stop melee combat.
-**Procedure**:
-
-1. `#addclass 12` (Wizard). Memorize a nuke (e.g., `#scribe 12 10`).
-2. Engage target with Auto-Attack ON.
-3. Cast the Nuke.
-**Expected**: Auto-attack stops immediately when casting begins to prevent "Battle Mage" exploitation unless intended.
-**Status**: [ ] Pass  [ ] Fail
-**Comments**: __________________________________________________
-
-### 2.6 Group Targets
-
-**Goal**: Verify group checks recognize the caster.
-**Procedure**:
-
-1. Form a group with another player or bot.
-2. Cast a Group Buff for a secondary class (e.g. Cleric `Heroism`).
-**Expected**: Buff lands on you and group members.
-**Status**: [ ] Pass  [ ] Fail
-**Comments**: __________________________________________________
+**Notes**: ______________________________
 
 ---
 
-## 3. Combat & Skills
+## 2) Spells & Casting
 
-### 3.1 Skill Caps
+### [S-01] Hybrid Scribing
 
-**Goal**: Verify the "Best of" skill cap logic.
-**Procedure**:
+**Goal**: Verify secondary-class spells can be learned.
+**Steps**:
 
-1. Base Class: Wizard (Low 1H Blunt cap).
-2. `#addclass 1` (Warrior). `#level 60`.
-3. `#setskill 0 300` (1H Blunt).
-**Expected**: Skill sets to ~200+ (Warrior cap), not capped at Wizard limit (~100).
+1. Base Warrior, `#addclass 12`, `#level 50`
+2. Scribe a Wizard spell (`#scribe ...` or scroll)
+**Expected**: Spell is learned and visible in spellbook.
 **Status**: [ ] Pass  [ ] Fail
-**Comments**: __________________________________________________
+**Notes**: ______________________________
 
-### 3.2 Skill Training (Level 1)
+### [S-02] Hybrid Casting
 
-**Goal**: Verify low-level skill access.
-**Procedure**:
+**Goal**: Verify secondary-class casting works.
+**Steps**:
 
-1. Make Level 1 Ranger.
-2. `#addclass 1` (Warrior).
-3. Open Skills window or use `#setskill 30 1` (Kick).
-**Expected**: Success. (Ranger normally gets Kick at Lvl 5, Warrior at Lvl 1).
+1. Memorize secondary-class spell.
+2. Cast on valid target.
+**Expected**: Cast succeeds, mana spent, effect applies.
 **Status**: [ ] Pass  [ ] Fail
-**Comments**: __________________________________________________
+**Notes**: ______________________________
 
-### 3.3 Trainer Window
+### [S-03] Bard Song Pulse
 
-**Goal**: Verify GM Trainer access.
-**Procedure**:
+**Goal**: Verify bard song refresh behavior.
+**Steps**:
 
-1. Base Class: Warrior. `#addclass 12` (Wizard).
-2. Target a Wizard GM NPC.
-3. Right-click / hail.
-**Expected**: The Skill Trainer window opens. (Normally says "I am not your master").
+1. `#addclass 8`
+2. Start beneficial song.
+3. Observe duration at expiry.
+**Expected**: Song refreshes instead of fading when appropriate.
 **Status**: [ ] Pass  [ ] Fail
-**Comments**: __________________________________________________
+**Notes**: ______________________________
 
-### 3.3a Trainer End Session (Multiclass)
+### [S-04] Infinite Buff Behavior (Non-Bard)
 
-**Goal**: Verify training close flow is also multiclass-aware.
-**Procedure**:
+**Goal**: Verify expected persistent beneficial buff behavior.
+**Steps**:
 
-1. Base Class: Warrior. `#addclass 12` (Wizard).
-2. Open a Wizard GM trainer window.
-3. Click **Done** / close the training session.
-**Expected**: Session closes normally, trainer sends departure text, no denial due to base class mismatch.
+1. Cast normal beneficial buff on self.
+2. Observe duration over ticks.
+**Expected**: Behavior matches current intended ruleset (persistent/reset as configured).
 **Status**: [ ] Pass  [ ] Fail
-**Comments**: __________________________________________________
+**Notes**: ______________________________
 
-### 3.4 Discipline Learning
+### [S-05] Group Spell Targeting
 
-**Goal**: Verify Discipline tome consumption.
-**Procedure**:
+**Goal**: Verify group spell propagation for multiclass caster.
+**Steps**:
 
-1. Base Class: Ranger. `#addclass 1` (Warrior).
-2. Use `#summon 20683` (Tome of Stone Stance).
-3. Right-click Tome.
-**Expected**: "You have learned Stone Stance".
+1. Group with player/bot.
+2. Cast group buff from secondary class.
+**Expected**: Group spell lands correctly on valid members.
 **Status**: [ ] Pass  [ ] Fail
-**Comments**: __________________________________________________
-
-### 3.5 Discipline Usage
-
-**Goal**: Verify Combat Ability activation.
-**Procedure**:
-
-1. Open Combat Abilities window (Ctrl+C).
-2. Create button for "Stone Stance".
-3. Press button.
-**Expected**: "You assume the durability of stone." (Buff active).
-**Status**: [ ] Pass  [ ] Fail
-**Comments**: __________________________________________________
-
-### 3.6 Monk Specials (Flying Kick)
-
-**Goal**: Verify `DoClassAttacks` handles secondary Monk.
-**Procedure**:
-
-1. Base: Warrior. `#addclass 7` (Monk). `#level 60`.
-2. `#setskill 38 300` (Flying Kick). `#setskill 30 300` (Kick).
-3. Turn on Auto-Attack.
-**Expected**: Combat log shows "You try to flying kick..." messages, not "You try to kick...".
-**Status**: [ ] Pass  [ ] Fail
-**Comments**: __________________________________________________
-
-### 3.7 Damage Caps
-
-**Goal**: Verify melee damage limits.
-**Procedure**:
-
-1. Base: Cleric. `#level 20`.
-2. Hit a dummy. Note max damage.
-3. `#addclass 1` (Warrior).
-4. Hit dummy.
-**Expected**: Max damage potential increases (Warrior table vs Cleric table).
-**Status**: [ ] Pass  [ ] Fail
-**Comments**: __________________________________________________
-
-### 3.8 Autoskills on Melee Auto-Attack
-
-**Goal**: Verify enabled autoskills trigger from melee auto-attack.
-**Procedure**:
-
-1. Use a character with `Kick` access and skill trained.
-2. Enable autoskill (`#autoskill set 30 on` or equivalent command flow).
-3. Enable auto-attack on a valid NPC target and stay in melee range.
-4. Observe combat messages/log over multiple attack rounds.
-**Expected**: `Kick` triggers automatically at reuse intervals while melee auto-attack is active.
-**Status**: [ ] Pass  [ ] Fail
-**Comments**: __________________________________________________
-
-### 3.9 Autoskills During Autofire
-
-**Goal**: Verify autoskill loop runs while autofire is active (THJ parity behavior).
-**Procedure**:
-
-1. Equip bow + arrows and enable autofire on a valid target.
-2. Keep at least one autoskill enabled (`Kick` recommended for regression check).
-3. Observe server/client combat output during sustained autofire.
-**Expected**: Autoskill timer loop executes while autofire is active; no recovery-time spam from autoskill context.
-**Status**: [ ] Pass  [ ] Fail
-**Comments**: __________________________________________________
-
-### 3.10 Proc Parity (2H and Bow)
-
-**Goal**: Verify THJ-aligned proc behavior for two-handed weapons and bows.
-**Procedure**:
-
-1. Enable/verify `Custom:MultipleTwoHandedProcs = true`.
-2. Equip a 2H weapon with at least one augment proc and attack test targets for enough swings.
-3. Repeat with a bow setup that has ranged proc sources.
-4. Capture logs for proc trigger frequency/pattern.
-**Expected**:
-- Two-handed weapons can trigger multiple proc sources per eligible round (not blocked by one-proc short-circuit when rule allows).
-- Bow/ranged proc paths use ranged checks and respect configured proc rules.
-**Status**: [ ] Pass  [ ] Fail
-**Comments**: __________________________________________________
+**Notes**: ______________________________
 
 ---
 
-## 4. Items & Equipment
+## 3) Combat, Pets, Autoskills, Procs
 
-### 4.1 Equip Logic
+### [P-01] Autoskills from Melee Auto-Attack
 
-**Goal**: Verify "Classes: WIZ" item works on WAR/WIZ.
-**Procedure**:
+**Goal**: Verify autoskill trigger path in melee.
+**Steps**:
 
-1. Base: Warrior. `#addclass 12` (Wizard).
-2. `#summon 9444` (Gossamer Robe - WIZ only).
-3. Equip to Chest.
-**Expected**: Item equips successfully. Main view updates.
+1. Enable `Kick` autoskill (`#autoskill ...`).
+2. Enable auto-attack in melee range.
+3. Observe multiple rounds.
+**Expected**: Kick fires automatically at reuse intervals.
+**Status**: [X] Pass  [ ] Fail
+**Notes**: Good as of 2/24
+
+### [P-02] Autoskills While Autofire
+
+**Goal**: Verify autoskill loop while autofire is active.
+**Steps**:
+
+1. Equip bow/arrows and enable autofire.
+2. Keep autoskill enabled.
+3. Observe combat output.
+**Expected**: Autoskill loop continues during autofire; no recovery spam from autoskill context.
+**Status**: [X] Pass  [ ] Fail
+**Notes**: Good as of 2/24
+
+### [P-03] Multi-Pet Runtime Behavior
+
+**Goal**: Verify active/focused pet behavior with multiple pets.
+**Steps**:
+
+1. Set `AbsolutePetLimit >= 2`.
+2. Summon two permanent pets.
+3. Use pet commands and switch focus.
+**Expected**: Commands apply to focused/active pet correctly; pet window remains coherent.
 **Status**: [ ] Pass  [ ] Fail
-**Comments**: __________________________________________________
+**Notes**: ______________________________
 
-### 4.2 Race Logic
+### [P-04] Multi-Pet Persistence (Zone/Camp/Relog)
 
-**Goal**: Verify Race restrictions are STRICT data checks (NOT bypassed).
-**Procedure**:
+**Goal**: Verify full pet persistence for multiple pets.
+**Steps**:
 
-1. Race: Human. Class: Warrior.
-2. `#summon 4516` (Small Banded Helm - Small races only).
-3. Attempt to equip.
-**Expected**: Error message "Your race cannot wear this item."
+1. Summon 2+ permanent pets.
+2. Zone and verify restore.
+3. Camp/relog and verify restore.
+**Expected**: All permanent pets restore (HP/mana/buffs/items) within configured limits.
 **Status**: [ ] Pass  [ ] Fail
-**Comments**: __________________________________________________
+**Notes**: ______________________________
 
-### 4.3 Weapon Procs
+### [P-05] Proc Parity: 2H and Bow
 
-**Goal**: Verify class-restricted procs.
-**Procedure**:
+**Goal**: Verify THJ-aligned proc behavior.
+**Steps**:
 
-1. Base: Warrior. `#addclass 12` (Wizard).
-2. Summon a weapon with a Wizard-Specific proc (or custom item).
-3. Swing until proc.
-**Expected**: Proc fires successfully.
+1. Verify `MultipleTwoHandedProcs = true`.
+2. Test 2H weapon + proc aug rounds.
+3. Test bow/ranged proc rounds.
+**Expected**: 2H and bow proc behavior follows configured parity expectations.
 **Status**: [ ] Pass  [ ] Fail
-**Comments**: __________________________________________________
+**Notes**: ______________________________
 
-### 4.4 Right-Click Items
+### [P-06] Ranger Point-Blank Autofire
 
-**Goal**: Verify `CheckItemRaceClassDietyRestrictions`.
-**Procedure**:
+**Goal**: Verify close-range ranger autofire behavior.
+**Steps**:
 
-1. Base: Warrior. `#addclass 2` (Cleric).
-2. Summon Item with "Effect: ... (Must be Cleric)".
-3. Right click.
-**Expected**: Cast bar appears / Effect triggers.
+1. Ranger class available, bow equipped.
+2. Stand at melee distance.
+3. Enable autofire.
+**Expected**: No `RANGED_TOO_CLOSE` rejection for ranger path.
+**Status**: [X] Pass  [ ] Fail
+**Notes**: Good as of 2/24
+
+### [P-07] Bow Augment Self-Heal Proc (THJ Style)
+
+**Goal**: Verify bow-only heal proc augments trigger and heal self during ranged combat.
+**Setup**:
+
+1. Buy one of the new augs from `Gemcrafter_Tessu` (`NPC 52099`) or `Gemcrafter_Anuk` (`NPC 382051`) or `Gemcrafter_Lentos` (`NPC 394174`):
+2. `1152012000` (`Lesser Bowstone of Mending`) `Level 20`
+3. `1152012001` (`Bowstone of Mending`) `Level 40`
+4. `1152012002` (`Greater Bowstone of Mending`) `Level 60`
+5. `1152012003` (`Grand Bowstone of Mending`) `Level 80`
+**Steps**:
+
+1. Insert selected augment into bow.
+2. Enable autofire and fight a valid target for multiple rounds.
+3. Watch combat/chat output for heal proc messages.
+4. Repeat at a level below the augment gate to verify it does not proc early.
+**Expected**: Proc fires during ranged combat and heal lands on self; proc is blocked below its required level.
 **Status**: [ ] Pass  [ ] Fail
-**Comments**: __________________________________________________
+**Notes**: ______________________________
 
-### 4.5 Epic Quests
+### [P-08] Legacy Bow Scaling (hDEX + Minimum Clamp)
 
-**Goal**: Verify Quest turn-ins.
-**Procedure**:
+**Goal**: Verify THJ-style legacy bow scaling behavior when new dex formulas are disabled.
+**Setup**:
 
-1. Find a secondary class Epic Quest NPC.
-2. Hand in a required item.
-**Expected**: NPC accepts item (Quest text triggers), does not return it saying "I have no need for this".
+1. Confirm `Combat:UseNewDexFormulas = false`.
+2. Confirm `Custom:ScaleBowByHDex > 0`.
+3. Confirm `Custom:ScaleBowMinimumDamageDivisor > 0` and `Custom:ScaleBowMinimumDamageMultiplier > 0`.
+**Steps**:
+
+1. Use a bow with low base damage and engage a valid target with autofire.
+2. Record several hit values with low hDEX gear.
+3. Repeat with high hDEX gear.
+**Expected**: Higher hDEX produces higher ranged damage profile; floor clamping prevents unexpectedly low legacy-archery hits.
 **Status**: [ ] Pass  [ ] Fail
-**Comments**: __________________________________________________
+**Notes**: ______________________________
+
+### [P-09] Devastating Frenzy Legacy Scaling
+
+**Goal**: Verify THJ-style berserker frenzy scaling against lower target HP.
+**Setup**:
+
+1. Confirm `Combat:UseNewDexFormulas = false`.
+2. Confirm `Custom:DevastatingFrenzyDamageMultiplier > 0`.
+3. Test character has Berserker class and uses Frenzy.
+**Steps**:
+
+1. Hit a target near full HP with Frenzy and record crit/frenzy damage range.
+2. Lower target HP in ~20% bands and continue Frenzy attacks.
+3. Compare damage profile as target HP drops.
+**Expected**: Frenzy critical output scales upward as target HP decreases, with occasional large spike behavior matching THJ-style legacy scaling.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [P-10] Pet/NPC Weapon Instance Proc Parity
+
+**Goal**: Verify pet/NPC attacks evaluate weapon-instance proc paths (including aug-based procs).
+**Setup**:
+
+1. Use a pet or controlled NPC with an equipped weapon instance (not just raw item ID fallback).
+2. Ensure weapon/aug proc effects are valid for level and proc rules.
+**Steps**:
+
+1. Engage a target and let pet/NPC perform sustained melee rounds.
+2. Observe combat output for innate weapon procs and augment procs.
+3. Repeat with offhand if applicable.
+**Expected**: Proc checks include instance-backed weapon data, and expected weapon/aug procs can fire during pet/NPC attacks.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [P-11] Pet Bag Equip Sync (Per Pet Class)
+
+**Goal**: Verify THJ-style class pet bag equipment is applied to pets.
+**Setup**:
+
+1. Confirm `Custom:EnablePetBags = true`.
+2. Obtain class pet bag from merchant (`899980, 899981, 899983, 899984, 899985, 899986, 899987, 899988`).
+3. Put equippable pet items into the bag.
+**Steps**:
+
+1. Summon a matching class pet (or zone with one saved).
+2. Observe pet equipment/appearance and combat behavior.
+3. Move/replace an item inside the pet bag.
+4. Destroy or remove the pet bag and observe pet equipment update.
+**Expected**: Matching class pet mirrors bag contents; bag item edits resync live; destroying/removing bag flushes bag-applied pet equipment.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [P-12] Charmed Pet Inventory Restore After Pet Bag Sync
+
+**Goal**: Verify charm + pet bag flow does not permanently lose original charmed inventory.
+**Setup**:
+
+1. Confirm `Custom:EnablePetBags = true`.
+2. Have an active class pet bag for the relevant class.
+**Steps**:
+
+1. Charm an NPC that has visible equipment/loot.
+2. Confirm pet bag sync applies while charmed.
+3. Break charm (wait fade or force break).
+4. Inspect NPC inventory/appearance post-break.
+**Expected**: Charmed NPC inventory is restored after charm breaks (no permanent bag-sync overwrite).
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
 
 ---
 
-## 5. XP & Stats
+## 4) Skills, Trainers, Disciplines
 
-### 5.1 XP Bonus
+### [K-01] Skill Cap Uses Best Class
 
-**Goal**: Verify Hybrid XP modifiers.
-**Procedure**:
+**Goal**: Verify skill cap selection across owned classes.
+**Steps**:
 
-1. `#addclass 1` (Warrior - Bonus XP) or `#addclass 9` (Rogue - Bonus XP).
-2. Kill a specific mob ID. Note XP gain message (if descriptive) or debug output.
-3. `#removeclass 1`. Kill same mob.
-**Expected**: XP values differ based on class bonuses defined in `exp.cpp`.
+1. Base Wizard, add Warrior, level up.
+2. Raise a melee skill (ex: 1H Blunt).
+**Expected**: Skill cap follows best owned class, not base class only.
 **Status**: [ ] Pass  [ ] Fail
-**Comments**: __________________________________________________
+**Notes**: ______________________________
 
-### 5.2 Food Consumption
+### [K-02] Trainer Window Access
 
-**Goal**: Verify Monk hunger rate.
-**Procedure**:
+**Goal**: Verify multiclass-aware trainer access.
+**Steps**:
 
-1. `#addclass 7` (Monk).
-2. Wait for hunger ticks.
-**Expected**: Food consumes faster than standard classes.
+1. Base Warrior + add Wizard.
+2. Use Wizard trainer.
+3. End training session.
+**Expected**: Training opens and closes cleanly without base-class denial.
 **Status**: [ ] Pass  [ ] Fail
-**Comments**: __________________________________________________
+**Notes**: ______________________________
 
-### 5.3 Regen
+### [K-03] Discipline Learn + Use
 
-**Goal**: Verify HP Regen formulas.
-**Procedure**:
+**Goal**: Verify tome learning and activation.
+**Steps**:
 
-1. Be Iksar or Troll (optional).
-2. `#addclass 7` (Monk) or `#addclass 15` (Beastlord).
-3. Sit down.
-4. Observe HP tick size.
-**Expected**: Higher regen tick than standard Warrior/Cleric.
+1. Add class with target discipline support.
+2. Consume discipline tome.
+3. Activate discipline from combat ability window.
+**Expected**: Discipline learned and activates correctly.
 **Status**: [ ] Pass  [ ] Fail
-**Comments**: __________________________________________________
+**Notes**: ______________________________
+
+### [K-04] Monk Special Attack Selection
+
+**Goal**: Verify monk special path when monk is secondary.
+**Steps**:
+
+1. Base Warrior + add Monk.
+2. Train flying kick and kick.
+3. Auto-attack target.
+**Expected**: Monk special behavior appears, not fallback-only kick behavior.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
 
 ---
 
-## 6. AA System
+## 5) Items & Equip Rules
 
-### 6.1 Visibility
+### [I-01] Positive Equip Gate (Owned Secondary Class)
 
-**Goal**: Verify AA Tabs.
-**Procedure**:
+**Goal**: Verify class restriction allows owned secondary class.
+**Steps**:
 
-1. `#level 60`. `#addclass 2` (Cleric) `#addclass 12` (Wizard).
-2. Open AA Window (`V`).
-**Expected**: You see tabs/AAs for both Cleric (e.g., MGB) and Wizard (e.g., Manaburn).
+1. Base Warrior + add Wizard.
+2. Equip Wizard-only item.
+**Expected**: Item can be equipped if other restrictions pass.
 **Status**: [ ] Pass  [ ] Fail
-**Comments**: __________________________________________________
+**Notes**: ______________________________
 
-### 6.2 Purchase & Activation
+### [I-02] Negative Equip Gate (Non-Owned Class)
 
-**Goal**: Buy and use a secondary AA.
-**Procedure**:
+**Goal**: Verify class restriction blocks non-owned class.
+**Steps**:
 
-1. Grant AA points (`#setaa 100`).
-2. Buy a secondary class active AA (e.g. Exodus for Wizard on a Warrior).
-3. Make hotkey. Use it.
-**Expected**: Ability activates.
+1. Base Ranger + add Warrior/Mage.
+2. Attempt Enchanter-only item.
+**Expected**: Equip denied; inventory state remains consistent.
 **Status**: [ ] Pass  [ ] Fail
-**Comments**: __________________________________________________
+**Notes**: ______________________________
 
-### 6.3 Passive Effects
+### [I-03] Race Restriction Still Enforced
 
-**Goal**: verify passive bonuses.
-**Procedure**:
+**Goal**: Verify multiclass does not bypass race checks.
+**Steps**:
 
-1. Buy "Innate Run Speed" (General) or a Class passive (e.g. Spell Casting Mastery).
-2. Verify effect (Run faster / Less mana cost).
-**Expected**: Passive persists.
+1. Attempt race-restricted item on invalid race.
+**Expected**: Denied due to race.
 **Status**: [ ] Pass  [ ] Fail
-**Comments**: __________________________________________________
+**Notes**: ______________________________
+
+### [I-04] Class-Locked Right-Click Item Effect
+
+**Goal**: Verify right-click effect honors multiclass ownership.
+**Steps**:
+
+1. Add matching secondary class.
+2. Use class-restricted clickable.
+**Expected**: Effect activates if class requirement is satisfied by owned class set.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [I-05] Class-Dependent Quest Turn-In
+
+**Goal**: Verify secondary-class epic/quest hand-ins.
+**Steps**:
+
+1. Attempt turn-in for secondary-class quest NPC.
+**Expected**: NPC accepts appropriate hand-ins based on multiclass ownership.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+---
+
+## 6) XP, Regen, AA
+
+### [X-01] XP Modifier Behavior
+
+**Goal**: Verify XP logic responds to owned classes as intended.
+**Steps**:
+
+1. Kill baseline mob.
+2. Add/remove target bonus class.
+3. Repeat kill comparison.
+**Expected**: XP pattern matches configured class modifier logic.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [X-02] Hunger/Food Tick Behavior
+
+**Goal**: Verify class-influenced consumption behavior.
+**Steps**:
+
+1. Add class with known hunger-rate differences.
+2. Observe over time.
+**Expected**: Consumption matches intended class logic.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [X-03] Regen Behavior
+
+**Goal**: Verify class/race regen calculations.
+**Steps**:
+
+1. Set test race/class mix.
+2. Sit and observe HP ticks.
+**Expected**: Regen follows intended formula outcomes.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [A-01] AA Visibility Across Owned Classes
+
+**Goal**: Verify AA window reflects multiclass ownership.
+**Steps**:
+
+1. Level and add two AA-rich classes.
+2. Open AA window.
+**Expected**: Relevant AA lines/tabs appear for owned classes.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [A-02] AA Purchase + Activate
+
+**Goal**: Verify active AA from secondary class works.
+**Steps**:
+
+1. Grant AA points.
+2. Buy secondary-class active AA.
+3. Activate AA.
+**Expected**: Purchase and activation succeed.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [A-03] Passive AA Effect
+
+**Goal**: Verify passive AA effects apply correctly.
+**Steps**:
+
+1. Buy passive AA.
+2. Validate effect in behavior/stats.
+**Expected**: Passive bonus is applied and persistent.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+---
+
+## 7) Custom Instances (THJ-Style)
+
+### [Z-01] Non-Respawning Instance Request + Daily Lockout
+
+**Goal**: Verify non-respawning expedition request is available and locked out for 24 hours after creation.
+**Steps**:
+
+1. Hail `Echo_of_the_Past` and choose `Non-Respawning`.
+2. Confirm expedition is created and can be entered.
+3. Attempt to request another non-respawning instance immediately.
+**Expected**: First request succeeds; second request is blocked by replay lockout until 24 hours have elapsed.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [Z-02] Non-Respawning Spawn Behavior
+
+**Goal**: Verify static instance kills do not naturally repop while instance is active.
+**Steps**:
+
+1. Enter a `Non-Respawning` instance and kill a normal mob.
+2. Wait longer than that mob's normal respawn window.
+3. Zone out/in and re-check the kill location.
+**Expected**: Killed mob does not return during normal respawn windows.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [Z-03] Farming Instance Raid Suppression
+
+**Goal**: Verify `Respawning` farming instance suppresses long-respawn/raid-style spawns.
+**Steps**:
+
+1. Enter a `Respawning` instance of a zone with known long-respawn raid targets.
+2. Verify trash/XP mobs spawn as expected.
+3. Verify known long-respawn raid target spawn points remain suppressed.
+**Expected**: XP/trash population exists; raid-style long-respawn bosses are not present.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [Z-04] Lua Helper Availability (`eq.is_static_instance`, `eq.is_farming_instance`)
+
+**Goal**: Verify THJ quest scripts can call custom instance helpers without runtime errors.
+**Steps**:
+
+1. Trigger a Lua quest script path that uses `eq.is_static_instance()` or `eq.is_farming_instance()`.
+2. Repeat in both non-respawning and respawning instances.
+**Expected**: No Lua nil-function errors; helper-based branch behavior matches instance type.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+---
+
+## Suggested Workflow
+
+If this still feels heavy, use this weekly cadence:
+
+1. Daily dev loop: run only `Smoke Run`.
+2. Pre-merge gate: run `Smoke Run` + all `P-*` tests.
+3. Release candidate: run full tracker once.

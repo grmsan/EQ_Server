@@ -1896,6 +1896,8 @@ SendServerStatsUpdate();
 					if ((m_ClientVersionBit & EQ::versions::maskUFAndLater) && !ingame) {
 						pet->SetTaunting(pet_info.taunting);
 					}
+
+					DoPetBagResync(pet->GetPetOriginClass());
 				}
 
 				pet_info.SpellID = 0;
@@ -3672,6 +3674,16 @@ void Client::Handle_OP_AugmentItem(const EQApplicationPacket *app)
 		safe_delete(item_two_to_push);
 	} else {
 		Object::HandleAugmentation(this, in_augment, m_tradeskill_object); // Delegate to tradeskill object to perform combine
+	}
+
+	if (RuleB(Custom, EnablePetBags)) {
+		for (int class_id = Class::Warrior; class_id <= Class::Berserker; class_id++) {
+			auto pet_bag_idx = GetActivePetBagSlot(class_id);
+			if (pet_bag_idx >= 0 && EQ::InventoryProfile::CalcSlotId(in_augment->container_slot) == pet_bag_idx) {
+				DoPetBagResync(class_id);
+				break;
+			}
+		}
 	}
 
 	return;

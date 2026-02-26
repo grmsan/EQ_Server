@@ -43,7 +43,23 @@
 
 #include "zone_store.h"
 #include "../common/content/world_content_service.h"
+#include "../common/rulesys.h"
 #include "stacktrace/backward.hpp"
+
+namespace {
+int RemapCustomInstanceVersion(int version)
+{
+	if (RuleI(Custom, StaticInstanceVersion) && version == RuleI(Custom, StaticInstanceVersion)) {
+		return RuleI(Custom, StaticInstanceTemplateVersion);
+	}
+
+	if (RuleI(Custom, FarmingInstanceVersion) && version == RuleI(Custom, FarmingInstanceVersion)) {
+		return RuleI(Custom, FarmingInstanceTemplateVersion);
+	}
+
+	return version;
+}
+}
 
 ZoneStore::ZoneStore() = default;
 ZoneStore::~ZoneStore() = default;
@@ -195,6 +211,8 @@ uint32 ZoneStore::GetZoneIDByLongName(const std::string& zone_long_name)
  */
 ZoneRepository::Zone *ZoneStore::GetZone(uint32 zone_id, int version)
 {
+	version = RemapCustomInstanceVersion(version);
+
 	for (auto &z: m_zones) {
 		if (z.zoneidnumber == zone_id && z.version == version) {
 			return &z;
@@ -242,6 +260,8 @@ const std::vector<ZoneRepository::Zone> &ZoneStore::GetZones() const
 // gets zone data by using explicit version and falling back to version 0 if not found
 ZoneRepository::Zone *ZoneStore::GetZoneWithFallback(uint32 zone_id, int version)
 {
+	version = RemapCustomInstanceVersion(version);
+
 	for (auto &z: m_zones) {
 		if (z.zoneidnumber == zone_id && z.version == version) {
 			return &z;

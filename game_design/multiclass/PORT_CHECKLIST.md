@@ -1,15 +1,15 @@
 # THJServer Multiclass Port Checklist
 
-**Last Updated:** 2026-02-21
+**Last Updated:** 2026-02-26
 **Master Technical Document:** [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
 **Test Tracker:** [TEST_TRACKER.md](TEST_TRACKER.md)
 
 **Inputs**
 - Reference report: `tools/output/multiclass_references.csv` (line hits from THJServer)
-- Upstream implementation: `extras/THJServer/`
+- Upstream implementation: `extras/thjserver/`
 
 **How to compare any file**
-- `git diff --no-index <relpath> extras/THJServer/<relpath>`
+- `git diff --no-index <relpath> extras/thjserver/<relpath>`
 
 ---
 
@@ -52,6 +52,59 @@ Files that control item class restrictions.
 - Referenced files: `112`
 - Parity with THJServer: `36` same, `66` differ, `10` THJ-only
 
+## Recent Port Activity (2026-02-26)
+
+- `zone/attack.cpp`:
+  - Ported THJ-style proc slot handling (`MAX_PROCS` scan + `procCount` cap).
+  - Ported THJ-style primary extra-attack roll behavior (per-hit roll instead of one-roll burst).
+  - Ported THJ-style legacy crit chance path while preserving `Combat:UseNewDexFormulas`.
+  - Ported THJ-style archery ordering (mastery applied after archery path).
+  - Added THJ-style bow minimum clamp + heroic DEX scaling on legacy dex path.
+  - Added THJ-style legacy berserker `DevastatingFrenzyDamageMultiplier`.
+  - Ported `GetMeleeImpliedTarget` helper and wired it into player/player-pet melee round paths.
+  - Ported THJ NPC/pet weapon-instance proc path in `NPC::Attack` (`weapon_instance` lookup + proc calls using instance pointer).
+  - Preserved existing custom/new-formula branches to avoid regressions.
+- `common/ruletypes.h`:
+  - Added THJ-aligned custom combat rules used by the new attack parity paths:
+    - `ScaleAutoAttackByHStr`, `ScaleAutoAttackHStrSoftCap`, `ScaleAutoAttackHStrScaleFloor`, `ScaleAutoAttackHStrScaleFactor`
+    - `ScaleBowByHDex`, `ScaleBowByHDexDivide`, `ScaleBowHDexSoftCap`, `ScaleBowHDexScaleFloor`, `ScaleBowHDexScaleFactor`
+    - `ScaleBowMinimumDamageMultiplier`, `ScaleBowMinimumDamageDivisor`
+    - `DevastatingFrenzyDamageMultiplier`
+  - Added `EnablePetBags` rule for THJ-style class pet bag equipment sync.
+- `zone/client.h` / `zone/client.cpp`:
+  - Ported THJ pet bag API and core behavior:
+    - `IsPetBagActive`, `IsValidPetBagForClass`, `IsValidPetBag`
+    - `GetActivePetBag`, `GetActivePetBagSlot`
+    - `DoPetBagResync`, `DoPetBagFlush`
+  - Added THJ class->bag ID mapping (including legacy fallback IDs).
+- `zone/npc.h` / `zone/npc.cpp`:
+  - Ported `NPC::GetPetOriginClass()` to route pet bag sync by originating class spell list.
+- `zone/pets.cpp`:
+  - Added pet bag resync hooks when pets are attached/set for a client (non-charm paths).
+- `zone/client_packet.cpp`:
+  - Added pet bag resync after zoned pet state restore.
+  - Added pet bag resync for augmentation actions performed inside the active pet bag.
+- `zone/inventory.cpp`:
+  - Added pet bag flush when a pet bag is destroyed from cursor.
+  - Added pet bag resync when moving/swapping an active pet bag.
+- `zone/spell_effects.cpp`:
+  - Added charm-path pet bag sync + initial charmed inventory serialization.
+  - Added charmed inventory restoration on charm break (for pets modified by bag sync).
+  - Added summon-pet path resync so newly summoned pets pick up bag equipment immediately.
+- `utils/sql/custom/2026_02_26_thj_pet_bags.sql`:
+  - Added DB migration that creates THJ pet bag item IDs and merchant entries for pet-capable classes.
+- THJ-style custom instance foundation port:
+  - `common/ruletypes.h`: added `StaticInstanceVersion`, `StaticInstanceTemplateVersion`, `FarmingInstanceVersion`, `FarmingInstanceTemplateVersion`.
+  - `common/zone_store.cpp`: remap static/farming instance versions to template versions for zone lookups/fallback.
+  - `zone/spawngroup.cpp`, `zone/trap.cpp`, `zone/zone.cpp`, `zone/zonedb.cpp`: remap static/farming versions to template versions for spawn groups, traps, zone points, and bulk NPC loads.
+  - `zone/spawn2.cpp`: ported THJ-style spawn behavior:
+    - static version disables practical respawn (`respawntime=604800000`, `variance=0`)
+    - farming version suppresses long-respawn spawns (`respawntime >= 7200`) to prevent raid-style spawns.
+  - `zone/lua_general.cpp`: added `eq.is_static_instance()` and `eq.is_farming_instance()` Lua helpers used by THJ quest scripts.
+  - `quests/plugins/cata_instance_utils.pl`: non-respawning instance lockout changed to 24 hours (once per day); lifetime remains 7 days.
+- Build status:
+  - `zone` target compiles clean after changes.
+
 ## Work Order (recommended)
 1. **Persistence + load path**
    - Ensure `GestaltClasses` is written on character creation and on class add/remove, and is loaded consistently by zone/world.
@@ -87,7 +140,7 @@ Legend:
 - [ ] `common/database/database_update_manifest.cpp` (refs: 38, parity: diff)
 - [x] `common/repositories/base/base_data_buckets_repository.h` (refs: 14, parity: same)
 - [ ] `common/database.cpp` (refs: 8, parity: diff)
-- [ ] `common/ruletypes.h` (refs: 5, parity: diff)
+- [ ] `common/ruletypes.h` (refs: 5, parity: partial - THJ combat custom rules ported 2026-02-26, broader rule parity still diff)
 - [x] `common/repositories/data_buckets_repository.h` (refs: 4, parity: same)
 - [ ] `common/guild_base.cpp` (refs: 3, parity: diff)
 - [ ] `common/shareddb.cpp` (refs: 3, parity: diff)
@@ -107,7 +160,7 @@ Legend:
 - [x] `zone/client_packet.cpp` (refs: 61, parity: implemented OP_PlayerProfile/OP_MemorizeSpell)
 - [ ] `zone/mob.cpp` (refs: 45, parity: diff)
 - [x] `zone/spell_effects.cpp` (refs: 39, parity: implemented Bard Pulse/Infinite Buffs)
-- [ ] `zone/attack.cpp` (refs: 34, parity: diff)
+- [ ] `zone/attack.cpp` (refs: 34, parity: partial - THJ proc/crit/archery/combat scaling parity pass ported 2026-02-26; smart-target helper + residual diffs remain)
 - [ ] `zone/aa.cpp` (refs: 27, parity: diff)
 - [x] `zone/spells.cpp` (refs: 27, parity: implemented dynamic AA timers)
 - [ ] `zone/client_mods.cpp` (refs: 26, parity: diff)

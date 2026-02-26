@@ -1068,6 +1068,23 @@ bool Mob::SpellEffect(Mob* caster, uint16 spell_id, float partial, int level_ove
 				} else if (IsNPC()) {
 					CastToNPC()->SetPetSpellID(spell_id);
 					CastToNPC()->ModifyStatsOnCharm(false, caster);
+
+					if (
+						GetOwner() &&
+						GetOwner()->IsClient() &&
+						GetOwner()->CastToClient()->GetActivePetBag(CastToNPC()->GetPetOriginClass())
+					) {
+						if (!EntityVariableExists("is_charmed")) {
+							auto inventory = CastToNPC()->GetLootList();
+							std::vector<std::string> inventory_strings;
+							for (int item_id : inventory) {
+								inventory_strings.push_back(std::to_string(item_id));
+							}
+							CastToNPC()->SetEntityVariable("is_charmed", Strings::Join(inventory_strings, ","));
+						}
+
+						GetOwner()->CastToClient()->DoPetBagResync(CastToNPC()->GetPetOriginClass());
+					}
 				}
 
 				bool bBreak = false;
@@ -1531,6 +1548,12 @@ bool Mob::SpellEffect(Mob* caster, uint16 spell_id, float partial, int level_ove
 				// Will fix buttons for now
 				Mob *pet = GetActivePet();
 				if (IsClient() && pet) {
+					for (auto all_pet : GetAllPets()) {
+						if (all_pet && all_pet->IsNPC() && all_pet->CastToNPC()->GetPetSpellID() == spell_id) {
+							CastToClient()->DoPetBagResync(all_pet->CastToNPC()->GetPetOriginClass());
+						}
+					}
+
 					auto c = CastToClient();
 					if (c->ClientVersionBit() & EQ::versions::maskUFAndLater) {
 						c->SetPetCommandState(PetButton::Sit, PetButtonState::Off);
@@ -4185,6 +4208,10 @@ void Mob::BuffProcess()
 
 					if (!frozen_buff) {
 						--buffs[buffs_i].ticsremaining;
+					} else {
+						// Frozen server-side duration needs periodic client refresh so
+						// the client UI doesn't continue ticking down independently.
+						buffs[buffs_i].UpdateClient = true;
 					}
 
 					if (buffs[buffs_i].ticsremaining < 0) {
@@ -4769,6 +4796,38 @@ void Mob::BuffFadeBySlot(int slot, bool iRecalcBonuses)
 				{
 					owner->RemovePet(this);
 					owner->ValidatePetList();
+				}
+
+				if (IsNPC()) {
+					if (EntityVariableExists("is_charmed") && !EntityVariableExists("preserve_inventory")) {
+						if (!EntityVariableExists("charm_refresh")) {
+							auto serialized_inventory = GetEntityVariable("is_charmed");
+
+							while(CastToNPC()->CountLoot()) {
+								for (int item_id : CastToNPC()->GetLootList()) {
+									CastToNPC()->RemoveItem(item_id);
+								}
+							}
+
+							if (!serialized_inventory.empty()) {
+								auto inventory = Strings::Split(serialized_inventory, ",");
+								for (const auto& item : inventory) {
+									int item_id = Strings::ToInt(item);
+									auto item_data = database.GetItem(item_id);
+									if (item_data) {
+										CastToNPC()->AddItem(
+											item_data->ID,
+											static_cast<uint16>(item_data->MaxCharges ? item_data->MaxCharges : 1)
+										);
+									}
+								}
+							}
+
+							DeleteEntityVariable("is_charmed");
+						}
+					} else {
+						DeleteEntityVariable("preserve_inventory");
+					}
 				}
 
 				// Any client that has a previous charmed pet targetted shouldo

@@ -21,7 +21,7 @@ function event_trade(e)
 		e.other:Faction(405, 10); --Dain
 		e.other:Faction(419, -40); --Kromrif
 		e.other:Faction(448, -20); --Kromzek
-		e.other:summonItem(1742); -- Choker of the Wretched
+		e.other:SummonItem(1742); -- Choker of the Wretched
 		e.other:SummonItem(1741); -- Shorn head
 		e.other:AddEXP(questExpToGive);
 		eq.depop();

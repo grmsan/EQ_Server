@@ -695,6 +695,15 @@ bool Mob::AddPet(uint16 new_pet_id)
 	petid = petids.front();
 	focused_pet_id = new_pet_id;
 	ConfigurePetWindow(newpet);
+
+	if (
+		newpet->IsNPC() &&
+		IsClient() &&
+		!IsCharmSpell(newpet->CastToNPC()->GetPetSpellID())
+	) {
+		CastToClient()->DoPetBagResync(newpet->CastToNPC()->GetPetOriginClass());
+	}
+
 	return true;
 }
 
@@ -759,6 +768,15 @@ bool Mob::SetPet(uint16 new_pet_id, uint8 idx)
 	petid = petids.empty() ? 0 : petids.front();
 	focused_pet_id = new_pet_id;
 	ConfigurePetWindow(newpet);
+
+	if (
+		newpet->IsNPC() &&
+		IsClient() &&
+		!IsCharmSpell(newpet->CastToNPC()->GetPetSpellID())
+	) {
+		CastToClient()->DoPetBagResync(newpet->CastToNPC()->GetPetOriginClass());
+	}
+
 	return true;
 }
 

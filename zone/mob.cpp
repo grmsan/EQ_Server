@@ -1072,94 +1072,107 @@ int64 Mob::GetSpellHPBonuses() {
 	return spell_hp;
 }
 
-bool Mob::IsIntelligenceCasterClass() const
+uint32 Mob::GetClassesBits() const
 {
-	switch (GetClass()) {
-		case Class::ShadowKnight:
-		case Class::Bard:
-		case Class::Necromancer:
-		case Class::Wizard:
-		case Class::Magician:
-		case Class::Enchanter:
-		case Class::ShadowKnightGM:
-		case Class::BardGM:
-		case Class::NecromancerGM:
-		case Class::WizardGM:
-		case Class::MagicianGM:
-		case Class::EnchanterGM:
-			return true;
+	if (IsClient()) {
+		return CastToClient()->GetClassesBits();
 	}
 
-	return false;
+	uint8 class_id = GetClass();
+	if (class_id >= Class::WarriorGM && class_id <= Class::BerserkerGM) {
+		class_id = static_cast<uint8>(class_id - 19);
+	}
+
+	if (IsPlayerClass(class_id)) {
+		return GetPlayerClassBit(class_id);
+	}
+
+	return 0;
 }
 
-bool Mob::IsPureMeleeClass() const
+bool Mob::HasClass(uint8 class_id) const
 {
-	switch (GetClass()) {
-		case Class::Warrior:
-		case Class::Monk:
-		case Class::Rogue:
-		case Class::Berserker:
-		case Class::WarriorGM:
-		case Class::MonkGM:
-		case Class::RogueGM:
-		case Class::BerserkerGM:
-			return true;
-		default:
-			break;
-	}
-
-	return false;
+	return HasClass(class_id, 0);
 }
 
-bool Mob::IsWarriorClass() const
+bool Mob::HasClass(uint8 class_id, uint32 bitmask) const
 {
-	switch (GetClass()) {
-		case Class::Warrior:
-		case Class::Paladin:
-		case Class::Ranger:
-		case Class::ShadowKnight:
-		case Class::Monk:
-		case Class::Bard:
-		case Class::Rogue:
-		case Class::Beastlord:
-		case Class::Berserker:
-		case Class::WarriorGM:
-		case Class::PaladinGM:
-		case Class::RangerGM:
-		case Class::ShadowKnightGM:
-		case Class::MonkGM:
-		case Class::BardGM:
-		case Class::RogueGM:
-		case Class::BeastlordGM:
-		case Class::BerserkerGM:
-			return true;
-		default:
-			break;
+	if (!IsPlayerClass(class_id)) {
+		return false;
 	}
 
-	return false;
+	if (bitmask == 0) {
+		bitmask = GetClassesBits();
+	}
+
+	return (GetPlayerClassBit(class_id) & bitmask) != 0;
 }
 
-bool Mob::IsWisdomCasterClass() const
+bool Mob::IsAnyCasterClass(uint8 class_id) const
 {
-	switch (GetClass()) {
-		case Class::Cleric:
-		case Class::Paladin:
-		case Class::Ranger:
-		case Class::Druid:
-		case Class::Shaman:
-		case Class::Beastlord:
-		case Class::ClericGM:
-		case Class::PaladinGM:
-		case Class::RangerGM:
-		case Class::DruidGM:
-		case Class::ShamanGM:
-		case Class::BeastlordGM:
-			return true;
-	}
+	const uint32 bitmask = (class_id == Class::None) ? GetClassesBits() : GetPlayerClassBit(class_id);
 
-	return false;
+	return HasClass(Class::Cleric, bitmask) ||
+		HasClass(Class::Paladin, bitmask) ||
+		HasClass(Class::Druid, bitmask) ||
+		HasClass(Class::Shaman, bitmask) ||
+		HasClass(Class::Necromancer, bitmask) ||
+		HasClass(Class::Wizard, bitmask) ||
+		HasClass(Class::Enchanter, bitmask) ||
+		HasClass(Class::Magician, bitmask) ||
+		HasClass(Class::ShadowKnight, bitmask) ||
+		HasClass(Class::Bard, bitmask) ||
+		HasClass(Class::Ranger, bitmask) ||
+		HasClass(Class::Beastlord, bitmask);
+}
+
+bool Mob::IsIntelligenceCasterClass(uint8 class_id) const
+{
+	const uint32 bitmask = (class_id == Class::None) ? GetClassesBits() : GetPlayerClassBit(class_id);
+
+	return HasClass(Class::ShadowKnight, bitmask) ||
+		HasClass(Class::Bard, bitmask) ||
+		HasClass(Class::Necromancer, bitmask) ||
+		HasClass(Class::Wizard, bitmask) ||
+		HasClass(Class::Magician, bitmask) ||
+		HasClass(Class::Enchanter, bitmask);
+}
+
+bool Mob::IsPureMeleeClass(uint8 class_id) const
+{
+	const uint32 bitmask = (class_id == Class::None) ? GetClassesBits() : GetPlayerClassBit(class_id);
+
+	return HasClass(Class::Warrior, bitmask) ||
+		HasClass(Class::Monk, bitmask) ||
+		HasClass(Class::Rogue, bitmask) ||
+		HasClass(Class::Berserker, bitmask);
+}
+
+bool Mob::IsWarriorClass(uint8 class_id) const
+{
+	const uint32 bitmask = (class_id == Class::None) ? GetClassesBits() : GetPlayerClassBit(class_id);
+
+	return HasClass(Class::Warrior, bitmask) ||
+		HasClass(Class::Paladin, bitmask) ||
+		HasClass(Class::Ranger, bitmask) ||
+		HasClass(Class::ShadowKnight, bitmask) ||
+		HasClass(Class::Monk, bitmask) ||
+		HasClass(Class::Bard, bitmask) ||
+		HasClass(Class::Rogue, bitmask) ||
+		HasClass(Class::Beastlord, bitmask) ||
+		HasClass(Class::Berserker, bitmask);
+}
+
+bool Mob::IsWisdomCasterClass(uint8 class_id) const
+{
+	const uint32 bitmask = (class_id == Class::None) ? GetClassesBits() : GetPlayerClassBit(class_id);
+
+	return HasClass(Class::Cleric, bitmask) ||
+		HasClass(Class::Paladin, bitmask) ||
+		HasClass(Class::Ranger, bitmask) ||
+		HasClass(Class::Druid, bitmask) ||
+		HasClass(Class::Shaman, bitmask) ||
+		HasClass(Class::Beastlord, bitmask);
 }
 
 uint8 Mob::GetArchetype() const
@@ -1601,49 +1614,14 @@ void Mob::SendHPUpdate(bool force_update_all)
 				last_hp
 			);
 
-			// RoF2: empirically verified that the client consumes OP_HPUpdate in the raw
-			// [uint16 spawn_id][uint32 cur_hp][int32 max_hp] layout (see #hptest 1).
-			// Sending via the raw layout here avoids any struct-strategy mismatch and
-			// ensures the self HP UI updates reliably.
-			bool sent_raw_rof2_hpupdate = false;
-			{
-				auto *eqs = CastToClient()->Connection();
-				auto *opm = eqs ? eqs->GetOpcodeManager() : nullptr;
-				const uint16 hpupdate_eq = opm ? opm->EmuToEQ(OP_HPUpdate) : 0;
-
-				if (hpupdate_eq != 0 && CastToClient()->ClientVersion() == EQ::versions::ClientVersion::RoF2) {
-					auto *p = new EQApplicationPacket(OP_HPUpdate, 10);
-					p->SetOpcodeBypass(hpupdate_eq);
-
-					auto *buf = p->pBuffer;
-					*reinterpret_cast<uint16 *>(buf + 0) = static_cast<uint16>(GetID());
-					*reinterpret_cast<uint32 *>(buf + 2) = static_cast<uint32>(CastToClient()->GetHP());
-					*reinterpret_cast<int32 *>(buf + 6)  = static_cast<int32>(CastToClient()->GetMaxHP());
-
-					CastToClient()->QueuePacket(p);
-					safe_delete(p);
-					sent_raw_rof2_hpupdate = true;
-				}
-			}
-
-			if (!sent_raw_rof2_hpupdate) {
-				auto p = new EQApplicationPacket(OP_HPUpdate, sizeof(SpawnHPUpdate_Struct));
-				auto b = (SpawnHPUpdate_Struct*)p->pBuffer;
-				// Send full server-side values (uncapped), do not subtract item HP
-				b->cur_hp   = static_cast<uint32>(CastToClient()->GetHP());
-				b->spawn_id = GetID();
-				b->max_hp   = CastToClient()->GetMaxHP();
-				CastToClient()->QueuePacket(p);
-				safe_delete(p);
-			}
-
-			// RoF2 clients can be sensitive to HP update paths; also send the percent-based OP_MobHealth
-			// packet to self so the UI has an additional supported signal to move the HP bar.
-			{
-				EQApplicationPacket self_hp_percent_packet;
-				CreateHPPacket(&self_hp_percent_packet);
-				CastToClient()->QueuePacket(&self_hp_percent_packet);
-			}
+			auto p = new EQApplicationPacket(OP_HPUpdate, sizeof(SpawnHPUpdate_Struct));
+			auto b = (SpawnHPUpdate_Struct*)p->pBuffer;
+			// Send full server-side values (uncapped), do not subtract item HP.
+			b->cur_hp   = static_cast<uint32>(CastToClient()->GetHP());
+			b->spawn_id = GetID();
+			b->max_hp   = CastToClient()->GetMaxHP();
+			CastToClient()->QueuePacket(p);
+			safe_delete(p);
 
 			// If a UI/DLL override is in use, push authoritative values when HP changes.
 			CastToClient()->SendServerStatsUpdate();

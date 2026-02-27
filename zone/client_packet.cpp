@@ -414,6 +414,7 @@ void MapOpcodes()
 	ConnectedOpcodes[OP_TradeSkillCombine] = &Client::Handle_OP_TradeSkillCombine;
 	ConnectedOpcodes[OP_TradeSkillRecipeInspect] = &Client::Handle_OP_TradeSkillRecipeInspect;
 	ConnectedOpcodes[OP_Translocate] = &Client::Handle_OP_Translocate;
+	ConnectedOpcodes[OP_WaypointRequest] = &Client::Handle_OP_WaypointRequest;
 	ConnectedOpcodes[OP_TributeItem] = &Client::Handle_OP_TributeItem;
 	ConnectedOpcodes[OP_TributeMoney] = &Client::Handle_OP_TributeMoney;
 	ConnectedOpcodes[OP_TributeNPC] = &Client::Handle_OP_TributeNPC;
@@ -567,6 +568,10 @@ void Client::CompleteConnect()
 		edge_stats_retry_attempts = 0;
 		edge_stats_retry_timer.Start();
 	}
+
+	// THJ parity: ensure every character has Bazaar and Back active AA available.
+	EnsureBazaarAndBackAA();
+
 	hpupdate_timer.Start();
 	autosave_timer.Start();
 	SetDuelTarget(0);
@@ -17399,6 +17404,32 @@ void Client::Handle_OP_EvolveItem(const EQApplicationPacket *app)
 		}
 		default: {
 		}
+	}
+}
+
+void Client::Handle_OP_WaypointRequest(const EQApplicationPacket *app)
+{
+	if (app->size != sizeof(WaypointRequest_Struct)) {
+		LogError(
+			"Received OP_WaypointRequest packet. Expected size {}, received size {}.",
+			sizeof(WaypointRequest_Struct),
+			app->size
+		);
+		return;
+	}
+
+	auto *waypoint_request = reinterpret_cast<WaypointRequest_Struct*>(app->pBuffer);
+
+	SetWaypointGroupFeatureState(waypoint_request->group_selected);
+	SetWaypointAutoTransportState(waypoint_request->autoconfirm_selected);
+
+	if (waypoint_request->expedition_selected && GetExpedition() && CheckWaypointGroupFeature()) {
+		TransportToWaypoint(0);
+		return;
+	}
+
+	if (waypoint_request->waypoint_id) {
+		TransportToWaypoint(waypoint_request->waypoint_id);
 	}
 }
 

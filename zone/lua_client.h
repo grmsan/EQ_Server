@@ -42,6 +42,11 @@ public:
 	void WorldKick();
 	void SendToGuildHall();
 	void SendToInstance(std::string instance_type, std::string zone_short_name, uint32 instance_version, float x, float y, float z, float heading, std::string instance_identifier, uint32 duration);
+	void SendWaypointList();
+	bool UnlockWaypoint(std::string waypoint_shortname);
+	bool IsWaypointUnlocked(std::string waypoint_shortname);
+	bool CheckWaypointGroupFeature();
+	void EnableWaypointGroupFeature();
 	int GetAnon();
 	void SetAnon(uint8 anon_flag);
 	int GetAFK();
@@ -57,6 +62,7 @@ public:
 	void SetBaseClass(int v);
 	void SetBaseRace(int v);
 	void SetBaseGender(int v);
+	bool HasClassID(int class_id);
 	uint16 GetClassBitmask();
 	uint16 GetClassesBitmask();
 	bool SetClassesBitmask(uint16 classes_bitmask);
@@ -260,6 +266,28 @@ public:
 		bool attuned);
 	void SummonItem(uint32 item_id, int charges, uint32 aug1, uint32 aug2, uint32 aug3, uint32 aug4, uint32 aug5,
 		bool attuned, int to_slot);
+	void SummonFixedItem(uint32 item_id);
+	void SummonFixedItem(uint32 item_id, int charges);
+	void SummonFixedItem(uint32 item_id, int charges, uint32 aug1);
+	void SummonFixedItem(uint32 item_id, int charges, uint32 aug1, uint32 aug2);
+	void SummonFixedItem(uint32 item_id, int charges, uint32 aug1, uint32 aug2, uint32 aug3);
+	void SummonFixedItem(uint32 item_id, int charges, uint32 aug1, uint32 aug2, uint32 aug3, uint32 aug4);
+	void SummonFixedItem(uint32 item_id, int charges, uint32 aug1, uint32 aug2, uint32 aug3, uint32 aug4, uint32 aug5);
+	void SummonFixedItem(uint32 item_id, int charges, uint32 aug1, uint32 aug2, uint32 aug3, uint32 aug4, uint32 aug5,
+		bool attuned);
+	void SummonFixedItem(uint32 item_id, int charges, uint32 aug1, uint32 aug2, uint32 aug3, uint32 aug4, uint32 aug5,
+		bool attuned, int to_slot);
+	void ReturnItem(uint32 item_id);
+	void ReturnItem(uint32 item_id, int charges);
+	void ReturnItem(uint32 item_id, int charges, uint32 aug1);
+	void ReturnItem(uint32 item_id, int charges, uint32 aug1, uint32 aug2);
+	void ReturnItem(uint32 item_id, int charges, uint32 aug1, uint32 aug2, uint32 aug3);
+	void ReturnItem(uint32 item_id, int charges, uint32 aug1, uint32 aug2, uint32 aug3, uint32 aug4);
+	void ReturnItem(uint32 item_id, int charges, uint32 aug1, uint32 aug2, uint32 aug3, uint32 aug4, uint32 aug5);
+	void ReturnItem(uint32 item_id, int charges, uint32 aug1, uint32 aug2, uint32 aug3, uint32 aug4, uint32 aug5,
+		bool attuned);
+	void ReturnItem(uint32 item_id, int charges, uint32 aug1, uint32 aug2, uint32 aug3, uint32 aug4, uint32 aug5,
+		bool attuned, int to_slot);
 	void SummonBaggedItems(uint32 bag_item_id, luabind::adl::object bag_items_table);
 	void SetStats(int type, int value);
 	void IncStats(int type, int value);
@@ -303,6 +331,7 @@ public:
 	uint32 GetClientVersionBit();
 	void SetTitleSuffix(const char *text);
 	void EnableTitleSet(uint32 title_set);
+	bool CheckTitle(int title_set);
 	void SetAAPoints(int points);
 	int GetAAPoints();
 	int GetSpentAA();
@@ -333,7 +362,9 @@ public:
 	uint32 GetRaidPoints();
 	void LearnRecipe(uint32 recipe_id);
 	int GetRecipeMadeCount(uint32 recipe_id);
+	int GetKillCount(int race_id);
 	bool HasRecipeLearned(uint32 recipe_id);
+	bool IsSeasonal();
 	int GetEndurance();
 	int GetMaxEndurance();
 	int GetEndurancePercent();
@@ -347,6 +378,8 @@ public:
 	void AddLevelBasedExp(int exp_pct, int max_level);
 	void AddLevelBasedExp(int exp_pct, int max_level, bool ignore_mods);
 	void IncrementAA(int aa);
+	bool ConsumeUnspentAA();
+	bool ConsumeItemOnCursor();
 	bool GrantAlternateAdvancementAbility(int aa_id, int points);
 	bool GrantAlternateAdvancementAbility(int aa_id, int points, bool ignore_cost);
 	void ResetAlternateAdvancementRank(int aa_id);
@@ -618,6 +651,8 @@ public:
 	bool ReloadDataBuckets();
 	void ShowZoneShardMenu();
 	void GrantPetNameChange();
+	void GrantPetNameChange(uint8 class_id);
+	bool IsPetNameChangeAllowed();
 
 	void GrantNameChange();
 	bool IsNameChangeAllowed();

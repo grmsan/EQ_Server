@@ -480,7 +480,7 @@ void Client::OPCombatAbility(const CombatAbility_Struct *ca_atk, bool is_riposte
 	DeleteEntityVariable("auto_skill");
 
 	int reuse_time     = 0;
-	int haste          = GetHaste();
+	int haste          = GetHaste() - 100;
 	int haste_modifier = 0;
 
 	if (haste >= 0) {
@@ -692,9 +692,20 @@ void Client::OPCombatAbility(const CombatAbility_Struct *ca_atk, bool is_riposte
 		reuse_time = 9 - skill_reduction;
 	}
 
-	reuse_time = (reuse_time * haste_modifier) / 100;
+	if (RuleB(Custom, UseHasteForMeleeSkills)) {
+		reuse_time = (reuse_time * haste_modifier) / 100;
+	}
 
-	reuse_time = EQ::Clamp(reuse_time, 0, reuse_time);
+	if (RuleB(Custom, ServerAuthStats)) {
+		// Keep client and server skill cooldown behavior aligned in server-auth mode.
+		reuse_time++;
+	}
+
+	reuse_time = std::max(0, reuse_time);
+	if (found_skill && !is_riposte && reuse_time == 0) {
+		// Never allow a successful activated melee skill to become a 0s cooldown.
+		reuse_time = 1;
+	}
 
 	if (reuse_time && !is_riposte) {
 		p_timers.Start(timer, reuse_time);

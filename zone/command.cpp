@@ -95,6 +95,7 @@ int command_init(void)
 		command_add("autoskill", "[skill id or name] [enable/disable/status] - Configure automatic skill usage", AccountStatus::Player, command_autoskill) ||
 		command_add("augmentitem", "Force augments an item. Must have the augment item window open.", AccountStatus::GMImpossible, command_augmentitem) ||
 		command_add("ban", "[Character Name] [Reason] - Ban by character name", AccountStatus::GMLeadAdmin, command_ban) ||
+		command_add("bazaarpull", "[count|count] - Pull unplaced staged Bazaar NPC spawns to your location. Default count is 1.", AccountStatus::GMAdmin, command_bazaarpull) ||
 		command_add("bugs", "[Close|Delete|Review|Search|View] - Handles player bug reports", AccountStatus::QuestTroupe, command_bugs) ||
 		(RuleB(Bots, Enabled) && command_add("bot", "Type \"#bot help\" or \"^help\" to the see the list of available commands for bots.", AccountStatus::Player, command_bot)) ||
 		command_add("camerashake", "[Duration (Milliseconds)] [Intensity (1-10)] - Shakes the camera on everyone's screen globally.", AccountStatus::QuestTroupe, command_camerashake) ||
@@ -232,6 +233,7 @@ int command_init(void)
 		command_add("suspendmulti", "[Character Name One|Character Name Two|etc] [Days] [Reason] - Suspend multiple characters by name for specified number of days", AccountStatus::GMLeadAdmin, command_suspendmulti) ||
 		command_add("takeplatinum", "[Platinum] - Takes specified amount of platinum from you or your player target", AccountStatus::GMMgmt, command_takeplatinum) ||
 		command_add("task", "(subcommand) - Task system commands", AccountStatus::GMLeadAdmin, command_task) ||
+		command_add("test", "[list|packs|all|smoke|combat|regression|<id>|<start-end>] - Run in-game multiclass sanity tests (example: #test smoke)", AccountStatus::Player, command_test) ||
 		command_add("petname", "[newname] - Temporarily renames your pet. Leave name blank to restore the original name.", AccountStatus::GMAdmin, command_petname) ||
 		command_add("traindisc", "[level] - Trains all the disciplines usable by the target, up to level specified. (may freeze client for a few seconds)", AccountStatus::GMLeadAdmin, command_traindisc) ||
 		command_add("tune", "Calculate statistical values related to combat.", AccountStatus::GMAdmin, command_tune) ||

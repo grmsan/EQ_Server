@@ -1,6 +1,6 @@
 # THJServer Multiclass Port Checklist
 
-**Last Updated:** 2026-02-26
+**Last Updated:** 2026-02-27
 **Master Technical Document:** [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
 **Test Tracker:** [TEST_TRACKER.md](TEST_TRACKER.md)
 
@@ -54,6 +54,31 @@ Files that control item class restrictions.
 
 ## Recent Port Activity (2026-02-26)
 
+- THJ waypoint + Bazaar quest compatibility foundation:
+  - Added waypoint protocol structs/opcodes:
+    - `common/eq_packet_structs.h`: `WaypointList_*` / `WaypointRequest_*`
+    - `common/emu_oplist.h`: `OP_WaypointList`, `OP_WaypointRequest`
+    - `utils/patches/patch_RoF2.conf`: opcode mappings for RoF2 (`0x1402`, `0x1403`)
+  - Added zone handling for waypoint request packets:
+    - `zone/client_packet.cpp`: `Handle_OP_WaypointRequest`, opcode registration
+  - Added client waypoint API used by imported THJ quest scripts:
+    - `zone/client.h` / `zone/client.cpp`:
+      - `SendWaypointList`, `UnlockWaypoint`, `IsWaypointUnlocked`
+      - `CheckWaypointGroupFeature`, `EnableWaypointGroupFeature`
+      - group/autotransport state buckets and waypoint transport flow
+  - Added missing script bindings:
+    - `zone/perl_client.cpp`: `HasClassID`, waypoint methods
+    - `zone/lua_client.h` / `zone/lua_client.cpp`: `HasClassID`, waypoint methods
+  - Expanded THJ quest API compatibility used by imported Bazaar/seasonal/progression scripts:
+    - `zone/client.h` / `zone/client.cpp`: `HasClass(string)`, `GrantPetNameChange(class_id)`
+    - `zone/exp.cpp`: `IsSeasonal`, `GetKillCount`, `ConsumeUnspentAA`, `ConsumeItemOnCursor`
+    - `zone/inventory.cpp`: `SummonFixedItem`, `ReturnItem`
+    - `zone/perl_client.cpp` + `zone/lua_client.h/.cpp`: exported/bound the above APIs plus `CheckTitle`, `IsPetNameChangeAllowed`
+  - Added missing seasonal rule expected by THJ-style scripts:
+    - `common/ruletypes.h`: `Custom:EnableSeasonalCharacters`
+  - Added DB bootstrap migration:
+    - `utils/sql/custom/2026_02_26_thj_waypoints_bazaar_bootstrap.sql`
+    - seeds `thj_waypoints*` base content, creates Bazaar THJ NPCs (Tearel, Vision_of_Ayonae, A_Fading_Memory, class trainers `20..35`, pet bag merchant), adds Bazaar map door `doorid=146`, and seeds per-zone `#TPTriggerN` waypoint discovery spawns from `thj_waypoints`.
 - `zone/attack.cpp`:
   - Ported THJ-style proc slot handling (`MAX_PROCS` scan + `procCount` cap).
   - Ported THJ-style primary extra-attack roll behavior (per-hit roll instead of one-roll burst).
@@ -105,6 +130,17 @@ Files that control item class restrictions.
 - Build status:
   - `zone` target compiles clean after changes.
 
+## Recent Port Activity (2026-02-27)
+
+- THJ-style `Bazaar and Back` AA foundation:
+  - Added server-side AA handler in `zone/aa.cpp`:
+    - first use (outside Bazaar): save return location to character bucket and teleport to Bazaar.
+    - second use (inside Bazaar): return to saved zone/instance/coords; validates instance existence and re-adds character to instance when needed.
+    - reuses AA cooldown path (60s from AA rank recast).
+  - Added auto-grant hook for all characters on connect in `zone/client_packet.cpp` via `EnsureBazaarAndBackAA()`.
+  - Added DB migration `utils/sql/custom/2026_02_27_bazaar_and_back_aa.sql`:
+    - seeds spell, db_str text, `aa_ability`, and `aa_ranks` entries for `Bazaar and Back`.
+
 ## Work Order (recommended)
 1. **Persistence + load path**
    - Ensure `GestaltClasses` is written on character creation and on class add/remove, and is loaded consistently by zone/world.
@@ -142,8 +178,8 @@ Legend:
 - [ ] `common/database.cpp` (refs: 8, parity: diff)
 - [ ] `common/ruletypes.h` (refs: 5, parity: partial - THJ combat custom rules ported 2026-02-26, broader rule parity still diff)
 - [x] `common/repositories/data_buckets_repository.h` (refs: 4, parity: same)
-- [ ] `common/guild_base.cpp` (refs: 3, parity: diff)
-- [ ] `common/shareddb.cpp` (refs: 3, parity: diff)
+- [x] `common/guild_base.cpp` (refs: 3, parity: implemented GestaltClasses guild roster projection 2026-02-26)
+- [x] `common/shareddb.cpp` (refs: 3, parity: implemented multiclass spell/disc timer + target-type transforms 2026-02-26)
 - [ ] `common/classes.h` (refs: 1, parity: diff)
 - [x] `common/data_bucket.h` (refs: 1, parity: same)
 - [x] `common/database_instances.cpp` (refs: 1, parity: same)
@@ -158,12 +194,12 @@ Legend:
 - [x] `zone/cli/tests/databuckets.cpp` (refs: 86, parity: same)
 - [x] `zone/client.cpp` (refs: 70, parity: partial/ongoing)
 - [x] `zone/client_packet.cpp` (refs: 61, parity: implemented OP_PlayerProfile/OP_MemorizeSpell)
-- [ ] `zone/mob.cpp` (refs: 45, parity: diff)
+- [ ] `zone/mob.cpp` (refs: 45, parity: partial - base Mob GetClassesBits/HasClass + caster/melee archetype checks ported 2026-02-26)
 - [x] `zone/spell_effects.cpp` (refs: 39, parity: implemented Bard Pulse/Infinite Buffs)
 - [ ] `zone/attack.cpp` (refs: 34, parity: partial - THJ proc/crit/archery/combat scaling parity pass ported 2026-02-26; smart-target helper + residual diffs remain)
-- [ ] `zone/aa.cpp` (refs: 27, parity: diff)
+- [ ] `zone/aa.cpp` (refs: 27, parity: partial - Mnemonic Retention + Fury of Magic multiclass gates ported 2026-02-26)
 - [x] `zone/spells.cpp` (refs: 27, parity: implemented dynamic AA timers)
-- [ ] `zone/client_mods.cpp` (refs: 26, parity: diff)
+- [ ] `zone/client_mods.cpp` (refs: 26, parity: partial - CalcBaseMana/CalcBaseEndurance now best-of-owned-classes 2026-02-26)
 - [ ] `zone/client_process.cpp` (refs: 24, parity: partial - multiclass trainer open/end gating + trainer-class skill caps ported 2026-02-21)
 - [ ] `zone/special_attacks.cpp` (refs: 23, parity: diff)
 - [ ] `zone/effects.cpp` (refs: 17, parity: diff)
@@ -171,7 +207,7 @@ Legend:
 - [ ] `zone/entity.cpp` (refs: 16, parity: diff)
 - [ ] `zone/client.h` (refs: 7, parity: diff)
 - [ ] `zone/inventory.cpp` (refs: 4, parity: diff)
-- [ ] `zone/mob.h` (refs: 4, parity: diff)
+- [ ] `zone/mob.h` (refs: 4, parity: partial - bitmask-aware Mob API declarations ported 2026-02-26)
 
 ### zone (MEDIUM PRIORITY - Bots/Mercs)
 - [ ] `zone/bot.cpp` (refs: 69, parity: diff)
@@ -206,8 +242,8 @@ Legend:
 - [ ] `zone/lua_zone.cpp` (refs: 6, parity: diff)
 - [ ] `zone/perl_zone.cpp` (refs: 6, parity: diff)
 - [ ] `zone/tradeskills.cpp` (refs: 6, parity: diff)
-- [ ] `zone/zonedb.cpp` (refs: 6, parity: diff)
-- [ ] `zone/aggro.cpp` (refs: 4, parity: diff)
+- [ ] `zone/zonedb.cpp` (refs: 6, parity: partial - preload GestaltClasses into PlayerProfile on zone load 2026-02-26)
+- [ ] `zone/aggro.cpp` (refs: 4, parity: partial - bard aggro cap bypass while multiclass enabled ported 2026-02-26)
 - [ ] `zone/lua_mob.h` (refs: 4, parity: diff)
 - [ ] `zone/perl_client.cpp` (refs: 4, parity: diff)
 - [x] `zone/gm_commands/show/quest_globals.cpp` (refs: 3, parity: same)
@@ -217,7 +253,8 @@ Legend:
 - [ ] `zone/lua_zone.h` (refs: 3, parity: diff)
 - [x] `zone/qglobals.cpp` (refs: 3, parity: same)
 - [ ] `zone/questmgr.cpp` (refs: 3, parity: diff)
-- [ ] `zone/tune.cpp` (refs: 3, parity: diff)
+- [ ] `zone/tune.cpp` (refs: 3, parity: partial - ranger archery + berserker frenzy class checks switched to HasClass 2026-02-26)
+- [ ] `zone/titles.cpp` (refs: 1, parity: partial - title eligibility uses HasClass for multiclass ownership 2026-02-26)
 - [ ] `zone/corpse.cpp` (refs: 2, parity: diff)
 - [x] `zone/gm_commands/gearup.cpp` (refs: 2, parity: same)
 - [ ] `zone/mob_ai.cpp` (refs: 2, parity: diff)

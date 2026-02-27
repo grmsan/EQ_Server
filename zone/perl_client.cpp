@@ -844,6 +844,96 @@ void Perl_Client_SummonItem(Client* self, uint32 item_id, int16 charges, bool at
 	self->SummonItem(item_id, charges, aug1, aug2, aug3, aug4, aug5, 0, attune, slot_id);
 }
 
+void Perl_Client_SummonFixedItem(Client* self, uint32 item_id) // @categories Inventory and Items, Script Utility
+{
+	self->SummonFixedItem(item_id);
+}
+
+void Perl_Client_SummonFixedItem(Client* self, uint32 item_id, int16 charges) // @categories Inventory and Items, Script Utility
+{
+	self->SummonFixedItem(item_id, charges);
+}
+
+void Perl_Client_SummonFixedItem(Client* self, uint32 item_id, int16 charges, bool attune) // @categories Inventory and Items, Script Utility
+{
+	self->SummonFixedItem(item_id, charges, 0, 0, 0, 0, 0, 0, attune);
+}
+
+void Perl_Client_SummonFixedItem(Client* self, uint32 item_id, int16 charges, bool attune, uint32 aug1) // @categories Inventory and Items, Script Utility
+{
+	self->SummonFixedItem(item_id, charges, aug1, 0, 0, 0, 0, 0, attune);
+}
+
+void Perl_Client_SummonFixedItem(Client* self, uint32 item_id, int16 charges, bool attune, uint32 aug1, uint32 aug2) // @categories Inventory and Items, Script Utility
+{
+	self->SummonFixedItem(item_id, charges, aug1, aug2, 0, 0, 0, 0, attune);
+}
+
+void Perl_Client_SummonFixedItem(Client* self, uint32 item_id, int16 charges, bool attune, uint32 aug1, uint32 aug2, uint32 aug3) // @categories Inventory and Items, Script Utility
+{
+	self->SummonFixedItem(item_id, charges, aug1, aug2, aug3, 0, 0, 0, attune);
+}
+
+void Perl_Client_SummonFixedItem(Client* self, uint32 item_id, int16 charges, bool attune, uint32 aug1, uint32 aug2, uint32 aug3, uint32 aug4) // @categories Inventory and Items, Script Utility
+{
+	self->SummonFixedItem(item_id, charges, aug1, aug2, aug3, aug4, 0, 0, attune);
+}
+
+void Perl_Client_SummonFixedItem(Client* self, uint32 item_id, int16 charges, bool attune, uint32 aug1, uint32 aug2, uint32 aug3, uint32 aug4, uint32 aug5) // @categories Inventory and Items, Script Utility
+{
+	self->SummonFixedItem(item_id, charges, aug1, aug2, aug3, aug4, aug5, 0, attune);
+}
+
+void Perl_Client_SummonFixedItem(Client* self, uint32 item_id, int16 charges, bool attune, uint32 aug1, uint32 aug2, uint32 aug3, uint32 aug4, uint32 aug5, uint16 slot_id) // @categories Inventory and Items, Script Utility
+{
+	self->SummonFixedItem(item_id, charges, aug1, aug2, aug3, aug4, aug5, 0, attune, slot_id);
+}
+
+void Perl_Client_ReturnItem(Client* self, uint32 item_id) // @categories Inventory and Items, Script Utility
+{
+	self->ReturnItem(item_id);
+}
+
+void Perl_Client_ReturnItem(Client* self, uint32 item_id, int16 charges) // @categories Inventory and Items, Script Utility
+{
+	self->ReturnItem(item_id, charges);
+}
+
+void Perl_Client_ReturnItem(Client* self, uint32 item_id, int16 charges, bool attune) // @categories Inventory and Items, Script Utility
+{
+	self->ReturnItem(item_id, charges, 0, 0, 0, 0, 0, 0, attune);
+}
+
+void Perl_Client_ReturnItem(Client* self, uint32 item_id, int16 charges, bool attune, uint32 aug1) // @categories Inventory and Items, Script Utility
+{
+	self->ReturnItem(item_id, charges, aug1, 0, 0, 0, 0, 0, attune);
+}
+
+void Perl_Client_ReturnItem(Client* self, uint32 item_id, int16 charges, bool attune, uint32 aug1, uint32 aug2) // @categories Inventory and Items, Script Utility
+{
+	self->ReturnItem(item_id, charges, aug1, aug2, 0, 0, 0, 0, attune);
+}
+
+void Perl_Client_ReturnItem(Client* self, uint32 item_id, int16 charges, bool attune, uint32 aug1, uint32 aug2, uint32 aug3) // @categories Inventory and Items, Script Utility
+{
+	self->ReturnItem(item_id, charges, aug1, aug2, aug3, 0, 0, 0, attune);
+}
+
+void Perl_Client_ReturnItem(Client* self, uint32 item_id, int16 charges, bool attune, uint32 aug1, uint32 aug2, uint32 aug3, uint32 aug4) // @categories Inventory and Items, Script Utility
+{
+	self->ReturnItem(item_id, charges, aug1, aug2, aug3, aug4, 0, 0, attune);
+}
+
+void Perl_Client_ReturnItem(Client* self, uint32 item_id, int16 charges, bool attune, uint32 aug1, uint32 aug2, uint32 aug3, uint32 aug4, uint32 aug5) // @categories Inventory and Items, Script Utility
+{
+	self->ReturnItem(item_id, charges, aug1, aug2, aug3, aug4, aug5, 0, attune);
+}
+
+void Perl_Client_ReturnItem(Client* self, uint32 item_id, int16 charges, bool attune, uint32 aug1, uint32 aug2, uint32 aug3, uint32 aug4, uint32 aug5, uint16 slot_id) // @categories Inventory and Items, Script Utility
+{
+	self->ReturnItem(item_id, charges, aug1, aug2, aug3, aug4, aug5, 0, attune, slot_id);
+}
+
 void Perl_Client_SetStats(Client* self, uint8 type, uint16 increase_val) // @categories Account and Character, Stats and Attributes
 {
 	self->SetStats(type, increase_val);
@@ -1284,6 +1374,16 @@ void Perl_Client_AddLevelBasedExp(Client* self, uint8 exp_percentage, uint8 max_
 void Perl_Client_IncrementAA(Client* self, uint32 aa_skill_id) // @categories Alternative Advancement
 {
 	self->IncrementAlternateAdvancementRank(aa_skill_id);
+}
+
+bool Perl_Client_ConsumeItemOnCursor(Client* self)
+{
+	return self->ConsumeItemOnCursor();
+}
+
+bool Perl_Client_ConsumeUnspentAA(Client* self)
+{
+	return self->ConsumeUnspentAA();
 }
 
 bool Perl_Client_GrantAlternateAdvancementAbility(Client* self, int aa_id, int points) // @categories Alternative Advancement
@@ -2025,6 +2125,41 @@ uint16_t Perl_Client_GetClassBitmask(Client* self)
 uint16_t Perl_Client_GetClassesBitmask(Client* self)
 {
 	return self->GetClassesBitmask();
+}
+
+bool Perl_Client_HasClassID(Client* self, int class_id)
+{
+	return self->HasClass(static_cast<uint8>(class_id));
+}
+
+bool Perl_Client_HasClass(Client* self, std::string class_name)
+{
+	return self->HasClass(class_name);
+}
+
+void Perl_Client_SendWaypointList(Client* self)
+{
+	self->SendWaypointList();
+}
+
+bool Perl_Client_UnlockWaypoint(Client* self, std::string waypoint_shortname)
+{
+	return self->UnlockWaypoint(waypoint_shortname);
+}
+
+bool Perl_Client_IsWaypointUnlocked(Client* self, std::string waypoint_shortname)
+{
+	return self->IsWaypointUnlocked(waypoint_shortname);
+}
+
+bool Perl_Client_CheckWaypointGroupFeature(Client* self)
+{
+	return self->CheckWaypointGroupFeature();
+}
+
+void Perl_Client_EnableWaypointGroupFeature(Client* self)
+{
+	self->EnableWaypointGroupFeature();
 }
 
 uint32_t Perl_Client_GetDeityBitmask(Client* self)
@@ -2846,6 +2981,21 @@ perl::array Perl_Client_GetZoneFlags(Client* self)
 	return a;
 }
 
+int Perl_Client_GetKillCount(Client* self, int race_id)
+{
+	return self->GetKillCount(race_id);
+}
+
+bool Perl_Client_CheckTitle(Client* self, int title_set)
+{
+	return self->CheckTitle(title_set);
+}
+
+int Perl_Client_IsSeasonal(Client* self)
+{
+	return self->IsSeasonal() ? 1 : 0;
+}
+
 void Perl_Client_SendPayload(Client* self, int payload_id) // @categories Script Utility
 {
 	self->SendPayload(payload_id);
@@ -3246,6 +3396,16 @@ void Perl_Client_GrantPetNameChange(Client* self)
 	self->GrantPetNameChange();
 }
 
+void Perl_Client_GrantPetNameChange(Client* self, uint8 class_id)
+{
+	self->GrantPetNameChange(class_id);
+}
+
+bool Perl_Client_IsPetNameChangeAllowed(Client* self)
+{
+	return self->IsPetNameChangeAllowed();
+}
+
 void Perl_Client_SetAAEXPPercentage(Client* self, uint8 percentage)
 {
 	self->SetAAEXPPercentage(percentage);
@@ -3454,9 +3614,11 @@ void perl_register_client()
 	package.add("CanHaveSkill", &Perl_Client_CanHaveSkill);
 	package.add("CashReward", &Perl_Client_CashReward);
 	package.add("ChangeLastName", &Perl_Client_ChangeLastName);
-	package.add("GrantPetNameChange", &Perl_Client_GrantPetNameChange);
+	package.add("GrantPetNameChange", (void(*)(Client*))&Perl_Client_GrantPetNameChange);
+	package.add("GrantPetNameChange", (void(*)(Client*, uint8))&Perl_Client_GrantPetNameChange);
 	package.add("ClearNameChange", (bool(*)(Client*))&Perl_Client_ClearNameChange);
 	package.add("CharacterID", &Perl_Client_CharacterID);
+	package.add("CheckTitle", &Perl_Client_CheckTitle);
 	package.add("CheckIncreaseSkill", (bool(*)(Client*, int))&Perl_Client_CheckIncreaseSkill);
 	package.add("CheckIncreaseSkill", (bool(*)(Client*, int, int))&Perl_Client_CheckIncreaseSkill);
 	package.add("CheckSpecializeIncrease", &Perl_Client_CheckSpecializeIncrease);
@@ -3466,6 +3628,8 @@ void perl_register_client()
 	package.add("ClearXTargets", &Perl_Client_ClearXTargets);
 	package.add("ClearZoneFlag", &Perl_Client_ClearZoneFlag);
 	package.add("CompleteTask", &Perl_Client_CompleteTask);
+	package.add("ConsumeItemOnCursor", &Perl_Client_ConsumeItemOnCursor);
+	package.add("ConsumeUnspentAA", &Perl_Client_ConsumeUnspentAA);
 	package.add("Connected", &Perl_Client_Connected);
 	package.add("CountAugmentEquippedByID", &Perl_Client_CountAugmentEquippedByID);
 	package.add("CountItem", &Perl_Client_CountItem);
@@ -3561,6 +3725,8 @@ void perl_register_client()
 	package.add("GetCarriedPlatinum", &Perl_Client_GetCarriedPlatinum);
 	package.add("GetCharacterFactionLevel", &Perl_Client_GetCharacterFactionLevel);
 	package.add("GetClassAbbreviation", &Perl_Client_GetClassAbbreviation);
+	package.add("HasClass", (bool(*)(Client*, std::string))&Perl_Client_HasClass);
+	package.add("HasClassID", (bool(*)(Client*, int))&Perl_Client_HasClassID);
 	package.add("GetClassBitmask", &Perl_Client_GetClassBitmask);
 	package.add("GetClassesBitmask", &Perl_Client_GetClassesBitmask);
 	package.add("SetClassesBitmask", &Perl_Client_SetClassesBitmask);
@@ -3618,6 +3784,7 @@ void perl_register_client()
 	package.add("GetItemCooldown", &Perl_Client_GetItemCooldown);
 	package.add("GetItemIDAt", &Perl_Client_GetItemIDAt);
 	package.add("GetItemInInventory", &Perl_Client_GetItemInInventory);
+	package.add("GetKillCount", &Perl_Client_GetKillCount);
 	package.add("GetKeyRing", &Perl_Client_GetKeyRing);
 	package.add("GetLDoNLosses", &Perl_Client_GetLDoNLosses);
 	package.add("GetLDoNLossesTheme", &Perl_Client_GetLDoNLossesTheme);
@@ -3708,6 +3875,8 @@ void perl_register_client()
 	package.add("IsLD", &Perl_Client_IsLD);
 	package.add("IsMedding", &Perl_Client_IsMedding);
 	package.add("IsNameChangeAllowed", (bool(*)(Client*))&Perl_Client_IsNameChangeAllowed);
+	package.add("IsPetNameChangeAllowed", &Perl_Client_IsPetNameChangeAllowed);
+	package.add("IsSeasonal", &Perl_Client_IsSeasonal);
 	package.add("IsRaidGrouped", &Perl_Client_IsRaidGrouped);
 	package.add("IsSitting", &Perl_Client_IsSitting);
 	package.add("IsStanding", &Perl_Client_IsStanding);
@@ -3831,6 +4000,11 @@ void perl_register_client()
 	package.add("SendTargetCommand", &Perl_Client_SendTargetCommand);
 	package.add("SendToGuildHall", &Perl_Client_SendToGuildHall);
 	package.add("SendToInstance", &Perl_Client_SendToInstance);
+	package.add("SendWaypointList", (void(*)(Client*))&Perl_Client_SendWaypointList);
+	package.add("UnlockWaypoint", (bool(*)(Client*, std::string))&Perl_Client_UnlockWaypoint);
+	package.add("IsWaypointUnlocked", (bool(*)(Client*, std::string))&Perl_Client_IsWaypointUnlocked);
+	package.add("CheckWaypointGroupFeature", (bool(*)(Client*))&Perl_Client_CheckWaypointGroupFeature);
+	package.add("EnableWaypointGroupFeature", (void(*)(Client*))&Perl_Client_EnableWaypointGroupFeature);
 	package.add("SendWebLink", &Perl_Client_SendWebLink);
 	package.add("SendZoneFlagInfo", &Perl_Client_SendZoneFlagInfo);
 	package.add("SetAAEXPModifier", (void(*)(Client*, float))&Perl_Client_SetAAEXPModifier);
@@ -3936,7 +4110,25 @@ void perl_register_client()
 	package.add("Sit", &Perl_Client_Sit);
 	package.add("SlotConvert2", &Perl_Client_SlotConvert2);
 	package.add("Stand", &Perl_Client_Stand);
+	package.add("ReturnItem", (void(*)(Client*, uint32))&Perl_Client_ReturnItem);
+	package.add("ReturnItem", (void(*)(Client*, uint32, int16))&Perl_Client_ReturnItem);
+	package.add("ReturnItem", (void(*)(Client*, uint32, int16, bool))&Perl_Client_ReturnItem);
+	package.add("ReturnItem", (void(*)(Client*, uint32, int16, bool, uint32))&Perl_Client_ReturnItem);
+	package.add("ReturnItem", (void(*)(Client*, uint32, int16, bool, uint32, uint32))&Perl_Client_ReturnItem);
+	package.add("ReturnItem", (void(*)(Client*, uint32, int16, bool, uint32, uint32, uint32))&Perl_Client_ReturnItem);
+	package.add("ReturnItem", (void(*)(Client*, uint32, int16, bool, uint32, uint32, uint32, uint32))&Perl_Client_ReturnItem);
+	package.add("ReturnItem", (void(*)(Client*, uint32, int16, bool, uint32, uint32, uint32, uint32, uint32))&Perl_Client_ReturnItem);
+	package.add("ReturnItem", (void(*)(Client*, uint32, int16, bool, uint32, uint32, uint32, uint32, uint32, uint16))&Perl_Client_ReturnItem);
 	package.add("SummonBaggedItems", &Perl_Client_SummonBaggedItems);
+	package.add("SummonFixedItem", (void(*)(Client*, uint32))&Perl_Client_SummonFixedItem);
+	package.add("SummonFixedItem", (void(*)(Client*, uint32, int16))&Perl_Client_SummonFixedItem);
+	package.add("SummonFixedItem", (void(*)(Client*, uint32, int16, bool))&Perl_Client_SummonFixedItem);
+	package.add("SummonFixedItem", (void(*)(Client*, uint32, int16, bool, uint32))&Perl_Client_SummonFixedItem);
+	package.add("SummonFixedItem", (void(*)(Client*, uint32, int16, bool, uint32, uint32))&Perl_Client_SummonFixedItem);
+	package.add("SummonFixedItem", (void(*)(Client*, uint32, int16, bool, uint32, uint32, uint32))&Perl_Client_SummonFixedItem);
+	package.add("SummonFixedItem", (void(*)(Client*, uint32, int16, bool, uint32, uint32, uint32, uint32))&Perl_Client_SummonFixedItem);
+	package.add("SummonFixedItem", (void(*)(Client*, uint32, int16, bool, uint32, uint32, uint32, uint32, uint32))&Perl_Client_SummonFixedItem);
+	package.add("SummonFixedItem", (void(*)(Client*, uint32, int16, bool, uint32, uint32, uint32, uint32, uint32, uint16))&Perl_Client_SummonFixedItem);
 	package.add("SummonItem", (void(*)(Client*, uint32))&Perl_Client_SummonItem);
 	package.add("SummonItem", (void(*)(Client*, uint32, int16))&Perl_Client_SummonItem);
 	package.add("SummonItem", (void(*)(Client*, uint32, int16, bool))&Perl_Client_SummonItem);

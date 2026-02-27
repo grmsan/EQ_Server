@@ -312,6 +312,7 @@
 	void Handle_OP_TradeSkillCombine(const EQApplicationPacket *app);
 	void Handle_OP_TradeSkillRecipeInspect(const EQApplicationPacket* app);
 	void Handle_OP_Translocate(const EQApplicationPacket *app);
+	void Handle_OP_WaypointRequest(const EQApplicationPacket *app);
 	void Handle_OP_TributeItem(const EQApplicationPacket *app);
 	void Handle_OP_TributeMoney(const EQApplicationPacket *app);
 	void Handle_OP_TributeNPC(const EQApplicationPacket *app);

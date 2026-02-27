@@ -164,7 +164,7 @@ Effects are defined in **`common/spdat.h`** in the `SpellEffect` namespace.
 | 99 | Root | Immobilize | base1 = duration modifier |
 | 100 | HealOverTime | HoT | base1 = HP per tick |
 
-See **SPELL_EFFECTS_REFERENCE.md** for complete list of all ~500 effects.
+For effect IDs and names, use `common/spdat.h` and existing rows in `spells_new`.
 
 ### Effect Value Fields
 
@@ -245,8 +245,8 @@ INSERT INTO spells_new (
 
 #### 4. Test In-Game
 
-```
-/castspell 90001
+```text
+#castspell 90001
 ```
 
 If it works, you're done! Most spells require no C++ code.
@@ -495,12 +495,12 @@ effect_base_value2 = 11    -- Block all AttackSpeed buffs
 
 ### Testing Stacking
 
-```
-/buff [spell_id]    # Apply buff to yourself
-/nobuff             # Remove all buffs
+```text
+#castspell [buff_spell_id]    # Apply first buff
+#castspell [other_spell_id]   # Apply second buff
 ```
 
-Try casting conflicting buffs and observe which persists.
+Try casting conflicting buffs and observe which one remains.
 
 ---
 
@@ -532,12 +532,14 @@ Most servers use **client-embedded** spell files. Server just references spell I
 2. **Use spell editor**: Modify client's spell file
 3. **Dynamic spell loading**: Send spell data via packets (advanced)
 
-### Spell File Editing
+### Repo Client Sync (`server_manager.py`)
 
-**Tool**: EQ Spell Editor (community tool)
-**File**: `spells_us.txt` or `spells_us_new.txt` in client directory
+This repository's intended client sync flow is:
 
-You can edit client spell file to match server database.
+1. Run shared memory after spell DB changes.
+2. Export `spells_us.txt` from Server Manager.
+3. If spell text/related AA text changed, export `dbstr_us.txt` too.
+4. Fully restart client.
 
 ---
 
@@ -545,24 +547,16 @@ You can edit client spell file to match server database.
 
 ### GM Commands
 
-```bash
+```text
 # Cast spells
-/castspell [spell_id]         # Cast on yourself
-/cast [spell_id]              # Cast on target
-/targetspell [spell_id]       # Cast on target from target
-
-# Buff management
-/buff [spell_id]              # Apply buff (bypasses casting)
-/buffme [spell_id]            # Apply buff on self
-/nobuff                       # Remove all buffs
+#castspell [spell_id]         # Cast on yourself
+#cast [spell_id]              # Cast on target
 
 # Spell info
-/spellinfo [spell_id]         # Show spell details
-/spellinfo [spell_name]       # Search by name
+#findspell [name|id]          # Search spell info
 
 # Memory slots
-/memspell [spell_id] [slot]   # Memorize spell in slot (0-15)
-/unscribespells               # Clear all memorized spells
+#memspell [spell_id] [slot]   # Memorize spell in slot (0-15)
 ```
 
 ### Debugging Spell Effects
@@ -590,9 +584,9 @@ Log(Logs::General, Logs::Spells,
 
 #### Verify Bonuses
 
-```
-/showstats    # Show your current stat bonuses
-/mystats      # Show detailed stats breakdown
+```text
+#showstats    # Show your current stat bonuses
+#mystats      # Show detailed stats breakdown
 ```
 
 ### Common Issues
@@ -683,6 +677,6 @@ Spells are the most flexible and powerful system in EQEmulator:
 
 Next Steps:
 - Create your first custom spell
-- Review **SPELL_EFFECTS_REFERENCE.md** for effect details
+- Review `common/spdat.h` for effect IDs and names
 - Examine live spells in database for examples
 - Read **DISCIPLINES_GUIDE.md** for combat abilities

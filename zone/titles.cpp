@@ -136,7 +136,7 @@ std::vector<TitlesRepository::Titles> TitleManager::GetEligibleTitles(Client* c)
 			continue;
 		}
 
-		if (t.class_ >= Class::None && c->GetBaseClass() != t.class_) {
+		if (t.class_ >= Class::None && !c->HasClass(t.class_)) {
 			continue;
 		}
 

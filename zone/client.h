@@ -295,6 +295,23 @@ public:
 	bool RemoveExtraClass(uint8 class_id);
 	uint8 GetClassesCount();
 	virtual bool HasClass(uint8 class_id) const override;
+	bool HasClass(const std::string& class_name) const;
+
+	// THJ waypoint compatibility hooks used by imported quest scripts.
+	bool UnlockWaypoint(int32 waypoint_id);
+	bool UnlockWaypoint(std::string waypoint_shortname);
+	bool IsWaypointUnlocked(std::string waypoint_shortname);
+	void SendWaypointList(bool force = true);
+	bool AllowAccountWaypoints() const;
+	bool CheckWaypointGroupFeature();
+	void EnableWaypointGroupFeature();
+	void TransportToWaypoint(uint32 waypoint_id);
+	bool GetWaypointGroupFeatureState();
+	void SetWaypointGroupFeatureState(bool val);
+	bool GetWaypointAutoTransportState();
+	void SetWaypointAutoTransportState(bool val);
+	void PromptWaypointTransport(uint32 zone_id, uint32 instance_id, float x, float y, float z, float heading);
+	void WaypointTransport(uint32 zone_id, uint32 instance_id, float x, float y, float z, float heading, ZoneMode zm);
 
 	void SendChatLineBreak(uint16 color = Chat::White);
 
@@ -352,6 +369,7 @@ public:
 	void GrantNameChange();
 	bool IsPetNameChangeAllowed();
 	void GrantPetNameChange();
+	void GrantPetNameChange(uint8 class_id);
 	void ClearPetNameChange();
 	void InvokeChangePetName(bool immediate = true);
 	bool ChangePetName(std::string new_name);
@@ -1092,6 +1110,8 @@ public:
 	bool GrantAlternateAdvancementAbility(int aa_id, int points, bool ignore_cost = false);
 	void IncrementAlternateAdvancementRank(int rank_id);
 	void ActivateAlternateAdvancementAbility(int rank_id, int target_id);
+	void EnsureBazaarAndBackAA();
+	bool HandleBazaarAndBackTeleport(uint32 timer_id, int timer_duration);
 	void SendAlternateAdvancementPoints();
 	void SendAlternateAdvancementTimer(int ability, int begin, int end);
 	void SendAlternateAdvancementTimers();
@@ -1162,6 +1182,10 @@ public:
 
 	int GetAAEXPPercentage();
 	int GetEXPPercentage();
+	bool IsSeasonal();
+	int GetKillCount(int race_id);
+	bool ConsumeItemOnCursor();
+	bool ConsumeUnspentAA();
 
 	// Item methods
 	void UseAugmentContainer(int container_slot);
@@ -1190,6 +1214,8 @@ public:
 	void PutLootInInventory(int16 slot_id, const EQ::ItemInstance &inst, LootItem** bag_item_data = 0);
 	bool AutoPutLootInInventory(EQ::ItemInstance& inst, bool try_worn = false, bool try_cursor = true, LootItem** bag_item_data = 0);
 	bool SummonItem(uint32 item_id, int16 charges = -1, uint32 aug1 = 0, uint32 aug2 = 0, uint32 aug3 = 0, uint32 aug4 = 0, uint32 aug5 = 0, uint32 aug6 = 0, bool attuned = false, uint16 to_slot = EQ::invslot::slotCursor, uint32 ornament_icon = 0, uint32 ornament_idfile = 0, uint32 ornament_hero_model = 0);
+	bool SummonFixedItem(uint32 item_id, int16 charges = -1, uint32 aug1 = 0, uint32 aug2 = 0, uint32 aug3 = 0, uint32 aug4 = 0, uint32 aug5 = 0, uint32 aug6 = 0, bool attuned = false, uint16 to_slot = EQ::invslot::slotCursor, uint32 ornament_icon = 0, uint32 ornament_idfile = 0, uint32 ornament_hero_model = 0);
+	bool ReturnItem(uint32 item_id, int16 charges = -1, uint32 aug1 = 0, uint32 aug2 = 0, uint32 aug3 = 0, uint32 aug4 = 0, uint32 aug5 = 0, uint32 aug6 = 0, bool attuned = false, uint16 to_slot = EQ::invslot::slotCursor, uint32 ornament_icon = 0, uint32 ornament_idfile = 0, uint32 ornament_hero_model = 0);
 	void SummonItemIntoInventory(uint32 item_id, int16 charges = -1, uint32 aug1 = 0, uint32 aug2 = 0, uint32 aug3 = 0, uint32 aug4 = 0, uint32 aug5 = 0, uint32 aug6 = 0, bool is_attuned = false);
 	void SummonBaggedItems(uint32 bag_item_id, const std::vector<LootItem>& bag_items);
 	void SetStats(uint8 type,int16 set_val);

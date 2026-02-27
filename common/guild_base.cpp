@@ -844,8 +844,11 @@ bool BaseGuildManager::QueryWithLogging(std::string query, const char *errmsg)
 #define GuildMemberBaseQuery \
 "SELECT c.`id`, c.`name`, c.`class`, c.`level`, c.`last_login`, c.`zone_id`," \
 " g.`guild_id`, g.`rank`, g.`tribute_enable`, g.`total_tribute`, g.`last_tribute`," \
-" g.`banker`, g.`public_note`, g.`alt`, g.`online` " \
-" FROM `character_data` AS c LEFT JOIN `guild_members` AS g ON c.`id` = g.`char_id` "
+" g.`banker`, g.`public_note`, g.`alt`, g.`online`," \
+" db.`value` AS `class_bitmask` " \
+" FROM `character_data` AS c " \
+" LEFT JOIN `guild_members` AS g ON c.`id` = g.`char_id` " \
+" LEFT JOIN `data_buckets` AS db ON c.`id` = db.`character_id` AND db.`key` = 'GestaltClasses' "
 static void ProcessGuildMember(MySQLRequestRow row, CharGuildInfo &into)
 {
 	//fields from `characer_`
@@ -866,6 +869,7 @@ static void ProcessGuildMember(MySQLRequestRow row, CharGuildInfo &into)
 	into.public_note    = row[12] ? row[12] : "";
 	into.alt            = row[13] ? (row[13][0] == '0' ? false : true) : false;
 	into.online         = row[14] ? (row[14][0] == '0' ? false : true) : false;
+	uint16 class_bitmask = row[15] ? Strings::ToUnsignedInt(row[15]) : 0;
 
 	//a little sanity checking/cleanup
 	if (into.guild_id == 0) {
@@ -873,6 +877,11 @@ static void ProcessGuildMember(MySQLRequestRow row, CharGuildInfo &into)
 	}
 	if (into.rank > GUILD_MAX_RANK + 1) {
 		into.rank = GUILD_RANK_NONE;
+	}
+
+	if (class_bitmask) {
+		into.class_ = into.level;
+		into.level = class_bitmask;
 	}
 }
 

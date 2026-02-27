@@ -18,10 +18,10 @@ DELETE FROM db_str          WHERE id IN (110010, 110011, 10010, 10011);
 -- Spell definition (used by all ranks; damage is overridden/scaled in code)
 INSERT INTO spells_new (
     id, name, player_1, you_cast, other_casts, cast_on_other,
-    cast_time, buffduration, buffdurationformula, `range`, targettype, skill,
+    cast_time, buffdurationformula, buffduration, `range`, targettype, skill,
     effectid1, effect_base_value1, effect_limit_value1,
     effectid2, effect_base_value2, effect_limit_value2,
-    goodEffect, TargetAnim, buffduration, buffdurationformula
+    goodEffect, ResistDiff, TargetAnim
 ) VALUES (
     65010,
     'Colossal Smash',
@@ -30,9 +30,11 @@ INSERT INTO spells_new (
     'unleashes a colossal smash!',
     'are smashed by a colossal blow!',
     0,
-    50,
-    5,
-    51,        -- throwing anim for now; damage is melee-like in code
+    0,
+    60,        -- 6 seconds duration
+    50,        -- short melee-ranged activation
+    5,         -- single target enemy
+    51,        -- throwing skill for visuals; damage is melee-like in code
     79,        -- CurrentHPOnce (damage), base overridden in code via scaler
     -500,      -- placeholder, real damage is computed in zone/spell_effects.cpp
     0,
@@ -40,9 +42,8 @@ INSERT INTO spells_new (
     -10,       -- base value (scaled in code)
     0,
     0,         -- detrimental
-    45,        -- throw animation; change if you want different visuals
-    60,        -- 6 seconds duration
-    0
+    -150,
+    45         -- throw animation; change if you want different visuals
 );
 
 -- db_str entries for name/description

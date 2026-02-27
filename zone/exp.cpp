@@ -1337,3 +1337,82 @@ uint32 Client::GetRequiredAAExperience() {
 
 	return RuleI(AA, ExpPerPoint);
 }
+
+bool Client::IsSeasonal()
+{
+	const auto seasonal_rule = RuleI(Custom, EnableSeasonalCharacters);
+	if (seasonal_rule <= 0) {
+		return false;
+	}
+
+	return Strings::ToInt(GetBucket("SeasonalCharacter"), 0) == seasonal_rule;
+}
+
+int Client::GetKillCount(int race_id)
+{
+	if (race_id <= 0) {
+		return 0;
+	}
+
+	auto results = database.QueryDatabase(fmt::format(
+		"SELECT count FROM account_kill_counts WHERE account_id = {} AND race_id = {} LIMIT 1",
+		AccountID(),
+		race_id
+	));
+
+	if (!results.Success() || results.RowCount() == 0) {
+		return 0;
+	}
+
+	return Strings::ToInt((*results.begin())[0], 0);
+}
+
+bool Client::ConsumeUnspentAA()
+{
+	auto pow_item = m_inv.GetItem(EQ::invslot::slotPowerSource);
+	if (!pow_item) {
+		Message(Chat::SpellFailure, "You must have a Power Source equipped to use this ability.");
+		return false;
+	}
+
+	if (m_pp.aapoints == 0) {
+		Message(Chat::SpellFailure, "You have no unspent AA points to consume.");
+		return false;
+	}
+
+	const auto consumed = m_pp.aapoints;
+	m_pp.aapoints = 0;
+	SendAlternateAdvancementStats();
+	Message(Chat::Yellow, "You consume %u unspent AA point%s.", consumed, consumed == 1 ? "" : "s");
+	return true;
+}
+
+bool Client::ConsumeItemOnCursor()
+{
+	auto pow_item = m_inv.GetItem(EQ::invslot::slotPowerSource);
+	if (!pow_item) {
+		Message(Chat::SpellFailure, "You must place an item in your Power Source slot first.");
+		return false;
+	}
+
+	auto cur_item = m_inv.GetItem(EQ::invslot::slotCursor);
+	if (!cur_item) {
+		Message(Chat::SpellFailure, "You must place an item on your cursor first.");
+		return false;
+	}
+
+	if (cur_item->IsAttuned()) {
+		Message(Chat::SpellFailure, "You may not consume attuned items.");
+		return false;
+	}
+
+	const bool matches_source_family = (cur_item->GetID() % 1000000) == (pow_item->GetID() % 1000000);
+	if (!matches_source_family || cur_item->GetID() >= 2000000) {
+		Message(Chat::SpellFailure, "You may only consume an item matching your equipped Power Source family.");
+		return false;
+	}
+
+	DeleteItemInInventory(EQ::invslot::slotCursor, 0, true, true);
+	Message(Chat::Yellow, "You consume the item on your cursor.");
+	return true;
+}

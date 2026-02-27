@@ -1345,6 +1345,31 @@ struct CombatDamage_Struct
 /* 23 */	uint32 special; // 2 = Rampage, 1 = Wild Rampage
 };
 
+struct WaypointListEntry_Struct {
+	int32_t category_id;
+	int32_t waypoint_id;
+	uint8_t enabled;
+	char name[64];
+};
+
+struct WaypointList_Struct {
+	bool group_enabled;
+	bool expedition_enabled;
+	bool group_selected;
+	bool force_show;
+	bool autoconfirm_selected;
+	uint32_t entry_count;
+	WaypointListEntry_Struct entries[];
+};
+
+struct WaypointRequest_Struct
+{
+	int32_t waypoint_id;
+	bool expedition_selected;
+	bool group_selected;
+	bool autoconfirm_selected;
+};
+
 /*
 ** Consider Struct
 */

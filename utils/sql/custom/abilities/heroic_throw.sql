@@ -117,7 +117,7 @@ INSERT INTO aa_ranks (
       10000,                          -- upper_hotkey_sid (db_str id for name)
       -1,                             -- lower_hotkey_sid (-1 = none)
       10000,                          -- title_sid (db_str id for name)
-      10001,                          -- desc_sid (db_str id for description)
+      10000,                          -- desc_sid (db_str id for description)
       0,                              -- cost (0 AA points - free!)
       5,                              -- level_req (Level 5 minimum)
       65000,                          -- spell (Links to spell ID above)

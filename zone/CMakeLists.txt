@@ -331,6 +331,7 @@ set(gm_command_sources
     gm_commands/attack.cpp
     gm_commands/augmentitem.cpp
     gm_commands/ban.cpp
+    gm_commands/bazaarpull.cpp
     gm_commands/bugs.cpp
     gm_commands/camerashake.cpp
     gm_commands/castspell.cpp
@@ -463,6 +464,7 @@ set(gm_command_sources
     gm_commands/suspendmulti.cpp
     gm_commands/takeplatinum.cpp
     gm_commands/task.cpp
+    gm_commands/test.cpp
     gm_commands/traindisc.cpp
     gm_commands/tune.cpp
     gm_commands/undye.cpp

@@ -689,109 +689,69 @@ int64 Client::CalcMaxMana()
 
 int64 Client::CalcBaseMana()
 {
-	uint8 mana_class = GetClass();
-	for (const uint8 class_id : {
-		Class::Wizard,
-		Class::Magician,
-		Class::Necromancer,
-		Class::Enchanter,
-		Class::Cleric,
-		Class::Druid,
-		Class::Shaman,
-		Class::Ranger,
-		Class::Paladin,
-		Class::ShadowKnight,
-		Class::Bard,
-		Class::Beastlord
-	}) {
-		if (HasClass(class_id)) {
-			mana_class = class_id;
-			break;
+	const auto calc_base_mana_for_class = [this](uint8 class_id) -> int64 {
+		int converted_wis_int = 0;
+		int mind_lesser_factor = 0;
+		int mind_factor = 0;
+		int wis_int = 0;
+		int64 max_m = 0;
+
+		const bool uses_int = IsINTCasterClass(class_id) || IsHeroicINTCasterClass(class_id);
+		const bool uses_wis = IsWISCasterClass(class_id) || IsHeroicWISCasterClass(class_id);
+
+		if (uses_int) {
+			wis_int = GetINT();
+		} else if (uses_wis) {
+			wis_int = GetWIS();
+		} else {
+			return 0;
 		}
-	}
-
-	int   ConvertedWisInt = 0;
-	int   MindLesserFactor, MindFactor;
-	int   WisInt          = 0;
-	int64 base_mana       = 0;
-	int   wisint_mana     = 0;
-	int64 max_m           = 0;
-
-	// Hybrids still use INT/WIS for mana depending on class.
-	const bool uses_int = IsINTCasterClass(mana_class) || IsHeroicINTCasterClass(mana_class);
-	const bool uses_wis = IsWISCasterClass(mana_class) || IsHeroicWISCasterClass(mana_class);
-
-	if (uses_int) {
-		WisInt = GetINT();
 
 		if (ClientVersion() >= EQ::versions::ClientVersion::SoF && RuleB(Character, SoDClientUseSoDHPManaEnd)) {
-			ConvertedWisInt = WisInt;
+			converted_wis_int = wis_int;
 
-			int over200 = WisInt;
-			if (WisInt > 100) {
-				if (WisInt > 200) {
-					over200 = (WisInt - 200) / -2 + WisInt;
+			int over200 = wis_int;
+			if (wis_int > 100) {
+				if (wis_int > 200) {
+					over200 = (wis_int - 200) / -2 + wis_int;
 				}
-				ConvertedWisInt = (3 * over200 - 300) / 2 + over200;
+				converted_wis_int = (3 * over200 - 300) / 2 + over200;
 			}
 
-			auto base_data = zone->GetBaseData(GetLevel(), mana_class);
+			auto base_data = zone->GetBaseData(GetLevel(), class_id);
 			if (base_data.level == GetLevel()) {
-				max_m = base_data.mana + (ConvertedWisInt * base_data.mana_fac) + itembonuses.heroic_max_mana;
+				max_m = base_data.mana + (converted_wis_int * base_data.mana_fac) + itembonuses.heroic_max_mana;
 			}
 		} else {
-			if (((WisInt - 199) / 2) > 0) {
-				MindLesserFactor = (WisInt - 199) / 2;
-			} else {
-				MindLesserFactor = 0;
+			if (((wis_int - 199) / 2) > 0) {
+				mind_lesser_factor = (wis_int - 199) / 2;
 			}
 
-			MindFactor = WisInt - MindLesserFactor;
-
-			if (WisInt > 100) {
-				max_m = (((5 * (MindFactor + 20)) / 2) * 3 * GetLevel() / 40);
+			mind_factor = wis_int - mind_lesser_factor;
+			if (wis_int > 100) {
+				max_m = (((5 * (mind_factor + 20)) / 2) * 3 * GetLevel() / 40);
 			} else {
-				max_m = (((5 * (MindFactor + 200)) / 2) * 3 * GetLevel() / 100);
+				max_m = (((5 * (mind_factor + 200)) / 2) * 3 * GetLevel() / 100);
 			}
 		}
-	} else if (uses_wis) {
-		WisInt = GetWIS();
 
-		if (ClientVersion() >= EQ::versions::ClientVersion::SoF && RuleB(Character, SoDClientUseSoDHPManaEnd)) {
-			ConvertedWisInt = WisInt;
+		return max_m;
+	};
 
-			int over200 = WisInt;
-			if (WisInt > 100) {
-				if (WisInt > 200) {
-					over200 = (WisInt - 200) / -2 + WisInt;
-				}
-				ConvertedWisInt = (3 * over200 - 300) / 2 + over200;
+	if (RuleB(Custom, MulticlassingEnabled)) {
+		int64 highest_base_mana = 0;
+		for (uint8 class_id = Class::Warrior; class_id <= Class::Berserker; ++class_id) {
+			if (!HasClass(class_id)) {
+				continue;
 			}
 
-			auto base_data = zone->GetBaseData(GetLevel(), mana_class);
-			if (base_data.level == GetLevel()) {
-				max_m = base_data.mana + (ConvertedWisInt * base_data.mana_fac) + itembonuses.heroic_max_mana;
-			}
-		} else {
-			if (((WisInt - 199) / 2) > 0) {
-				MindLesserFactor = (WisInt - 199) / 2;
-			} else {
-				MindLesserFactor = 0;
-			}
-
-			MindFactor = WisInt - MindLesserFactor;
-
-			if (WisInt > 100) {
-				max_m = (((5 * (MindFactor + 20)) / 2) * 3 * GetLevel() / 40);
-			} else {
-				max_m = (((5 * (MindFactor + 200)) / 2) * 3 * GetLevel() / 100);
-			}
+			highest_base_mana = std::max(highest_base_mana, calc_base_mana_for_class(class_id));
 		}
-	} else {
-		max_m = 0;
+
+		return highest_base_mana;
 	}
 
-	return max_m;
+	return calc_base_mana_for_class(GetClass());
 }
 
 int64 Client::CalcBaseManaRegen()
@@ -1784,47 +1744,64 @@ void Client::CalcMaxEndurance()
 
 int64 Client::CalcBaseEndurance()
 {
-	int64 base_end = 0;
-	if (ClientVersion() >= EQ::versions::ClientVersion::SoF && RuleB(Character, SoDClientUseSoDHPManaEnd)) {
-		double stats = (GetSTR() + GetSTA() + GetDEX() + GetAGI()) / 4.0f;
+	const auto calc_base_endurance_for_class = [this](uint8 class_id) -> int64 {
+		int64 base_end = 0;
 
-		if (stats > 201.0f) {
-			stats = 1.25f * (stats - 201.0f) + 352.5f;
-		}
-		else if (stats > 100.0f) {
-			stats = 2.5f * (stats - 100.0f) + 100.0f;
-		}
-		auto base_data = zone->GetBaseData(GetLevel(), GetClass());
-		if (base_data.level == GetLevel()) {
-			base_end = base_data.end + itembonuses.heroic_max_end + (base_data.end_fac * static_cast<int>(stats));
-		}
-	}
-	else {
-		int Stats = GetSTR() + GetSTA() + GetDEX() + GetAGI();
-		int LevelBase = GetLevel() * 15;
-		int at_most_800 = Stats;
-		if (at_most_800 > 800) {
-			at_most_800 = 800;
-		}
-		int Bonus400to800 = 0;
-		int HalfBonus400to800 = 0;
-		int Bonus800plus = 0;
-		int HalfBonus800plus = 0;
-		int BonusUpto800 = int( at_most_800 / 4 ) ;
-		if (Stats > 400) {
-			Bonus400to800 = int( (at_most_800 - 400) / 4 );
-			HalfBonus400to800 = int( std::max( ( at_most_800 - 400 ), 0 ) / 8 );
-			if (Stats > 800) {
-				Bonus800plus = int( (Stats - 800) / 8 ) * 2;
-				HalfBonus800plus = int( (Stats - 800) / 16 );
+		if (ClientVersion() >= EQ::versions::ClientVersion::SoF && RuleB(Character, SoDClientUseSoDHPManaEnd)) {
+			double stats = (GetSTR() + GetSTA() + GetDEX() + GetAGI()) / 4.0f;
+
+			if (stats > 201.0f) {
+				stats = 1.25f * (stats - 201.0f) + 352.5f;
+			} else if (stats > 100.0f) {
+				stats = 2.5f * (stats - 100.0f) + 100.0f;
 			}
+
+			auto base_data = zone->GetBaseData(GetLevel(), class_id);
+			if (base_data.level == GetLevel()) {
+				base_end = base_data.end + itembonuses.heroic_max_end + (base_data.end_fac * static_cast<int>(stats));
+			}
+		} else {
+			int stats = GetSTR() + GetSTA() + GetDEX() + GetAGI();
+			int level_base = GetLevel() * 15;
+			int at_most_800 = std::min(stats, 800);
+
+			int bonus_400_to_800 = 0;
+			int half_bonus_400_to_800 = 0;
+			int bonus_800_plus = 0;
+			int half_bonus_800_plus = 0;
+			int bonus_upto_800 = at_most_800 / 4;
+
+			if (stats > 400) {
+				bonus_400_to_800 = (at_most_800 - 400) / 4;
+				half_bonus_400_to_800 = std::max(at_most_800 - 400, 0) / 8;
+				if (stats > 800) {
+					bonus_800_plus = ((stats - 800) / 8) * 2;
+					half_bonus_800_plus = (stats - 800) / 16;
+				}
+			}
+
+			int64 bonus_sum = bonus_upto_800 + bonus_400_to_800 + half_bonus_400_to_800 + bonus_800_plus + half_bonus_800_plus;
+			base_end = level_base;
+			base_end += (bonus_sum * 3 * GetLevel()) / 40;
 		}
-		int64 bonus_sum = BonusUpto800 + Bonus400to800 + HalfBonus400to800 + Bonus800plus + HalfBonus800plus;
-		base_end = LevelBase;
-		//take all of the sums from above, then multiply by level*0.075
-		base_end += ( bonus_sum * 3 * GetLevel() ) / 40;
+
+		return base_end;
+	};
+
+	if (RuleB(Custom, MulticlassingEnabled)) {
+		int64 highest_base_endur = 0;
+		for (uint8 class_id = Class::Warrior; class_id <= Class::Berserker; ++class_id) {
+			if (!HasClass(class_id)) {
+				continue;
+			}
+
+			highest_base_endur = std::max(highest_base_endur, calc_base_endurance_for_class(class_id));
+		}
+
+		return highest_base_endur > 0 ? highest_base_endur : 5;
 	}
-	return base_end;
+
+	return calc_base_endurance_for_class(GetClass());
 }
 
 int64 Client::CalcEnduranceRegen(bool bCombat)

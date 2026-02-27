@@ -5001,6 +5001,14 @@ void Client::GrantPetNameChange() {
 	InvokeChangePetName(true);
 }
 
+void Client::GrantPetNameChange(uint8 class_id)
+{
+	GrantPetNameChange();
+	if (class_id > 0) {
+		SetBucket("PetNameChangeClassID", std::to_string(class_id), "10m");
+	}
+}
+
 void Client::ClearPetNameChange() {
 	DataBucketKey k = GetScopedBucketKeys();
 	k.key = "PetNameChangesAllowed";
@@ -13576,6 +13584,97 @@ std::string Client::GetAccountBucketRemaining(std::string bucket_name)
 static constexpr const char *kGestaltClassesBucketKey = "GestaltClasses";
 static constexpr const char *kLegacyMulticlassBucketKey = "multiclass.classes_bitmask";
 
+namespace {
+struct WaypointRecord {
+	int32 id = 0;
+	std::string shortname;
+	std::string long_name;
+	int32 category = 0;
+	float x = 0.0f;
+	float y = 0.0f;
+	float z = 0.0f;
+	float heading = 0.0f;
+};
+
+std::vector<WaypointRecord> LoadAllWaypoints()
+{
+	std::vector<WaypointRecord> waypoints;
+
+	auto results = database.QueryDatabase(
+		"SELECT id, shortname, long_name, category, x, y, z, heading "
+		"FROM thj_waypoints ORDER BY category, id"
+	);
+
+	if (!results.Success()) {
+		return waypoints;
+	}
+
+	for (auto row = results.begin(); row != results.end(); ++row) {
+		WaypointRecord entry;
+		entry.id = Strings::ToInt(row[0]);
+		entry.shortname = row[1] ? row[1] : "";
+		entry.long_name = row[2] ? row[2] : "";
+		entry.category = Strings::ToInt(row[3]);
+		entry.x = Strings::ToFloat(row[4]);
+		entry.y = Strings::ToFloat(row[5]);
+		entry.z = Strings::ToFloat(row[6]);
+		entry.heading = Strings::ToFloat(row[7]);
+		waypoints.emplace_back(std::move(entry));
+	}
+
+	return waypoints;
+}
+
+std::set<int32> LoadUnlockedWaypointIds(const Client *client)
+{
+	std::set<int32> unlocked_ids;
+	if (!client) {
+		return unlocked_ids;
+	}
+
+	const uint16 race_id = client->GetBaseRace();
+	const uint32 class_bits = client->GetClassesBits();
+	const uint8 level = client->GetLevel();
+
+	auto defaults_results = database.QueryDatabase(fmt::format(
+		"SELECT waypoint_id FROM thj_waypoints_default "
+		"WHERE (race_id = 0 OR race_id = 65535 OR race_id = {}) "
+		"AND (class_mask = 65535 OR (class_mask & {}) > 0) "
+		"AND min_level <= {} AND max_level >= {}",
+		race_id,
+		class_bits,
+		level,
+		level
+	));
+
+	if (defaults_results.Success()) {
+		for (auto row = defaults_results.begin(); row != defaults_results.end(); ++row) {
+			unlocked_ids.insert(Strings::ToInt(row[0]));
+		}
+	}
+
+	const bool account_waypoints = client->AllowAccountWaypoints();
+	const std::string table_name = account_waypoints ? "thj_waypoints_account" : "thj_waypoints_character";
+	const std::string id_col = account_waypoints ? "account_id" : "character_id";
+	const uint32 id_val = account_waypoints ? client->AccountID() : client->CharacterID();
+
+	auto unlock_results = database.QueryDatabase(fmt::format(
+		"SELECT waypoint_id FROM {} WHERE {} = {}",
+		table_name,
+		id_col,
+		id_val
+	));
+
+	if (unlock_results.Success()) {
+		for (auto row = unlock_results.begin(); row != unlock_results.end(); ++row) {
+			unlocked_ids.insert(Strings::ToInt(row[0]));
+		}
+	}
+
+	return unlocked_ids;
+}
+}
+
 uint32 Client::GetClassesBits() const
 {
 	const uint32 base_bit = GetPlayerClassBit(GetClass());
@@ -13699,6 +13798,45 @@ bool Client::HasClass(uint8 class_id) const
 	return (GetClassesBits() & bit) != 0;
 }
 
+bool Client::HasClass(const std::string& class_name) const
+{
+	if (class_name.empty()) {
+		return false;
+	}
+
+	std::string normalized = Strings::ToLower(class_name);
+	Strings::FindReplace(normalized, "_", " ");
+	Strings::FindReplace(normalized, "-", " ");
+	Strings::Trim(normalized);
+
+	static const std::unordered_map<std::string, uint8> class_name_map = {
+		{"warrior", Class::Warrior},
+		{"cleric", Class::Cleric},
+		{"paladin", Class::Paladin},
+		{"ranger", Class::Ranger},
+		{"shadow knight", Class::ShadowKnight},
+		{"shadowknight", Class::ShadowKnight},
+		{"druid", Class::Druid},
+		{"monk", Class::Monk},
+		{"bard", Class::Bard},
+		{"rogue", Class::Rogue},
+		{"shaman", Class::Shaman},
+		{"necromancer", Class::Necromancer},
+		{"wizard", Class::Wizard},
+		{"magician", Class::Magician},
+		{"enchanter", Class::Enchanter},
+		{"beastlord", Class::Beastlord},
+		{"berserker", Class::Berserker},
+	};
+
+	const auto it = class_name_map.find(normalized);
+	if (it == class_name_map.end()) {
+		return false;
+	}
+
+	return HasClass(it->second);
+}
+
 bool Client::AddExtraClass(uint8 class_id)
 {
 	if (!RuleB(Custom, MulticlassingEnabled)) {
@@ -13796,6 +13934,293 @@ bool Client::RemoveExtraClass(uint8 class_id)
 	SendEdgeStats();
 	UpdateWho();
 	return true;
+}
+
+bool Client::IsWaypointUnlocked(std::string waypoint_shortname)
+{
+	const auto escaped_shortname = Strings::Escape(waypoint_shortname);
+	auto waypoint_results = database.QueryDatabase(fmt::format(
+		"SELECT id FROM thj_waypoints WHERE shortname = '{}' LIMIT 1",
+		escaped_shortname
+	));
+
+	if (!waypoint_results.Success() || waypoint_results.RowCount() == 0) {
+		return false;
+	}
+
+	const int32 waypoint_id = Strings::ToInt((*waypoint_results.begin())[0]);
+	const auto unlocked_ids = LoadUnlockedWaypointIds(this);
+	return unlocked_ids.find(waypoint_id) != unlocked_ids.end();
+}
+
+bool Client::UnlockWaypoint(std::string waypoint_shortname)
+{
+	const auto escaped_shortname = Strings::Escape(waypoint_shortname);
+	auto waypoint_results = database.QueryDatabase(fmt::format(
+		"SELECT id FROM thj_waypoints WHERE shortname = '{}' LIMIT 1",
+		escaped_shortname
+	));
+
+	if (!waypoint_results.Success() || waypoint_results.RowCount() == 0) {
+		return false;
+	}
+
+	return UnlockWaypoint(Strings::ToInt((*waypoint_results.begin())[0]));
+}
+
+bool Client::UnlockWaypoint(int32 waypoint_id)
+{
+	if (waypoint_id <= 0) {
+		return false;
+	}
+
+	auto exists_results = database.QueryDatabase(fmt::format(
+		"SELECT id FROM thj_waypoints WHERE id = {} LIMIT 1",
+		waypoint_id
+	));
+
+	if (!exists_results.Success() || exists_results.RowCount() == 0) {
+		return false;
+	}
+
+	const bool account_waypoints = AllowAccountWaypoints();
+	const std::string table_name = account_waypoints ? "thj_waypoints_account" : "thj_waypoints_character";
+	const std::string id_col = account_waypoints ? "account_id" : "character_id";
+	const uint32 id_val = account_waypoints ? AccountID() : CharacterID();
+
+	auto dupe_results = database.QueryDatabase(fmt::format(
+		"SELECT 1 FROM {} WHERE {} = {} AND waypoint_id = {} LIMIT 1",
+		table_name,
+		id_col,
+		id_val,
+		waypoint_id
+	));
+
+	if (dupe_results.Success() && dupe_results.RowCount() > 0) {
+		return false;
+	}
+
+	auto insert_results = database.QueryDatabase(fmt::format(
+		"INSERT INTO {} ({}, waypoint_id) VALUES ({}, {})",
+		table_name,
+		id_col,
+		id_val,
+		waypoint_id
+	));
+
+	return insert_results.Success() && insert_results.RowsAffected() > 0;
+}
+
+void Client::SendWaypointList(bool force)
+{
+	const auto all_waypoints = LoadAllWaypoints();
+	if (all_waypoints.empty()) {
+		Message(Chat::White, "Waypoint data is not configured on this server.");
+		return;
+	}
+
+	const auto unlocked_ids = LoadUnlockedWaypointIds(this);
+	const size_t entry_count = all_waypoints.size();
+	const size_t packet_size = sizeof(WaypointList_Struct) + (entry_count * sizeof(WaypointListEntry_Struct));
+
+	auto outapp = new EQApplicationPacket(OP_WaypointList, packet_size);
+	auto *wl = reinterpret_cast<WaypointList_Struct *>(outapp->pBuffer);
+
+	wl->group_enabled = CheckWaypointGroupFeature();
+	wl->expedition_enabled = (CheckWaypointGroupFeature() && GetExpedition());
+	wl->group_selected = GetWaypointGroupFeatureState();
+	wl->autoconfirm_selected = GetWaypointAutoTransportState();
+	wl->force_show = force;
+	wl->entry_count = static_cast<uint32>(entry_count);
+
+	for (size_t i = 0; i < entry_count; ++i) {
+		const auto &wp = all_waypoints[i];
+		auto &entry = wl->entries[i];
+
+		entry.category_id = wp.category;
+		entry.waypoint_id = wp.id;
+		entry.enabled = (unlocked_ids.find(wp.id) != unlocked_ids.end()) ? 1 : 0;
+
+		std::string display_name = wp.long_name;
+		if (wp.shortname == zone->GetShortName()) {
+			display_name = fmt::format("{} [Current Zone]", wp.long_name);
+			entry.enabled = 0;
+		}
+
+		strn0cpy(entry.name, display_name.c_str(), sizeof(entry.name));
+	}
+
+	QueuePacket(outapp);
+	safe_delete(outapp);
+}
+
+bool Client::AllowAccountWaypoints() const
+{
+	return true;
+}
+
+bool Client::CheckWaypointGroupFeature()
+{
+	if (GetGM()) {
+		return true;
+	}
+
+	return !GetAccountBucket("waypoints.group_feature").empty();
+}
+
+void Client::EnableWaypointGroupFeature()
+{
+	SetAccountBucket("waypoints.group_feature", "true");
+	SendWaypointList(false);
+}
+
+bool Client::GetWaypointGroupFeatureState()
+{
+	if (!CheckWaypointGroupFeature()) {
+		return false;
+	}
+
+	return GetBucket("waypoints.group_feature_state") == "enabled";
+}
+
+void Client::SetWaypointGroupFeatureState(bool val)
+{
+	SetBucket("waypoints.group_feature_state", val ? "enabled" : "disabled");
+}
+
+bool Client::GetWaypointAutoTransportState()
+{
+	return GetBucket("waypoints.auto_transport_state") == "enabled";
+}
+
+void Client::SetWaypointAutoTransportState(bool val)
+{
+	SetBucket("waypoints.auto_transport_state", val ? "enabled" : "disabled");
+}
+
+void Client::TransportToWaypoint(uint32 waypoint_id)
+{
+	uint32 zone_id = Zones::BAZAAR;
+	uint32 instance_id = 0;
+	float x = 0.0f;
+	float y = 0.0f;
+	float z = 0.0f;
+	float h = 0.0f;
+	ZoneMode zone_mode = ZoneSolicited;
+
+	if (!waypoint_id) {
+		auto expedition = GetExpedition();
+		if (!expedition || !CheckWaypointGroupFeature()) {
+			return;
+		}
+
+		zone_id = expedition->GetZoneID();
+		instance_id = expedition->GetInstanceID();
+		zone_mode = ZoneMode::ZoneToSafeCoords;
+
+		const auto safe_coords = ZoneStore::Instance()->GetZoneSafeCoordinates(
+			zone_id,
+			database.GetInstanceVersion(instance_id)
+		);
+
+		x = safe_coords.x;
+		y = safe_coords.y;
+		z = safe_coords.z;
+		h = safe_coords.w;
+	}
+	else {
+		const auto all_waypoints = LoadAllWaypoints();
+		const auto unlocked_ids = LoadUnlockedWaypointIds(this);
+
+		const WaypointRecord *selected = nullptr;
+		for (const auto &wp : all_waypoints) {
+			if (wp.id == static_cast<int32>(waypoint_id)) {
+				selected = &wp;
+				break;
+			}
+		}
+
+		if (!selected || unlocked_ids.find(selected->id) == unlocked_ids.end()) {
+			Message(Chat::Red, "That waypoint is not unlocked.");
+			return;
+		}
+
+		zone_id = ZoneID(selected->shortname.c_str());
+		if (!zone_id) {
+			Message(Chat::Red, "That waypoint references an invalid zone.");
+			return;
+		}
+
+		x = selected->x;
+		y = selected->y;
+		z = selected->z;
+		h = selected->heading;
+	}
+
+	if (GetWaypointGroupFeatureState()) {
+		auto *group = GetGroup();
+		if (group) {
+			for (auto &member : group->members) {
+				if (!member || !member->IsClient()) {
+					continue;
+				}
+
+				auto *group_client = member->CastToClient();
+				if (group_client->GetWaypointAutoTransportState()) {
+					group_client->WaypointTransport(zone_id, instance_id, x, y, z, h, zone_mode);
+					continue;
+				}
+
+				group_client->PromptWaypointTransport(zone_id, instance_id, x, y, z, h);
+			}
+			return;
+		}
+	}
+
+	if (GetWaypointAutoTransportState()) {
+		WaypointTransport(zone_id, instance_id, x, y, z, h, zone_mode);
+		return;
+	}
+
+	PromptWaypointTransport(zone_id, instance_id, x, y, z, h);
+}
+
+void Client::PromptWaypointTransport(uint32 zone_id, uint32 instance_id, float x, float y, float z, float heading)
+{
+	if (PendingTranslocate) {
+		return;
+	}
+
+	auto outapp = new EQApplicationPacket(OP_Translocate, sizeof(Translocate_Struct));
+	auto *ts = reinterpret_cast<Translocate_Struct *>(outapp->pBuffer);
+
+	strn0cpy(ts->Caster, "The Magic Map", sizeof(ts->Caster));
+	ts->SpellID = 0;
+	ts->ZoneID = zone_id;
+	ts->x = x;
+	ts->y = y;
+	ts->z = z;
+	ts->unknown008 = 0;
+	ts->Complete = 0;
+
+	PendingTranslocateData.spell_id = 0;
+	PendingTranslocateData.zone_id = zone_id;
+	PendingTranslocateData.instance_id = instance_id;
+	PendingTranslocateData.x = x;
+	PendingTranslocateData.y = y;
+	PendingTranslocateData.z = z;
+	PendingTranslocateData.heading = heading;
+
+	PendingTranslocate = true;
+	TranslocateTime = time(nullptr);
+
+	QueuePacket(outapp);
+	safe_delete(outapp);
+}
+
+void Client::WaypointTransport(uint32 zone_id, uint32 instance_id, float x, float y, float z, float heading, ZoneMode zm)
+{
+	MovePC(zone_id, instance_id, x, y, z, heading, 0, zm);
 }
 
 std::string Client::GetBandolierName(uint8 bandolier_slot)

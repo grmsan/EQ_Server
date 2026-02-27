@@ -1932,6 +1932,30 @@ void SharedDatabase::LoadSpells(void *data, int max_spells) {
 		sp[tempid].min_range = safe_float(231);
 		sp[tempid].no_remove = safe_bool(232);
 		sp[tempid].damage_shield_type = 0;
+
+		if (RuleB(Custom, MulticlassingEnabled)) {
+			if (!sp[tempid].is_discipline) {
+				sp[tempid].timer_id = -1;
+
+				if (sp[tempid].target_type == ST_GroupClientAndPet) {
+					sp[tempid].target_type = ST_Target;
+				}
+			} else {
+				int eligible_class_count = 0;
+				int eligible_class_id = -1;
+
+				for (int class_id = 0; class_id < 16; class_id++) {
+					if (sp[tempid].classes[class_id] <= 70) {
+						eligible_class_count++;
+						eligible_class_id = class_id;
+					}
+				}
+
+				if (eligible_class_count == 1 && eligible_class_id != -1) {
+					sp[tempid].timer_id += (20 * (eligible_class_id + 1));
+				}
+			}
+		}
 	}
 
 	LoadDamageShieldTypes(sp);

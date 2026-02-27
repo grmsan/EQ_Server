@@ -48,6 +48,58 @@ Copyright (C) 2001-2016 EQEMu Development Team (http://eqemulator.net)
 extern WorldServer worldserver;
 extern QueryServ* QServ;
 
+namespace {
+constexpr uint32 kBazaarAndBackAAAbilityID = 32001;
+constexpr uint32 kBazaarAndBackAARankID = 50001;
+constexpr uint32 kBazaarAndBackOriginAAAbilityID = 331;  // THJ-style alias
+constexpr uint32 kBazaarAndBackOriginAARankID = 1000;    // THJ-style alias
+constexpr uint32 kBazaarAndBackZoneID = 151; // bazaar
+constexpr float kBazaarAndBackX = -824.32f;
+constexpr float kBazaarAndBackY = 1.64f;
+constexpr float kBazaarAndBackZ = 3.44f;
+constexpr float kBazaarAndBackH = 256.0f;
+constexpr const char* kBazaarAndBackBucketKey = "thj.bazaar_and_back.return";
+
+struct BazaarBackLocation {
+	uint32 zone_id = 0;
+	uint32 instance_id = 0;
+	float x = 0.0f;
+	float y = 0.0f;
+	float z = 0.0f;
+	float heading = 0.0f;
+};
+
+std::string SerializeBazaarBackLocation(const BazaarBackLocation& location)
+{
+	return fmt::format(
+		"{}|{}|{:.3f}|{:.3f}|{:.3f}|{:.3f}",
+		location.zone_id,
+		location.instance_id,
+		location.x,
+		location.y,
+		location.z,
+		location.heading
+	);
+}
+
+bool ParseBazaarBackLocation(const std::string& raw, BazaarBackLocation& out)
+{
+	auto parts = Strings::Split(raw, '|');
+	if (parts.size() != 6) {
+		return false;
+	}
+
+	out.zone_id = Strings::ToUnsignedInt(parts[0], 0);
+	out.instance_id = Strings::ToUnsignedInt(parts[1], 0);
+	out.x = Strings::ToFloat(parts[2], 0.0f);
+	out.y = Strings::ToFloat(parts[3], 0.0f);
+	out.z = Strings::ToFloat(parts[4], 0.0f);
+	out.heading = Strings::ToFloat(parts[5], 0.0f);
+
+	return out.zone_id != 0;
+}
+} // namespace
+
 void Mob::TemporaryPets(uint16 spell_id, Mob *targ, const char *name_override, uint32 duration_override, bool followme, bool sticktarg, uint16 *eye_id) {
 
 	//It might not be a bad idea to put these into the database, eventually..
@@ -1259,9 +1311,14 @@ void Client::FinishAlternateAdvancementPurchase(AA::Rank *rank, bool ignore_cost
 	} else {
 		SetAA(rank_id, rank->current_value, 0);
 
-		//if not max then send next aa
-		if (rank->next && send_message_and_save) {
-			SendAlternateAdvancementRank(rank->base_ability->id, rank->next->current_value);
+		if (send_message_and_save) {
+			// If there is a next rank, send the next purchasable rank.
+			// If this is a single-rank AA, send the current rank so it appears immediately in the AA window.
+			if (rank->next) {
+				SendAlternateAdvancementRank(rank->base_ability->id, rank->next->current_value);
+			} else {
+				SendAlternateAdvancementRank(rank->base_ability->id, rank->current_value);
+			}
 		}
 	}
 
@@ -1488,6 +1545,24 @@ void Client::ActivateAlternateAdvancementAbility(int rank_id, int target_id) {
 		GetCleanName()
 	);
 
+	if (
+		ability->id == kBazaarAndBackAAAbilityID ||
+		rank->id == kBazaarAndBackAARankID ||
+		ability->id == kBazaarAndBackOriginAAAbilityID ||
+		rank->id == kBazaarAndBackOriginAARankID
+	) {
+		if (!HandleBazaarAndBackTeleport(timer_id, timer_duration)) {
+			LogInfo(
+				"AA DEBUG: bazaar/back handler aborted aa_id [{}] rank_id [{}] (client [{}])",
+				ability->id,
+				rank_id,
+				GetCleanName()
+			);
+		}
+
+		return;
+	}
+
 	if (!IsCastWhileInvisibleSpell(rank->spell))
 		CommonBreakInvisible();
 
@@ -1579,6 +1654,112 @@ void Client::ActivateAlternateAdvancementAbility(int rank_id, int target_id) {
 			}
 		}
 	}
+}
+
+void Client::EnsureBazaarAndBackAA()
+{
+	auto* ability = zone ? zone->GetAlternateAdvancementAbility(kBazaarAndBackAAAbilityID) : nullptr;
+	if (!ability || !ability->first) {
+		return;
+	}
+
+	uint32 charges = 0;
+	if (GetAA(ability->first_rank_id, &charges) > 0) {
+		return;
+	}
+
+	if (!CanUseAlternateAdvancementRank(ability->first)) {
+		return;
+	}
+
+	if (GrantAlternateAdvancementAbility(ability->id, 1, true)) {
+		LogInfo("Granted Bazaar and Back AA [{}] to [{}]", ability->id, GetCleanName());
+	}
+}
+
+bool Client::HandleBazaarAndBackTeleport(uint32 timer_id, int timer_duration)
+{
+	if (dead) {
+		Message(Chat::Red, "You cannot use Bazaar and Back while dead.");
+		return false;
+	}
+
+	if (IsHoveringForRespawn()) {
+		Message(Chat::Red, "You cannot use Bazaar and Back while waiting to respawn.");
+		return false;
+	}
+
+	const bool in_bazaar = (GetZoneID() == kBazaarAndBackZoneID);
+	BazaarBackLocation destination{};
+
+	if (in_bazaar) {
+		const std::string raw = GetBucket(kBazaarAndBackBucketKey);
+		if (raw.empty()) {
+			Message(Chat::Yellow, "Bazaar and Back has no saved return location yet.");
+			return false;
+		}
+
+		if (!ParseBazaarBackLocation(raw, destination)) {
+			Message(Chat::Yellow, "Bazaar and Back return location data is invalid. Use it outside Bazaar to reset.");
+			return false;
+		}
+
+		if (destination.zone_id == kBazaarAndBackZoneID && destination.instance_id == 0) {
+			Message(Chat::Yellow, "Bazaar and Back return location points to Bazaar. Use it outside Bazaar to reset.");
+			return false;
+		}
+
+		if (destination.instance_id > 0) {
+			if (!database.CheckInstanceExists(destination.instance_id)) {
+				Message(Chat::Yellow, "Your saved return instance no longer exists.");
+				DeleteBucket(kBazaarAndBackBucketKey);
+				return false;
+			}
+
+			database.AddClientToInstance(destination.instance_id, CharacterID());
+		}
+	}
+	else {
+		BazaarBackLocation saved_location{};
+		saved_location.zone_id = GetZoneID();
+		saved_location.instance_id = GetInstanceID();
+		saved_location.x = GetX();
+		saved_location.y = GetY();
+		saved_location.z = GetZ();
+		saved_location.heading = GetHeading();
+
+		SetBucket(kBazaarAndBackBucketKey, SerializeBazaarBackLocation(saved_location));
+
+		destination.zone_id = kBazaarAndBackZoneID;
+		destination.instance_id = 0;
+		destination.x = kBazaarAndBackX;
+		destination.y = kBazaarAndBackY;
+		destination.z = kBazaarAndBackZ;
+		destination.heading = kBazaarAndBackH;
+	}
+
+	if (timer_duration < 0) {
+		timer_duration = 0;
+	}
+
+	p_timers.Start(static_cast<pTimerType>(timer_id + pTimerAAStart), timer_duration);
+	if (auto* timer = p_timers.Get(static_cast<pTimerType>(timer_id + pTimerAAStart)); timer) {
+		SendAlternateAdvancementTimer(static_cast<int>(timer_id), timer->GetStartTime(), static_cast<uint32>(time(nullptr)));
+	}
+	else {
+		SendAlternateAdvancementTimers();
+	}
+
+	MovePC(
+		destination.zone_id,
+		destination.instance_id,
+		destination.x,
+		destination.y,
+		destination.z,
+		destination.heading
+	);
+
+	return true;
 }
 
 int Mob::GetAlternateAdvancementCooldownReduction(AA::Rank *rank_in) {
@@ -1803,6 +1984,15 @@ bool Mob::CanUseAlternateAdvancementRank(AA::Rank *rank)
 	// When multiclassing, right-shift and compare against GetClassesBits().
 	// When not multiclassing, use original single-class check.
 	if (RuleB(Custom, MulticlassingEnabled)) {
+		if (rank->base_ability->first_rank_id == aaMnemonicRetention) {
+			return true;
+		}
+
+		// Restrict Fury of Magic rank 6+ to pure casters
+		if (rank->base_ability->first_rank_id == aaFuryofMagic && rank->id > 772 && rank->id <= 4751) {
+			return (GetClassesBits() & 15906);
+		}
+
 		if (IsClient()) {
 			const uint32 aa_classes_normalized = a->classes >> 1;
 			if (!(aa_classes_normalized & CastToClient()->GetClassesBits())) {

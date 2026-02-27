@@ -1,0 +1,1378 @@
+{
+  "quest_pairs": 382,
+  "covered": 154,
+  "missing_npc_type": 19,
+  "missing_spawn": 209,
+  "missing_spawn_rows": [
+    {
+      "zone": "acrylia",
+      "version": null,
+      "npc_id": 154052,
+      "path": "acrylia/154052.lua"
+    },
+    {
+      "zone": "acrylia",
+      "version": null,
+      "npc_id": 154129,
+      "path": "acrylia/154129.lua"
+    },
+    {
+      "zone": "acrylia",
+      "version": null,
+      "npc_id": 154151,
+      "path": "acrylia/154151.lua"
+    },
+    {
+      "zone": "acrylia",
+      "version": null,
+      "npc_id": 154152,
+      "path": "acrylia/154152.lua"
+    },
+    {
+      "zone": "acrylia",
+      "version": null,
+      "npc_id": 154156,
+      "path": "acrylia/154156.lua"
+    },
+    {
+      "zone": "acrylia",
+      "version": null,
+      "npc_id": 154159,
+      "path": "acrylia/154159.lua"
+    },
+    {
+      "zone": "airplane",
+      "version": null,
+      "npc_id": 552,
+      "path": "airplane/552.lua"
+    },
+    {
+      "zone": "airplane",
+      "version": null,
+      "npc_id": 553,
+      "path": "airplane/553.lua"
+    },
+    {
+      "zone": "airplane",
+      "version": null,
+      "npc_id": 554,
+      "path": "airplane/554.lua"
+    },
+    {
+      "zone": "airplane",
+      "version": null,
+      "npc_id": 555,
+      "path": "airplane/555.lua"
+    },
+    {
+      "zone": "airplane",
+      "version": null,
+      "npc_id": 556,
+      "path": "airplane/556.lua"
+    },
+    {
+      "zone": "airplane",
+      "version": null,
+      "npc_id": 557,
+      "path": "airplane/557.lua"
+    },
+    {
+      "zone": "airplane",
+      "version": null,
+      "npc_id": 558,
+      "path": "airplane/558.lua"
+    },
+    {
+      "zone": "airplane",
+      "version": null,
+      "npc_id": 559,
+      "path": "airplane/559.lua"
+    },
+    {
+      "zone": "airplane",
+      "version": null,
+      "npc_id": 560,
+      "path": "airplane/560.lua"
+    },
+    {
+      "zone": "airplane",
+      "version": null,
+      "npc_id": 561,
+      "path": "airplane/561.lua"
+    },
+    {
+      "zone": "airplane",
+      "version": null,
+      "npc_id": 562,
+      "path": "airplane/562.lua"
+    },
+    {
+      "zone": "airplane",
+      "version": null,
+      "npc_id": 563,
+      "path": "airplane/563.lua"
+    },
+    {
+      "zone": "airplane",
+      "version": null,
+      "npc_id": 564,
+      "path": "airplane/564.lua"
+    },
+    {
+      "zone": "airplane",
+      "version": null,
+      "npc_id": 565,
+      "path": "airplane/565.lua"
+    },
+    {
+      "zone": "airplane",
+      "version": null,
+      "npc_id": 566,
+      "path": "airplane/566.lua"
+    },
+    {
+      "zone": "airplane",
+      "version": null,
+      "npc_id": 614,
+      "path": "airplane/614.lua"
+    },
+    {
+      "zone": "airplane",
+      "version": null,
+      "npc_id": 615,
+      "path": "airplane/615.lua"
+    },
+    {
+      "zone": "airplane",
+      "version": null,
+      "npc_id": 616,
+      "path": "airplane/616.lua"
+    },
+    {
+      "zone": "airplane",
+      "version": null,
+      "npc_id": 617,
+      "path": "airplane/617.lua"
+    },
+    {
+      "zone": "airplane",
+      "version": null,
+      "npc_id": 618,
+      "path": "airplane/618.lua"
+    },
+    {
+      "zone": "airplane",
+      "version": null,
+      "npc_id": 619,
+      "path": "airplane/619.lua"
+    },
+    {
+      "zone": "airplane",
+      "version": null,
+      "npc_id": 620,
+      "path": "airplane/620.lua"
+    },
+    {
+      "zone": "airplane",
+      "version": null,
+      "npc_id": 621,
+      "path": "airplane/621.lua"
+    },
+    {
+      "zone": "airplane",
+      "version": null,
+      "npc_id": 622,
+      "path": "airplane/622.lua"
+    },
+    {
+      "zone": "airplane",
+      "version": null,
+      "npc_id": 623,
+      "path": "airplane/623.lua"
+    },
+    {
+      "zone": "airplane",
+      "version": null,
+      "npc_id": 624,
+      "path": "airplane/624.lua"
+    },
+    {
+      "zone": "airplane",
+      "version": null,
+      "npc_id": 625,
+      "path": "airplane/625.lua"
+    },
+    {
+      "zone": "airplane",
+      "version": null,
+      "npc_id": 626,
+      "path": "airplane/626.lua"
+    },
+    {
+      "zone": "airplane",
+      "version": null,
+      "npc_id": 627,
+      "path": "airplane/627.lua"
+    },
+    {
+      "zone": "airplane",
+      "version": null,
+      "npc_id": 628,
+      "path": "airplane/628.lua"
+    },
+    {
+      "zone": "airplane",
+      "version": null,
+      "npc_id": 629,
+      "path": "airplane/629.lua"
+    },
+    {
+      "zone": "airplane",
+      "version": null,
+      "npc_id": 630,
+      "path": "airplane/630.lua"
+    },
+    {
+      "zone": "airplane",
+      "version": null,
+      "npc_id": 631,
+      "path": "airplane/631.lua"
+    },
+    {
+      "zone": "airplane",
+      "version": null,
+      "npc_id": 632,
+      "path": "airplane/632.lua"
+    },
+    {
+      "zone": "airplane",
+      "version": null,
+      "npc_id": 633,
+      "path": "airplane/633.lua"
+    },
+    {
+      "zone": "airplane",
+      "version": null,
+      "npc_id": 634,
+      "path": "airplane/634.lua"
+    },
+    {
+      "zone": "airplane",
+      "version": null,
+      "npc_id": 663,
+      "path": "airplane/663.lua"
+    },
+    {
+      "zone": "airplane",
+      "version": null,
+      "npc_id": 71103,
+      "path": "airplane/71103.lua"
+    },
+    {
+      "zone": "airplane",
+      "version": null,
+      "npc_id": 71107,
+      "path": "airplane/71107.lua"
+    },
+    {
+      "zone": "akheva",
+      "version": null,
+      "npc_id": 179141,
+      "path": "akheva/179141.lua"
+    },
+    {
+      "zone": "akheva",
+      "version": null,
+      "npc_id": 179169,
+      "path": "akheva/179169.lua"
+    },
+    {
+      "zone": "bloodfields",
+      "version": null,
+      "npc_id": 301073,
+      "path": "bloodfields/301073.lua"
+    },
+    {
+      "zone": "bloodfields",
+      "version": null,
+      "npc_id": 301074,
+      "path": "bloodfields/301074.lua"
+    },
+    {
+      "zone": "bloodfields",
+      "version": null,
+      "npc_id": 301075,
+      "path": "bloodfields/301075.lua"
+    },
+    {
+      "zone": "bloodfields",
+      "version": null,
+      "npc_id": 301076,
+      "path": "bloodfields/301076.lua"
+    },
+    {
+      "zone": "bothunder",
+      "version": null,
+      "npc_id": 209086,
+      "path": "bothunder/209086.lua"
+    },
+    {
+      "zone": "bothunder",
+      "version": null,
+      "npc_id": 209107,
+      "path": "bothunder/209107.lua"
+    },
+    {
+      "zone": "bothunder",
+      "version": null,
+      "npc_id": 209122,
+      "path": "bothunder/209122.lua"
+    },
+    {
+      "zone": "bothunder",
+      "version": null,
+      "npc_id": 209123,
+      "path": "bothunder/209123.lua"
+    },
+    {
+      "zone": "bothunder",
+      "version": null,
+      "npc_id": 209124,
+      "path": "bothunder/209124.lua"
+    },
+    {
+      "zone": "bothunder",
+      "version": null,
+      "npc_id": 209125,
+      "path": "bothunder/209125.lua"
+    },
+    {
+      "zone": "bothunder",
+      "version": null,
+      "npc_id": 209126,
+      "path": "bothunder/209126.lua"
+    },
+    {
+      "zone": "cazicthule",
+      "version": null,
+      "npc_id": 48007,
+      "path": "cazicthule/48007.lua"
+    },
+    {
+      "zone": "cazicthule",
+      "version": null,
+      "npc_id": 48026,
+      "path": "cazicthule/48026.lua"
+    },
+    {
+      "zone": "cazicthule",
+      "version": null,
+      "npc_id": 48030,
+      "path": "cazicthule/48030.pl"
+    },
+    {
+      "zone": "cazicthule",
+      "version": null,
+      "npc_id": 48047,
+      "path": "cazicthule/48047.lua"
+    },
+    {
+      "zone": "cazicthule",
+      "version": null,
+      "npc_id": 48057,
+      "path": "cazicthule/48057.pl"
+    },
+    {
+      "zone": "cazicthule",
+      "version": null,
+      "npc_id": 48076,
+      "path": "cazicthule/48076.lua"
+    },
+    {
+      "zone": "cazicthule",
+      "version": null,
+      "npc_id": 48254,
+      "path": "cazicthule/48254.lua"
+    },
+    {
+      "zone": "cazicthule",
+      "version": null,
+      "npc_id": 48255,
+      "path": "cazicthule/48255.lua"
+    },
+    {
+      "zone": "codecay",
+      "version": null,
+      "npc_id": 218068,
+      "path": "codecay/218068.lua"
+    },
+    {
+      "zone": "corathus",
+      "version": null,
+      "npc_id": 365246,
+      "path": "corathus/365246.lua"
+    },
+    {
+      "zone": "cshome",
+      "version": null,
+      "npc_id": 45000,
+      "path": "cshome/45000.pl"
+    },
+    {
+      "zone": "cshome",
+      "version": null,
+      "npc_id": 51037,
+      "path": "cshome/51037.pl"
+    },
+    {
+      "zone": "dawnshroud",
+      "version": null,
+      "npc_id": 174122,
+      "path": "dawnshroud/174122.lua"
+    },
+    {
+      "zone": "dranik",
+      "version": null,
+      "npc_id": 336011,
+      "path": "dranik/336011.lua"
+    },
+    {
+      "zone": "dranik",
+      "version": null,
+      "npc_id": 336129,
+      "path": "dranik/336129.lua"
+    },
+    {
+      "zone": "eastwastes",
+      "version": null,
+      "npc_id": 116548,
+      "path": "eastwastes/116548.pl"
+    },
+    {
+      "zone": "eastwastes",
+      "version": null,
+      "npc_id": 116556,
+      "path": "eastwastes/116556.pl"
+    },
+    {
+      "zone": "eastwastes",
+      "version": null,
+      "npc_id": 116577,
+      "path": "eastwastes/116577.pl"
+    },
+    {
+      "zone": "ferubi",
+      "version": null,
+      "npc_id": 284093,
+      "path": "ferubi/284093.lua"
+    },
+    {
+      "zone": "ferubi",
+      "version": null,
+      "npc_id": 284094,
+      "path": "ferubi/284094.lua"
+    },
+    {
+      "zone": "ferubi",
+      "version": null,
+      "npc_id": 284095,
+      "path": "ferubi/284095.lua"
+    },
+    {
+      "zone": "ferubi",
+      "version": null,
+      "npc_id": 284096,
+      "path": "ferubi/284096.lua"
+    },
+    {
+      "zone": "freeportwest",
+      "version": null,
+      "npc_id": 383269,
+      "path": "freeportwest/383269.lua"
+    },
+    {
+      "zone": "freporte",
+      "version": null,
+      "npc_id": 10000,
+      "path": "freporte/10000.lua"
+    },
+    {
+      "zone": "frozenshadow",
+      "version": null,
+      "npc_id": 111154,
+      "path": "frozenshadow/111154.pl"
+    },
+    {
+      "zone": "griegsend",
+      "version": null,
+      "npc_id": 163047,
+      "path": "griegsend/163047.lua"
+    },
+    {
+      "zone": "griegsend",
+      "version": null,
+      "npc_id": 163185,
+      "path": "griegsend/163185.lua"
+    },
+    {
+      "zone": "griegsend",
+      "version": null,
+      "npc_id": 163189,
+      "path": "griegsend/163189.lua"
+    },
+    {
+      "zone": "griegsend",
+      "version": null,
+      "npc_id": 163190,
+      "path": "griegsend/163190.lua"
+    },
+    {
+      "zone": "hohonora",
+      "version": null,
+      "npc_id": 202368,
+      "path": "hohonora/202368.lua"
+    },
+    {
+      "zone": "hohonora",
+      "version": null,
+      "npc_id": 218068,
+      "path": "hohonora/218068.lua"
+    },
+    {
+      "zone": "ikkinz",
+      "version": null,
+      "npc_id": 294345,
+      "path": "ikkinz/294345.lua"
+    },
+    {
+      "zone": "ikkinz",
+      "version": null,
+      "npc_id": 294346,
+      "path": "ikkinz/294346.lua"
+    },
+    {
+      "zone": "ikkinz",
+      "version": null,
+      "npc_id": 294593,
+      "path": "ikkinz/294593.lua"
+    },
+    {
+      "zone": "ikkinz",
+      "version": null,
+      "npc_id": 294598,
+      "path": "ikkinz/294598.lua"
+    },
+    {
+      "zone": "ikkinz",
+      "version": null,
+      "npc_id": 294599,
+      "path": "ikkinz/294599.lua"
+    },
+    {
+      "zone": "ikkinz",
+      "version": null,
+      "npc_id": 294600,
+      "path": "ikkinz/294600.lua"
+    },
+    {
+      "zone": "inktuta",
+      "version": null,
+      "npc_id": 296029,
+      "path": "inktuta/296029.lua"
+    },
+    {
+      "zone": "kodtaz",
+      "version": null,
+      "npc_id": 293219,
+      "path": "kodtaz/293219.lua"
+    },
+    {
+      "zone": "kodtaz",
+      "version": null,
+      "npc_id": 293222,
+      "path": "kodtaz/293222.lua"
+    },
+    {
+      "zone": "kodtaz",
+      "version": null,
+      "npc_id": 293223,
+      "path": "kodtaz/293223.lua"
+    },
+    {
+      "zone": "lakerathe",
+      "version": null,
+      "npc_id": 51138,
+      "path": "lakerathe/51138.pl"
+    },
+    {
+      "zone": "najena",
+      "version": null,
+      "npc_id": 44108,
+      "path": "najena/44108.lua"
+    },
+    {
+      "zone": "necropolis",
+      "version": null,
+      "npc_id": 123167,
+      "path": "necropolis/123167.lua"
+    },
+    {
+      "zone": "necropolis",
+      "version": null,
+      "npc_id": 123190,
+      "path": "necropolis/123190.lua"
+    },
+    {
+      "zone": "nightmareb",
+      "version": null,
+      "npc_id": 221013,
+      "path": "nightmareb/221013.lua"
+    },
+    {
+      "zone": "oot",
+      "version": null,
+      "npc_id": 409135,
+      "path": "oot/409135.pl"
+    },
+    {
+      "zone": "poair",
+      "version": null,
+      "npc_id": 215070,
+      "path": "poair/215070.lua"
+    },
+    {
+      "zone": "poair",
+      "version": null,
+      "npc_id": 215438,
+      "path": "poair/215438.lua"
+    },
+    {
+      "zone": "poair",
+      "version": null,
+      "npc_id": 215446,
+      "path": "poair/215446.pl"
+    },
+    {
+      "zone": "poair",
+      "version": null,
+      "npc_id": 215447,
+      "path": "poair/215447.pl"
+    },
+    {
+      "zone": "poair",
+      "version": null,
+      "npc_id": 215448,
+      "path": "poair/215448.pl"
+    },
+    {
+      "zone": "poair",
+      "version": null,
+      "npc_id": 215460,
+      "path": "poair/215460.pl"
+    },
+    {
+      "zone": "poeartha",
+      "version": null,
+      "npc_id": 218016,
+      "path": "poeartha/218016.lua"
+    },
+    {
+      "zone": "poeartha",
+      "version": null,
+      "npc_id": 218027,
+      "path": "poeartha/218027.lua"
+    },
+    {
+      "zone": "poeartha",
+      "version": null,
+      "npc_id": 218068,
+      "path": "poeartha/218068.lua"
+    },
+    {
+      "zone": "poearthb",
+      "version": null,
+      "npc_id": 222025,
+      "path": "poearthb/222025.lua"
+    },
+    {
+      "zone": "poinnovation",
+      "version": null,
+      "npc_id": 206000,
+      "path": "poinnovation/206000.pl"
+    },
+    {
+      "zone": "poinnovation",
+      "version": null,
+      "npc_id": 206001,
+      "path": "poinnovation/206001.pl"
+    },
+    {
+      "zone": "poinnovation",
+      "version": null,
+      "npc_id": 206002,
+      "path": "poinnovation/206002.pl"
+    },
+    {
+      "zone": "poinnovation",
+      "version": null,
+      "npc_id": 206069,
+      "path": "poinnovation/206069.pl"
+    },
+    {
+      "zone": "poinnovation",
+      "version": null,
+      "npc_id": 206070,
+      "path": "poinnovation/206070.pl"
+    },
+    {
+      "zone": "poinnovation",
+      "version": null,
+      "npc_id": 206071,
+      "path": "poinnovation/206071.pl"
+    },
+    {
+      "zone": "poinnovation",
+      "version": null,
+      "npc_id": 206072,
+      "path": "poinnovation/206072.pl"
+    },
+    {
+      "zone": "poinnovation",
+      "version": null,
+      "npc_id": 206086,
+      "path": "poinnovation/206086.pl"
+    },
+    {
+      "zone": "pojustice",
+      "version": null,
+      "npc_id": 201477,
+      "path": "pojustice/201477.lua"
+    },
+    {
+      "zone": "pojustice",
+      "version": null,
+      "npc_id": 201478,
+      "path": "pojustice/201478.lua"
+    },
+    {
+      "zone": "pojustice",
+      "version": null,
+      "npc_id": 201479,
+      "path": "pojustice/201479.lua"
+    },
+    {
+      "zone": "pojustice",
+      "version": null,
+      "npc_id": 201480,
+      "path": "pojustice/201480.lua"
+    },
+    {
+      "zone": "pojustice",
+      "version": null,
+      "npc_id": 201481,
+      "path": "pojustice/201481.lua"
+    },
+    {
+      "zone": "pojustice",
+      "version": null,
+      "npc_id": 201482,
+      "path": "pojustice/201482.lua"
+    },
+    {
+      "zone": "pojustice",
+      "version": null,
+      "npc_id": 201483,
+      "path": "pojustice/201483.lua"
+    },
+    {
+      "zone": "pojustice",
+      "version": null,
+      "npc_id": 201484,
+      "path": "pojustice/201484.lua"
+    },
+    {
+      "zone": "pojustice",
+      "version": null,
+      "npc_id": 201485,
+      "path": "pojustice/201485.lua"
+    },
+    {
+      "zone": "pojustice",
+      "version": null,
+      "npc_id": 201486,
+      "path": "pojustice/201486.lua"
+    },
+    {
+      "zone": "pojustice",
+      "version": null,
+      "npc_id": 201487,
+      "path": "pojustice/201487.lua"
+    },
+    {
+      "zone": "pojustice",
+      "version": null,
+      "npc_id": 201488,
+      "path": "pojustice/201488.lua"
+    },
+    {
+      "zone": "pojustice",
+      "version": null,
+      "npc_id": 201489,
+      "path": "pojustice/201489.lua"
+    },
+    {
+      "zone": "pojustice",
+      "version": null,
+      "npc_id": 201490,
+      "path": "pojustice/201490.lua"
+    },
+    {
+      "zone": "pojustice",
+      "version": null,
+      "npc_id": 201491,
+      "path": "pojustice/201491.lua"
+    },
+    {
+      "zone": "pojustice",
+      "version": null,
+      "npc_id": 201492,
+      "path": "pojustice/201492.lua"
+    },
+    {
+      "zone": "postorms",
+      "version": null,
+      "npc_id": 210254,
+      "path": "postorms/210254.lua"
+    },
+    {
+      "zone": "postorms",
+      "version": null,
+      "npc_id": 210261,
+      "path": "postorms/210261.lua"
+    },
+    {
+      "zone": "postorms",
+      "version": null,
+      "npc_id": 210262,
+      "path": "postorms/210262.lua"
+    },
+    {
+      "zone": "postorms",
+      "version": null,
+      "npc_id": 210265,
+      "path": "postorms/210265.lua"
+    },
+    {
+      "zone": "postorms",
+      "version": null,
+      "npc_id": 210266,
+      "path": "postorms/210266.lua"
+    },
+    {
+      "zone": "potactics",
+      "version": null,
+      "npc_id": 202368,
+      "path": "potactics/202368.lua"
+    },
+    {
+      "zone": "potactics",
+      "version": null,
+      "npc_id": 214105,
+      "path": "potactics/214105.lua"
+    },
+    {
+      "zone": "potactics",
+      "version": null,
+      "npc_id": 218068,
+      "path": "potactics/218068.lua"
+    },
+    {
+      "zone": "potimeb",
+      "version": null,
+      "npc_id": 223214,
+      "path": "potimeb/223214.lua"
+    },
+    {
+      "zone": "potimeb",
+      "version": null,
+      "npc_id": 223229,
+      "path": "potimeb/223229.lua"
+    },
+    {
+      "zone": "potimeb",
+      "version": null,
+      "npc_id": 223230,
+      "path": "potimeb/223230.lua"
+    },
+    {
+      "zone": "potorment",
+      "version": null,
+      "npc_id": 207031,
+      "path": "potorment/207031.pl"
+    },
+    {
+      "zone": "potorment",
+      "version": null,
+      "npc_id": 218068,
+      "path": "potorment/218068.lua"
+    },
+    {
+      "zone": "qey2hh1",
+      "version": null,
+      "npc_id": 12183,
+      "path": "qey2hh1/12183.pl"
+    },
+    {
+      "zone": "qey2hh1",
+      "version": null,
+      "npc_id": 12184,
+      "path": "qey2hh1/12184.pl"
+    },
+    {
+      "zone": "qeynos",
+      "version": null,
+      "npc_id": 1303,
+      "path": "qeynos/1303.lua"
+    },
+    {
+      "zone": "qinimi",
+      "version": null,
+      "npc_id": 281098,
+      "path": "qinimi/281098.pl"
+    },
+    {
+      "zone": "skyfire",
+      "version": null,
+      "npc_id": 91097,
+      "path": "skyfire/91097.pl"
+    },
+    {
+      "zone": "solrotower",
+      "version": null,
+      "npc_id": 202365,
+      "path": "solrotower/202365.lua"
+    },
+    {
+      "zone": "solrotower",
+      "version": null,
+      "npc_id": 202366,
+      "path": "solrotower/202366.lua"
+    },
+    {
+      "zone": "solrotower",
+      "version": null,
+      "npc_id": 202367,
+      "path": "solrotower/202367.lua"
+    },
+    {
+      "zone": "solrotower",
+      "version": null,
+      "npc_id": 202368,
+      "path": "solrotower/202368.lua"
+    },
+    {
+      "zone": "solrotower",
+      "version": null,
+      "npc_id": 212067,
+      "path": "solrotower/212067.pl"
+    },
+    {
+      "zone": "solrotower",
+      "version": null,
+      "npc_id": 212068,
+      "path": "solrotower/212068.pl"
+    },
+    {
+      "zone": "solrotower",
+      "version": null,
+      "npc_id": 212069,
+      "path": "solrotower/212069.pl"
+    },
+    {
+      "zone": "solrotower",
+      "version": null,
+      "npc_id": 212070,
+      "path": "solrotower/212070.pl"
+    },
+    {
+      "zone": "solrotower",
+      "version": null,
+      "npc_id": 212071,
+      "path": "solrotower/212071.pl"
+    },
+    {
+      "zone": "solrotower",
+      "version": null,
+      "npc_id": 214105,
+      "path": "solrotower/214105.lua"
+    },
+    {
+      "zone": "solrotower",
+      "version": null,
+      "npc_id": 218068,
+      "path": "solrotower/218068.lua"
+    },
+    {
+      "zone": "tacvi",
+      "version": null,
+      "npc_id": 298009,
+      "path": "tacvi/298009.lua"
+    },
+    {
+      "zone": "tacvi",
+      "version": null,
+      "npc_id": 298010,
+      "path": "tacvi/298010.lua"
+    },
+    {
+      "zone": "tacvi",
+      "version": null,
+      "npc_id": 298011,
+      "path": "tacvi/298011.lua"
+    },
+    {
+      "zone": "tacvi",
+      "version": null,
+      "npc_id": 298017,
+      "path": "tacvi/298017.lua"
+    },
+    {
+      "zone": "tacvi",
+      "version": null,
+      "npc_id": 298019,
+      "path": "tacvi/298019.lua"
+    },
+    {
+      "zone": "tacvi",
+      "version": null,
+      "npc_id": 298022,
+      "path": "tacvi/298022.lua"
+    },
+    {
+      "zone": "tacvi",
+      "version": null,
+      "npc_id": 298024,
+      "path": "tacvi/298024.lua"
+    },
+    {
+      "zone": "tacvi",
+      "version": null,
+      "npc_id": 298030,
+      "path": "tacvi/298030.lua"
+    },
+    {
+      "zone": "tacvi",
+      "version": null,
+      "npc_id": 298031,
+      "path": "tacvi/298031.lua"
+    },
+    {
+      "zone": "tacvi",
+      "version": null,
+      "npc_id": 298033,
+      "path": "tacvi/298033.lua"
+    },
+    {
+      "zone": "tacvi",
+      "version": null,
+      "npc_id": 298034,
+      "path": "tacvi/298034.lua"
+    },
+    {
+      "zone": "tacvi",
+      "version": null,
+      "npc_id": 298036,
+      "path": "tacvi/298036.lua"
+    },
+    {
+      "zone": "tacvi",
+      "version": null,
+      "npc_id": 298037,
+      "path": "tacvi/298037.lua"
+    },
+    {
+      "zone": "tacvi",
+      "version": null,
+      "npc_id": 298038,
+      "path": "tacvi/298038.lua"
+    },
+    {
+      "zone": "tenebrous",
+      "version": null,
+      "npc_id": 172136,
+      "path": "tenebrous/172136.pl"
+    },
+    {
+      "zone": "tenebrous",
+      "version": null,
+      "npc_id": 172186,
+      "path": "tenebrous/172186.pl"
+    },
+    {
+      "zone": "thedeep",
+      "version": null,
+      "npc_id": 164085,
+      "path": "thedeep/164085.pl"
+    },
+    {
+      "zone": "thedeep",
+      "version": null,
+      "npc_id": 164100,
+      "path": "thedeep/164100.pl"
+    },
+    {
+      "zone": "thedeep",
+      "version": null,
+      "npc_id": 164104,
+      "path": "thedeep/164104.pl"
+    },
+    {
+      "zone": "thedeep",
+      "version": null,
+      "npc_id": 164108,
+      "path": "thedeep/164108.pl"
+    },
+    {
+      "zone": "thedeep",
+      "version": null,
+      "npc_id": 164118,
+      "path": "thedeep/164118.pl"
+    },
+    {
+      "zone": "timorous",
+      "version": null,
+      "npc_id": 96368,
+      "path": "timorous/96368.lua"
+    },
+    {
+      "zone": "tox",
+      "version": null,
+      "npc_id": 38173,
+      "path": "tox/38173.lua"
+    },
+    {
+      "zone": "txevu",
+      "version": null,
+      "npc_id": 297076,
+      "path": "txevu/297076.lua"
+    },
+    {
+      "zone": "txevu",
+      "version": null,
+      "npc_id": 297077,
+      "path": "txevu/297077.lua"
+    },
+    {
+      "zone": "txevu",
+      "version": null,
+      "npc_id": 297152,
+      "path": "txevu/297152.lua"
+    },
+    {
+      "zone": "txevu",
+      "version": null,
+      "npc_id": 297219,
+      "path": "txevu/297219.lua"
+    },
+    {
+      "zone": "txevu",
+      "version": null,
+      "npc_id": 297221,
+      "path": "txevu/297221.lua"
+    },
+    {
+      "zone": "uqua",
+      "version": null,
+      "npc_id": 292001,
+      "path": "uqua/292001.lua"
+    },
+    {
+      "zone": "uqua",
+      "version": null,
+      "npc_id": 292002,
+      "path": "uqua/292002.lua"
+    },
+    {
+      "zone": "uqua",
+      "version": null,
+      "npc_id": 292005,
+      "path": "uqua/292005.lua"
+    },
+    {
+      "zone": "uqua",
+      "version": null,
+      "npc_id": 292006,
+      "path": "uqua/292006.lua"
+    },
+    {
+      "zone": "uqua",
+      "version": null,
+      "npc_id": 292029,
+      "path": "uqua/292029.lua"
+    },
+    {
+      "zone": "uqua",
+      "version": null,
+      "npc_id": 292030,
+      "path": "uqua/292030.lua"
+    },
+    {
+      "zone": "uqua",
+      "version": null,
+      "npc_id": 292086,
+      "path": "uqua/292086.lua"
+    },
+    {
+      "zone": "uqua",
+      "version": null,
+      "npc_id": 292087,
+      "path": "uqua/292087.lua"
+    },
+    {
+      "zone": "uqua",
+      "version": null,
+      "npc_id": 292088,
+      "path": "uqua/292088.lua"
+    },
+    {
+      "zone": "veeshan",
+      "version": null,
+      "npc_id": 108518,
+      "path": "veeshan/108518.pl"
+    },
+    {
+      "zone": "wakening",
+      "version": null,
+      "npc_id": 119143,
+      "path": "wakening/119143.pl"
+    },
+    {
+      "zone": "warslikswood",
+      "version": null,
+      "npc_id": 79126,
+      "path": "warslikswood/79126.pl"
+    },
+    {
+      "zone": "warslikswood",
+      "version": null,
+      "npc_id": 79127,
+      "path": "warslikswood/79127.pl"
+    }
+  ],
+  "missing_npc_type_rows": [
+    {
+      "zone": "airplane",
+      "version": null,
+      "npc_id": 936,
+      "path": "airplane/936.pl"
+    },
+    {
+      "zone": "airplane",
+      "version": null,
+      "npc_id": 980,
+      "path": "airplane/980.pl"
+    },
+    {
+      "zone": "bazaar",
+      "version": null,
+      "npc_id": 1120001017,
+      "path": "bazaar/1120001017.pl"
+    },
+    {
+      "zone": "bazaar",
+      "version": null,
+      "npc_id": 1120001127,
+      "path": "bazaar/1120001127.pl"
+    },
+    {
+      "zone": "bazaar",
+      "version": null,
+      "npc_id": 12000142,
+      "path": "bazaar/12000142.pl"
+    },
+    {
+      "zone": "bazaar",
+      "version": null,
+      "npc_id": 12000189,
+      "path": "bazaar/12000189.pl"
+    },
+    {
+      "zone": "bazaar",
+      "version": null,
+      "npc_id": 151061,
+      "path": "bazaar/151061.pl"
+    },
+    {
+      "zone": "droga",
+      "version": 0,
+      "npc_id": 781003,
+      "path": "droga/v0/781003.lua"
+    },
+    {
+      "zone": "droga",
+      "version": 0,
+      "npc_id": 781469,
+      "path": "droga/v0/781469.lua"
+    },
+    {
+      "zone": "greatdivide",
+      "version": null,
+      "npc_id": 118361,
+      "path": "greatdivide/118361.lua"
+    },
+    {
+      "zone": "mire",
+      "version": null,
+      "npc_id": 1120000955,
+      "path": "mire/1120000955.pl"
+    },
+    {
+      "zone": "neriaka",
+      "version": null,
+      "npc_id": 1120001101,
+      "path": "neriaka/1120001101.pl"
+    },
+    {
+      "zone": "qeynos2",
+      "version": null,
+      "npc_id": 2177,
+      "path": "qeynos2/2177.lua"
+    },
+    {
+      "zone": "runnyeye",
+      "version": null,
+      "npc_id": 11169,
+      "path": "runnyeye/11169.pl"
+    },
+    {
+      "zone": "runnyeye",
+      "version": null,
+      "npc_id": 11170,
+      "path": "runnyeye/11170.pl"
+    },
+    {
+      "zone": "tox",
+      "version": null,
+      "npc_id": 38005,
+      "path": "tox/38005.lua"
+    },
+    {
+      "zone": "txevu",
+      "version": null,
+      "npc_id": 297134,
+      "path": "txevu/297134.lua"
+    },
+    {
+      "zone": "txevu",
+      "version": null,
+      "npc_id": 297143,
+      "path": "txevu/297143.lua"
+    },
+    {
+      "zone": "txevu",
+      "version": null,
+      "npc_id": 297144,
+      "path": "txevu/297144.lua"
+    }
+  ]
+}

@@ -17,7 +17,7 @@ This checklist provides step-by-step instructions for implementing spells, disci
 - [ ] Check for existing spell effects that match
 
 ### ☑ Phase 2: Database Entry
-- [ ] Choose unused spell ID (60000+ recommended)
+- [ ] Choose unused spell ID `< 65535` (client-safe); prefer checking `SELECT MAX(id) FROM spells_new`
 - [ ] Create `spells_new` entry with all fields
 - [ ] Set `classes1-16` to appropriate levels
 - [ ] Configure `effectid1-12` with spell effects
@@ -31,8 +31,8 @@ This checklist provides step-by-step instructions for implementing spells, disci
 - [ ] Set string IDs to non-NULL (use 0 if you don’t have custom strings): `descnum`, `typedescnum`, `effectdescnum`, `effectdescnum2`
 
 ### ☑ Phase 3: Testing
-- [ ] Reload shared memory: `shared_memory.exe`
-- [ ] Test cast: `/castspell [spell_id]`
+- [ ] Reload shared memory: `shared_memory.exe` (or Server Manager "Shared Memory")
+- [ ] Test cast: `#castspell [spell_id]`
 - [ ] Verify mana cost correct
 - [ ] Verify cast time feels right
 - [ ] Verify effects apply correctly
@@ -48,7 +48,7 @@ This checklist provides step-by-step instructions for implementing spells, disci
 - [ ] Set `scrolleffect = [spell_id]`
 - [ ] Set `classes` bitmask for who can scribe
 - [ ] Set `reqlevel` for minimum level
-- [ ] Test: `/summonitem [item_id]`
+- [ ] Test: `#summonitem [item_id]`
 - [ ] Right-click scroll to scribe
 - [ ] Verify spell in spell book
 
@@ -95,14 +95,14 @@ This checklist provides step-by-step instructions for implementing spells, disci
 - [ ] Set `scrolleffect = [discipline_spell_id]`
 - [ ] Set `classes` to appropriate melee classes
 - [ ] Set `reqlevel` for minimum level
-- [ ] Test: `/summonitem [item_id]`
+- [ ] Test: `#summonitem [item_id]`
 - [ ] Right-click tome to learn
 
 ### ☑ Phase 4: Testing
 - [ ] Reload shared memory
 - [ ] Summon tome and learn discipline
 - [ ] Check endurance cost is correct
-- [ ] Use discipline: `/disc [spell_id]`
+- [ ] Use discipline from combat abilities window (or `/disc [spell_id]` client command)
 - [ ] Verify effects apply
 - [ ] Test recast timer works
 - [ ] Verify can't use without endurance
@@ -122,11 +122,11 @@ This checklist provides step-by-step instructions for implementing spells, disci
 - [ ] Choose appropriate classes
 
 ### ☑ Phase 2: Ability Entry
-- [ ] Choose unused AA ability ID (1000+)
+- [ ] Choose unused AA ability ID (query DB first; do not assume a fixed band)
 - [ ] Create `aa_ability` entry
 - [ ] Set `name` (display name)
 - [ ] Set `category` (1-4)
-- [ ] Set `classes` bitmask
+- [ ] Set `classes` bitmask using AA mask rules from `AA_GUIDE.md` (`1 << class_id`, all classes `131070`)
 - [ ] Set `type` (1=General, 2=Archetype, 3=Class)
 - [ ] Set `charges` (0 for unlimited)
 - [ ] Set `grant_only` (0 for purchasable)
@@ -177,16 +177,17 @@ This checklist provides step-by-step instructions for implementing spells, disci
 - [ ] Set `points` (points needed)
 
 ### ☑ Phase 6: Testing
-- [ ] Reload AA data: `/reloadaa`
-- [ ] Grant AA: `/grantaa [aa_id] [points]`
-- [ ] Open AA window: `/alt list`
+- [ ] Reload AA data: `#reload aa_data`
+- [ ] Set test AA points: `#set aa_points aa [amount]`
+- [ ] Open AA window and purchase rank
 - [ ] Verify AA appears
 - [ ] Purchase ranks (or grant them)
-- [ ] Check effects apply: `/showstats`
+- [ ] Check effects apply: `#showstats`
 - [ ] Test active AAs activate correctly
 - [ ] Test recast timers work
 - [ ] Verify prerequisites block correctly
 - [ ] Test rank progression
+- [ ] If title/desc/spell text changed: export `spells_us.txt` + `dbstr_us.txt` via Server Manager, then fully restart client
 
 ### ☑ Phase 7: Custom Code (If Needed)
 - [ ] Add effect to `common/spdat.h` namespace
@@ -278,7 +279,7 @@ case SpellEffect::MyEffect: {
 ### ☑ Phase 3: Testing
 - [ ] Rebuild server: `cmake --build build`
 - [ ] Create test spell with new effect
-- [ ] Cast spell: `/castspell [spell_id]`
+- [ ] Cast spell: `#castspell [spell_id]`
 - [ ] Verify effect applies
 - [ ] Check bonus field updates
 - [ ] Test edge cases (0 value, negative, max)
@@ -286,7 +287,7 @@ case SpellEffect::MyEffect: {
 - [ ] Check for crashes or errors
 
 ### ☑ Phase 4: Documentation
-- [ ] Document effect in `SPELL_EFFECTS_REFERENCE.md`
+- [ ] Document effect behavior in this folder's guides (`SPELLS_GUIDE.md` / `AA_GUIDE.md`)
 - [ ] Add example spell usage
 - [ ] Note any special behaviors
 
@@ -315,6 +316,10 @@ case SpellEffect::MyEffect: {
   SELECT * FROM items WHERE id >= 100000 INTO OUTFILE 'custom_items.sql';
   ```
 - [ ] Test import on staging server
+- [ ] Sync client files used by this repo:
+  - [ ] Export `spells_us.txt` from Server Manager
+  - [ ] Export `dbstr_us.txt` from Server Manager
+  - [ ] Verify "Client Asset Status" shows up to date
 
 ### ☑ Code Deployment
 - [ ] Commit C++ changes to version control
@@ -347,7 +352,7 @@ case SpellEffect::MyEffect: {
 2. Verify mana cost vs. current mana
 3. Check skill requirements
 4. Verify targettype allows your target
-5. Check if spell is valid: `/spellinfo [spell_id]`
+5. Check spell row exists and is valid in `spells_new`
 
 ### Spell Effect Not Working
 1. Verify effect ID is implemented
@@ -361,13 +366,14 @@ case SpellEffect::MyEffect: {
 2. Verify `classes` bitmask includes your class
 3. Check `level_req` isn't too high
 4. Ensure `first_rank_id` is correct
-5. Try `/reloadaa`
+5. Try `#reload aa_data`
+6. Verify AA class mask is correct for this branch's AA rules
 
 ### AA Effects Not Applying
 1. Verify effect in `zone/bonuses.cpp::ApplyAABonuses()`
 2. Check `aa_rank_effects.rank_id` is correct
 3. Ensure `effect_id` is valid SPA
-4. Check `/showstats` for AA bonuses
+4. Check `#showstats` for AA bonuses
 5. Try removing and re-granting AA
 
 ### Discipline Won't Learn
@@ -414,11 +420,11 @@ case SpellEffect::MyEffect: {
 - **AAs**: Benefit-focused ("Combat Fury", "Planar Power")
 
 ### ID Ranges
-- **Spells**: 60000-79999 (custom spells)
-- **Spells**: 80000-99999 (disciplines)
+- **Spells**: keep `< 65535` (client limit)
+- **Spells**: reserve/track custom bands in SQL docs; do not assume old global ranges
 - **Items**: 100000-199999 (scrolls/tomes)
 - **Items**: 200000-299999 (other custom items)
-- **AAs**: 1000-9999 (custom AAs)
+- **AAs**: use unused IDs from DB; many custom IDs are already in low and mid ranges
 
 ### Documentation
 - Comment all custom code
@@ -456,4 +462,4 @@ case SpellEffect::MyEffect: {
 - Spell details → **SPELLS_GUIDE.md**
 - Discipline specifics → **DISCIPLINES_GUIDE.md**
 - AA details → **AA_GUIDE.md**
-- Effect reference → **SPELL_EFFECTS_REFERENCE.md**
+- Effect IDs/code locations → `common/spdat.h` and `zone/spell_effects.cpp`

@@ -597,8 +597,9 @@ public:
 	inline void ChangeDrakkinDetails(uint8 in) { drakkin_details = in; }
 	inline uint32 GetArmorTint(uint8 i) const { return armor_tint.Slot[(i < EQ::textures::materialCount) ? i : 0].Color; }
 	inline uint8 GetClass() const { return class_; }
-	virtual uint32 GetClassesBits() const { return (1 << (class_ - 1)); }
-	virtual bool HasClass(uint8 class_id) const { return class_ == class_id; }
+	virtual uint32 GetClassesBits() const;
+	virtual bool HasClass(uint8 class_id) const;
+	bool HasClass(uint8 class_id, uint32 bitmask) const;
 	inline uint8 GetLevel() const { return level; }
 	inline uint8 GetOrigLevel() const { return orig_level; }
 	inline const char* GetName() const { return name; }
@@ -862,10 +863,11 @@ public:
 	uint8 GetItemTypeBySkill(EQ::skills::SkillType skill);
 	virtual void MakePet(uint16 spell_id, const char* pettype, const char *petname = nullptr);
 	virtual void MakePoweredPet(uint16 spell_id, const char* pettype, int16 petpower, const char *petname = nullptr, float in_size = 0.0f);
-	bool IsWarriorClass() const;
-	bool IsIntelligenceCasterClass() const;
-	bool IsPureMeleeClass() const;
-	bool IsWisdomCasterClass() const;
+	bool IsWarriorClass(uint8 class_id = Class::None) const;
+	bool IsIntelligenceCasterClass(uint8 class_id = Class::None) const;
+	bool IsPureMeleeClass(uint8 class_id = Class::None) const;
+	bool IsWisdomCasterClass(uint8 class_id = Class::None) const;
+	bool IsAnyCasterClass(uint8 class_id = Class::None) const;
 	uint8 GetArchetype() const;
 	const std::string GetArchetypeName();
 	void SetZone(uint32 zone_id, uint32 instance_id);

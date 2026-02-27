@@ -1162,6 +1162,7 @@ RULE_INT(Custom, MulticlassMaxClasses, 3, "Maximum number of classes allowed in 
 RULE_STRING(Custom, MulticlassBucketKey, "GestaltClasses", "Character-scoped data bucket key where the class bitmask is stored (THJServer uses GestaltClasses).")
 RULE_BOOL(Custom, ServerAuthStats, true, "Compatibility rule used by multiclass-era quest scripts to gate server-authoritative stats features.")
 RULE_BOOL(Custom, UseDynamicAATimers, true, "Enable using dynamic AA timers. Required to deconflict multiclass AA timers (THJServer parity).")
+RULE_INT(Custom, EnableSeasonalCharacters, 0, "If non-zero, characters with matching SeasonalCharacter bucket value are treated as seasonal.")
 RULE_INT(Custom, StaticInstanceVersion, UINT8_MAX, "Instances with this version load from StaticInstanceTemplateVersion and have respawns disabled.")
 RULE_INT(Custom, StaticInstanceTemplateVersion, 0, "Template version backing non-respawning static instances.")
 RULE_INT(Custom, FarmingInstanceVersion, 254, "Instances with this version load from FarmingInstanceTemplateVersion and suppress long-respawn spawns.")

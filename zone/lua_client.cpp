@@ -125,6 +125,31 @@ void Lua_Client::SendToGuildHall() {
 	self->SendToGuildHall();
 }
 
+void Lua_Client::SendWaypointList() {
+	Lua_Safe_Call_Void();
+	self->SendWaypointList();
+}
+
+bool Lua_Client::UnlockWaypoint(std::string waypoint_shortname) {
+	Lua_Safe_Call_Bool();
+	return self->UnlockWaypoint(waypoint_shortname);
+}
+
+bool Lua_Client::IsWaypointUnlocked(std::string waypoint_shortname) {
+	Lua_Safe_Call_Bool();
+	return self->IsWaypointUnlocked(waypoint_shortname);
+}
+
+bool Lua_Client::CheckWaypointGroupFeature() {
+	Lua_Safe_Call_Bool();
+	return self->CheckWaypointGroupFeature();
+}
+
+void Lua_Client::EnableWaypointGroupFeature() {
+	Lua_Safe_Call_Void();
+	self->EnableWaypointGroupFeature();
+}
+
 bool Lua_Client::GetPVP() {
 	Lua_Safe_Call_Bool();
 	return self->GetPVP();
@@ -148,6 +173,11 @@ void Lua_Client::SetBaseRace(int v) {
 void Lua_Client::SetBaseGender(int v) {
 	Lua_Safe_Call_Void();
 	self->SetBaseGender(v);
+}
+
+bool Lua_Client::HasClassID(int class_id) {
+	Lua_Safe_Call_Bool();
+	return self->HasClass(static_cast<uint8>(class_id));
 }
 
 uint16 Lua_Client::GetClassBitmask() {
@@ -994,6 +1024,96 @@ void Lua_Client::SummonItem(uint32 item_id, int charges, uint32 aug1, uint32 aug
 	self->SummonItem(item_id, charges, aug1, aug2, aug3, aug4, aug5, 0, attuned, to_slot);
 }
 
+void Lua_Client::SummonFixedItem(uint32 item_id) {
+	Lua_Safe_Call_Void();
+	self->SummonFixedItem(item_id);
+}
+
+void Lua_Client::SummonFixedItem(uint32 item_id, int charges) {
+	Lua_Safe_Call_Void();
+	self->SummonFixedItem(item_id, charges);
+}
+
+void Lua_Client::SummonFixedItem(uint32 item_id, int charges, uint32 aug1) {
+	Lua_Safe_Call_Void();
+	self->SummonFixedItem(item_id, charges, aug1);
+}
+
+void Lua_Client::SummonFixedItem(uint32 item_id, int charges, uint32 aug1, uint32 aug2) {
+	Lua_Safe_Call_Void();
+	self->SummonFixedItem(item_id, charges, aug1, aug2);
+}
+
+void Lua_Client::SummonFixedItem(uint32 item_id, int charges, uint32 aug1, uint32 aug2, uint32 aug3) {
+	Lua_Safe_Call_Void();
+	self->SummonFixedItem(item_id, charges, aug1, aug2, aug3);
+}
+
+void Lua_Client::SummonFixedItem(uint32 item_id, int charges, uint32 aug1, uint32 aug2, uint32 aug3, uint32 aug4) {
+	Lua_Safe_Call_Void();
+	self->SummonFixedItem(item_id, charges, aug1, aug2, aug3, aug4);
+}
+
+void Lua_Client::SummonFixedItem(uint32 item_id, int charges, uint32 aug1, uint32 aug2, uint32 aug3, uint32 aug4, uint32 aug5) {
+	Lua_Safe_Call_Void();
+	self->SummonFixedItem(item_id, charges, aug1, aug2, aug3, aug4, aug5);
+}
+
+void Lua_Client::SummonFixedItem(uint32 item_id, int charges, uint32 aug1, uint32 aug2, uint32 aug3, uint32 aug4, uint32 aug5, bool attuned) {
+	Lua_Safe_Call_Void();
+	self->SummonFixedItem(item_id, charges, aug1, aug2, aug3, aug4, aug5, 0, attuned);
+}
+
+void Lua_Client::SummonFixedItem(uint32 item_id, int charges, uint32 aug1, uint32 aug2, uint32 aug3, uint32 aug4, uint32 aug5, bool attuned, int to_slot) {
+	Lua_Safe_Call_Void();
+	self->SummonFixedItem(item_id, charges, aug1, aug2, aug3, aug4, aug5, 0, attuned, to_slot);
+}
+
+void Lua_Client::ReturnItem(uint32 item_id) {
+	Lua_Safe_Call_Void();
+	self->ReturnItem(item_id);
+}
+
+void Lua_Client::ReturnItem(uint32 item_id, int charges) {
+	Lua_Safe_Call_Void();
+	self->ReturnItem(item_id, charges);
+}
+
+void Lua_Client::ReturnItem(uint32 item_id, int charges, uint32 aug1) {
+	Lua_Safe_Call_Void();
+	self->ReturnItem(item_id, charges, aug1);
+}
+
+void Lua_Client::ReturnItem(uint32 item_id, int charges, uint32 aug1, uint32 aug2) {
+	Lua_Safe_Call_Void();
+	self->ReturnItem(item_id, charges, aug1, aug2);
+}
+
+void Lua_Client::ReturnItem(uint32 item_id, int charges, uint32 aug1, uint32 aug2, uint32 aug3) {
+	Lua_Safe_Call_Void();
+	self->ReturnItem(item_id, charges, aug1, aug2, aug3);
+}
+
+void Lua_Client::ReturnItem(uint32 item_id, int charges, uint32 aug1, uint32 aug2, uint32 aug3, uint32 aug4) {
+	Lua_Safe_Call_Void();
+	self->ReturnItem(item_id, charges, aug1, aug2, aug3, aug4);
+}
+
+void Lua_Client::ReturnItem(uint32 item_id, int charges, uint32 aug1, uint32 aug2, uint32 aug3, uint32 aug4, uint32 aug5) {
+	Lua_Safe_Call_Void();
+	self->ReturnItem(item_id, charges, aug1, aug2, aug3, aug4, aug5);
+}
+
+void Lua_Client::ReturnItem(uint32 item_id, int charges, uint32 aug1, uint32 aug2, uint32 aug3, uint32 aug4, uint32 aug5, bool attuned) {
+	Lua_Safe_Call_Void();
+	self->ReturnItem(item_id, charges, aug1, aug2, aug3, aug4, aug5, 0, attuned);
+}
+
+void Lua_Client::ReturnItem(uint32 item_id, int charges, uint32 aug1, uint32 aug2, uint32 aug3, uint32 aug4, uint32 aug5, bool attuned, int to_slot) {
+	Lua_Safe_Call_Void();
+	self->ReturnItem(item_id, charges, aug1, aug2, aug3, aug4, aug5, 0, attuned, to_slot);
+}
+
 void Lua_Client::SetStats(int type, int value) {
 	Lua_Safe_Call_Void();
 	self->SetStats(type, value);
@@ -1351,6 +1471,18 @@ void Lua_Client::AddLevelBasedExp(int exp_pct, int max_level, bool ignore_mods) 
 void Lua_Client::IncrementAA(int aa) {
 	Lua_Safe_Call_Void();
 	self->IncrementAlternateAdvancementRank(aa);
+}
+
+bool Lua_Client::ConsumeUnspentAA()
+{
+	Lua_Safe_Call_Bool();
+	return self->ConsumeUnspentAA();
+}
+
+bool Lua_Client::ConsumeItemOnCursor()
+{
+	Lua_Safe_Call_Bool();
+	return self->ConsumeItemOnCursor();
 }
 
 bool Lua_Client::GrantAlternateAdvancementAbility(int aa_id, int points) {
@@ -2648,9 +2780,21 @@ int Lua_Client::GetRecipeMadeCount(uint32 recipe_id) {
 	return self->GetRecipeMadeCount(recipe_id);
 }
 
+int Lua_Client::GetKillCount(int race_id)
+{
+	Lua_Safe_Call_Int();
+	return self->GetKillCount(race_id);
+}
+
 bool Lua_Client::HasRecipeLearned(uint32 recipe_id) {
 	Lua_Safe_Call_Bool();
 	return self->HasRecipeLearned(recipe_id);
+}
+
+bool Lua_Client::IsSeasonal()
+{
+	Lua_Safe_Call_Bool();
+	return self->IsSeasonal();
 }
 
 bool Lua_Client::SendGMCommand(std::string message) {
@@ -3486,6 +3630,18 @@ void Lua_Client::GrantPetNameChange()
 	self->GrantPetNameChange();
 }
 
+void Lua_Client::GrantPetNameChange(uint8 class_id)
+{
+	Lua_Safe_Call_Void();
+	self->GrantPetNameChange(class_id);
+}
+
+bool Lua_Client::IsPetNameChangeAllowed()
+{
+	Lua_Safe_Call_Bool();
+	return self->IsPetNameChangeAllowed();
+}
+
 void Lua_Client::SetAAEXPPercentage(uint8 percentage)
 {
 	Lua_Safe_Call_Void();
@@ -3640,6 +3796,12 @@ void Lua_Client::EnableTitleSet(uint32 title_set) {
 	self->EnableTitle(title_set);
 }
 
+bool Lua_Client::CheckTitle(int title_set)
+{
+	Lua_Safe_Call_Bool();
+	return self->CheckTitle(title_set);
+}
+
 luabind::object Lua_Client::GetKeyRing(lua_State* L)
 {
 	auto lua_table = luabind::newtable(L);
@@ -3724,9 +3886,12 @@ luabind::scope lua_register_client() {
 	.def("CanHaveSkill", (bool(Lua_Client::*)(int))&Lua_Client::CanHaveSkill)
 	.def("CashReward", &Lua_Client::CashReward)
 	.def("ChangeLastName", (void(Lua_Client::*)(std::string))&Lua_Client::ChangeLastName)
-	.def("GrantPetNameChange", &Lua_Client::GrantPetNameChange)
+	.def("GrantPetNameChange", (void(Lua_Client::*)(void))&Lua_Client::GrantPetNameChange)
+	.def("GrantPetNameChange", (void(Lua_Client::*)(uint8))&Lua_Client::GrantPetNameChange)
+	.def("IsPetNameChangeAllowed", (bool(Lua_Client::*)(void))&Lua_Client::IsPetNameChangeAllowed)
 	.def("ClearNameChange", &Lua_Client::ClearNameChange)
 	.def("CharacterID", (uint32(Lua_Client::*)(void))&Lua_Client::CharacterID)
+	.def("CheckTitle", (bool(Lua_Client::*)(int))&Lua_Client::CheckTitle)
 	.def("CheckIncreaseSkill", (void(Lua_Client::*)(int,Lua_Mob))&Lua_Client::CheckIncreaseSkill)
 	.def("CheckIncreaseSkill", (void(Lua_Client::*)(int,Lua_Mob,int))&Lua_Client::CheckIncreaseSkill)
 	.def("CheckSpecializeIncrease", (void(Lua_Client::*)(int))&Lua_Client::CheckSpecializeIncrease)
@@ -3736,6 +3901,8 @@ luabind::scope lua_register_client() {
 	.def("ClearXTargets", (void(Lua_Client::*)(void))&Lua_Client::ClearXTargets)
 	.def("ClearZoneFlag", (void(Lua_Client::*)(uint32))&Lua_Client::ClearZoneFlag)
 	.def("CompleteTask", (bool(Lua_Client::*)(int))&Lua_Client::CompleteTask)
+	.def("ConsumeItemOnCursor", (bool(Lua_Client::*)(void))&Lua_Client::ConsumeItemOnCursor)
+	.def("ConsumeUnspentAA", (bool(Lua_Client::*)(void))&Lua_Client::ConsumeUnspentAA)
 	.def("Connected", (bool(Lua_Client::*)(void))&Lua_Client::Connected)
 	.def("CountAugmentEquippedByID", (uint32(Lua_Client::*)(uint32))&Lua_Client::CountAugmentEquippedByID)
 	.def("CountItem", (uint32(Lua_Client::*)(uint32))&Lua_Client::CountItem)
@@ -3841,6 +4008,7 @@ luabind::scope lua_register_client() {
 	.def("GetCarriedPlatinum", (uint32(Lua_Client::*)(void))&Lua_Client::GetCarriedPlatinum)
 	.def("GetCharacterFactionLevel", (int(Lua_Client::*)(int))&Lua_Client::GetCharacterFactionLevel)
 	.def("GetClassAbbreviation", (std::string(Lua_Client::*)(void))&Lua_Client::GetClassAbbreviation)
+	.def("HasClassID", (bool(Lua_Client::*)(int))&Lua_Client::HasClassID)
 	.def("GetClassBitmask", (uint16(Lua_Client::*)(void))&Lua_Client::GetClassBitmask)
 	.def("GetClassesBitmask", (uint16(Lua_Client::*)(void))&Lua_Client::GetClassesBitmask)
 	.def("SetClassesBitmask", (bool(Lua_Client::*)(uint16))&Lua_Client::SetClassesBitmask)
@@ -3926,6 +4094,7 @@ luabind::scope lua_register_client() {
 	.def("GetRawItemAC", (int(Lua_Client::*)(void))&Lua_Client::GetRawItemAC)
 	.def("GetRawSkill", (int(Lua_Client::*)(int))&Lua_Client::GetRawSkill)
 	.def("GetRecipeMadeCount", (int(Lua_Client::*)(uint32))&Lua_Client::GetRecipeMadeCount)
+	.def("GetKillCount", (int(Lua_Client::*)(int))&Lua_Client::GetKillCount)
 	.def("GetScribeableSpells", (luabind::object(Lua_Client::*)(lua_State* L))&Lua_Client::GetScribeableSpells)
 	.def("GetScribeableSpells", (luabind::object(Lua_Client::*)(lua_State* L,uint8))&Lua_Client::GetScribeableSpells)
 	.def("GetScribeableSpells", (luabind::object(Lua_Client::*)(lua_State* L,uint8,uint8))&Lua_Client::GetScribeableSpells)
@@ -3982,6 +4151,7 @@ luabind::scope lua_register_client() {
 	.def("IsLD", (bool(Lua_Client::*)(void))&Lua_Client::IsLD)
 	.def("IsMedding", (bool(Lua_Client::*)(void))&Lua_Client::IsMedding)
 	.def("IsNameChangeAllowed", &Lua_Client::IsNameChangeAllowed)
+	.def("IsSeasonal", (bool(Lua_Client::*)(void))&Lua_Client::IsSeasonal)
 	.def("IsRaidGrouped", (bool(Lua_Client::*)(void))&Lua_Client::IsRaidGrouped)
 	.def("IsSitting", (bool(Lua_Client::*)(void))&Lua_Client::IsSitting)
 	.def("IsStanding", (bool(Lua_Client::*)(void))&Lua_Client::IsStanding)
@@ -4108,6 +4278,11 @@ luabind::scope lua_register_client() {
 	.def("SendSound", (void(Lua_Client::*)(void))&Lua_Client::SendSound)
 	.def("SendToGuildHall", (void(Lua_Client::*)(void))&Lua_Client::SendToGuildHall)
 	.def("SendToInstance", (void(Lua_Client::*)(std::string,std::string,uint32,float,float,float,float,std::string,uint32))&Lua_Client::SendToInstance)
+	.def("SendWaypointList", (void(Lua_Client::*)(void))&Lua_Client::SendWaypointList)
+	.def("UnlockWaypoint", (bool(Lua_Client::*)(std::string))&Lua_Client::UnlockWaypoint)
+	.def("IsWaypointUnlocked", (bool(Lua_Client::*)(std::string))&Lua_Client::IsWaypointUnlocked)
+	.def("CheckWaypointGroupFeature", (bool(Lua_Client::*)(void))&Lua_Client::CheckWaypointGroupFeature)
+	.def("EnableWaypointGroupFeature", (void(Lua_Client::*)(void))&Lua_Client::EnableWaypointGroupFeature)
 	.def("SendPayload", (void(Lua_Client::*)(int))&Lua_Client::SendPayload)
 	.def("SendPayload", (void(Lua_Client::*)(int,std::string))&Lua_Client::SendPayload)
 	.def("SendWebLink", (void(Lua_Client::*)(const char *))&Lua_Client::SendWebLink)
@@ -4209,7 +4384,25 @@ luabind::scope lua_register_client() {
 	.def("Signal", (void(Lua_Client::*)(int))&Lua_Client::Signal)
 	.def("Sit", (void(Lua_Client::*)(void))&Lua_Client::Sit)
 	.def("Stand", (void(Lua_Client::*)(void))&Lua_Client::Stand)
+	.def("ReturnItem", (void(Lua_Client::*)(uint32))&Lua_Client::ReturnItem)
+	.def("ReturnItem", (void(Lua_Client::*)(uint32,int))&Lua_Client::ReturnItem)
+	.def("ReturnItem", (void(Lua_Client::*)(uint32,int,uint32))&Lua_Client::ReturnItem)
+	.def("ReturnItem", (void(Lua_Client::*)(uint32,int,uint32,uint32))&Lua_Client::ReturnItem)
+	.def("ReturnItem", (void(Lua_Client::*)(uint32,int,uint32,uint32,uint32))&Lua_Client::ReturnItem)
+	.def("ReturnItem", (void(Lua_Client::*)(uint32,int,uint32,uint32,uint32,uint32))&Lua_Client::ReturnItem)
+	.def("ReturnItem", (void(Lua_Client::*)(uint32,int,uint32,uint32,uint32,uint32,uint32))&Lua_Client::ReturnItem)
+	.def("ReturnItem", (void(Lua_Client::*)(uint32,int,uint32,uint32,uint32,uint32,uint32,bool))&Lua_Client::ReturnItem)
+	.def("ReturnItem", (void(Lua_Client::*)(uint32,int,uint32,uint32,uint32,uint32,uint32,bool,int))&Lua_Client::ReturnItem)
 	.def("SummonBaggedItems", (void(Lua_Client::*)(uint32,luabind::adl::object))&Lua_Client::SummonBaggedItems)
+	.def("SummonFixedItem", (void(Lua_Client::*)(uint32))&Lua_Client::SummonFixedItem)
+	.def("SummonFixedItem", (void(Lua_Client::*)(uint32,int))&Lua_Client::SummonFixedItem)
+	.def("SummonFixedItem", (void(Lua_Client::*)(uint32,int,uint32))&Lua_Client::SummonFixedItem)
+	.def("SummonFixedItem", (void(Lua_Client::*)(uint32,int,uint32,uint32))&Lua_Client::SummonFixedItem)
+	.def("SummonFixedItem", (void(Lua_Client::*)(uint32,int,uint32,uint32,uint32))&Lua_Client::SummonFixedItem)
+	.def("SummonFixedItem", (void(Lua_Client::*)(uint32,int,uint32,uint32,uint32,uint32))&Lua_Client::SummonFixedItem)
+	.def("SummonFixedItem", (void(Lua_Client::*)(uint32,int,uint32,uint32,uint32,uint32,uint32))&Lua_Client::SummonFixedItem)
+	.def("SummonFixedItem", (void(Lua_Client::*)(uint32,int,uint32,uint32,uint32,uint32,uint32,bool))&Lua_Client::SummonFixedItem)
+	.def("SummonFixedItem", (void(Lua_Client::*)(uint32,int,uint32,uint32,uint32,uint32,uint32,bool,int))&Lua_Client::SummonFixedItem)
 	.def("SummonItem", (void(Lua_Client::*)(uint32))&Lua_Client::SummonItem)
 	.def("SummonItem", (void(Lua_Client::*)(uint32,int))&Lua_Client::SummonItem)
 	.def("SummonItem", (void(Lua_Client::*)(uint32,int,uint32))&Lua_Client::SummonItem)

@@ -1,163 +1,72 @@
 # EQEmulator Abilities Development Guide
 
-This folder contains comprehensive documentation for creating, modifying, and implementing new spells, disciplines, and alternate advancement (AA) abilities in the EQEmulator server.
+This folder documents how this repo implements custom spells, disciplines, and alternate advancements (AAs), including the client sync steps (`spells_us.txt` / `dbstr_us.txt`) used by `server_manager.py`.
 
-## Documentation Structure
+## Docs In This Folder
 
-### 1. **SPELLS_GUIDE.md**
-Complete guide to creating and modifying spells:
-- Database structure and spell tables
-- Spell effects (SPA) reference
-- Implementing new spell effects in C++
-- Client/server synchronization
-- Testing and debugging
+### 1. `SPELLS_GUIDE.md`
+- Spell schema and effect fields
+- C++ extension points for custom SPAs
+- Client synchronization behavior
 
-### 2. **DISCIPLINES_GUIDE.md**
-Disciplines (combat abilities) implementation:
-- How disciplines differ from spells
-- Creating discipline tomes
-- Endurance costs and recast timers
-- Warrior/Rogue/Monk/Berserker specific mechanics
+### 2. `DISCIPLINES_GUIDE.md`
+- Discipline spell setup (`IsDiscipline=1`)
+- Tome/item wiring
+- Endurance and timer handling
 
-### 3. **AA_GUIDE.md**
-Alternate Advancement system:
-- AA database structure (abilities, ranks, effects, prerequisites)
-- Creating passive vs. active AAs
-- Rank progression and costs
-- AA-specific spell effects
-- Integration with character progression
+### 3. `AA_GUIDE.md`
+- AA schema (`aa_ability`, `aa_ranks`, `aa_rank_effects`, `aa_rank_prereqs`)
+- Active vs passive AA setup
+- AA visibility and reload troubleshooting
 
-### 4. **SPELL_EFFECTS_REFERENCE.md**
-Detailed reference of all ~500 Spell Effects (SPAs):
-- Effect descriptions and parameters
-- Implementation status
-- Code locations
-- Examples from live spells
+### 4. `IMPLEMENTATION_CHECKLIST.md`
+- Build/deploy/test checklist
+- Common failure modes and recovery steps
 
-### 5. **IMPLEMENTATION_CHECKLIST.md**
-Step-by-step guide for developers:
-- Database changes required
-- C++ code modifications
-- Packet handling
-- Testing procedures
-- Common pitfalls
+## Repo-Specific Workflow (Authoritative)
 
-## Quick Start for Developers
+1. Apply SQL changes (typically in `utils/sql/custom/...`).
+2. Reload server data:
+   - AA table changes: `#reload aa_data`
+   - Spell table changes: run `shared_memory.exe` (or Server Manager "Shared Memory")
+3. Export client files with Server Manager:
+   - `Export spells_us`
+   - `Export dbstr_us`
+4. Verify Server Manager "Client Asset Status" shows up to date.
+5. Fully restart client (`eqgame`) before validating in-game UI/AA/spell text.
 
-### Adding a New Spell
-1. Insert into `spells_new` table with effects
-2. Test with `/cast` command in-game
-3. If custom behavior needed, modify `zone/spell_effects.cpp`
-4. Create scrolls/tomes in `items` table
+## Important Notes
 
-### Adding a New Discipline
-1. Create spell entry (set `IsDiscipline=1`)
-2. Create tome item (ItemType 20)
-3. Optionally: Create custom endurance costs in `zone/effects.cpp::UseDiscipline()`
+- `spells_new.id` must stay `< 65535` for client compatibility.
+- `db_str` entries are required for correct AA names/descriptions in the client window.
+- In this branch, AA class masks are evaluated with a left shift (`1 << class_id`) in `zone/aa.cpp`.
+  - Example: Warrior = `2`, Cleric = `4`, ... all classes = `131070`.
+- Reserved IDs currently in active custom use:
+  - Spells: `5824` (Origin alias path), `65000` (Heroic Throw), `65010` (Colossal Smash)
+  - AA/Ranks: `331` / `1000` (Origin/Bazaar-and-Back alias), `10000` and `12000` bands (custom warrior AAs)
+  - DB strings: `1000`, `10000`, `10010`, `10011`
 
-### Adding a New AA
-1. Insert into `aa_ability` table (base ability)
-2. Insert ranks into `aa_ranks` table
-3. Insert effects into `aa_rank_effects` table
-4. Add prerequisites to `aa_rank_prereqs` table
-5. If custom logic needed, modify `zone/aa.cpp` and `zone/bonuses.cpp::ApplyAABonuses()`
+## Useful In-Game Commands
 
-## Key Concepts
-
-- **Spells** = Database-driven with ~500 effects, mostly handled automatically
-- **Disciplines** = Special spells that cost endurance, tied to combat classes
-- **AAs** = Purchasable permanent upgrades, can be passive or active
-- **Spell Effects (SPAs)** = Atomic effects that make up spells/disciplines/AAs
-- **Focus Effects** = Spell effects that modify other spells (limits + modifications)
-
-## Architecture Overview
-
-```
-Database (spells_new, aa_ability, aa_ranks, etc.)
-    ↓
-Shared Memory (loaded by shared_memory process)
-    ↓
-Zone Server (applies effects via SpellEffect(), ApplyAABonuses())
-    ↓
-Client (receives packets with spell data, renders effects)
+```text
+#castspell [spell_id]              # Cast spell on yourself
+#reload aa_data                    # Reload AA definitions
+#set aa_points aa [amount]         # Set unspent AA points on target
+#showstats                         # Show current stat state
 ```
 
-## Important Files
+`#grantaa` in this codebase grants all AAs up to a level on the target; it is not "grant by AA id".
 
-### Database Tables
-- `spells_new` - All spell data (~236 columns)
-- `aa_ability` - Base AA definitions
-- `aa_ranks` - Individual AA ranks
-- `aa_rank_effects` - Effects for each rank
-- `aa_rank_prereqs` - AA unlock requirements
-- `items` - Spell scrolls, discipline tomes
-- **ID ranges / limits**:
-  - `spells_new.id` is effectively 16-bit on the client (wraps at 65535). Keep custom spell IDs < 65535 (we reserve the 64000–65050 band for custom AAs like Heroic Throw 65000 and Colossal Smash 65010).
-  - `aa_ability.id` / `aa_ranks.id` / `aa_rank_effects.rank_id` are `int unsigned` (server side) and safe well past 100k; we use the 110000 band for custom warrior AA above. Stay below 2^31 to avoid client/packet surprises.
+## Where Code Lives
 
-### C++ Code
-- `common/spdat.h` - Spell constants and SpellEffect namespace
-- `zone/spell_effects.cpp` - Spell effect implementations (~10k lines)
-- `zone/spells.cpp` - Spell casting logic
-- `zone/effects.cpp` - Discipline handling
-- `zone/aa.cpp` - AA activation and management
-- `zone/bonuses.cpp` - Applies bonuses from spells/items/AAs
+- `zone/spell_effects.cpp` - Spell effect execution
+- `zone/spells.cpp` - Casting/recast/core spell flow
+- `zone/aa.cpp` - AA purchase/activation/send table logic
+- `zone/bonuses.cpp` - Passive bonuses from spells/items/AAs
+- `server_manager.py` - Export of `spells_us.txt` / `dbstr_us.txt`
 
-### Repositories
-- `common/repositories/spells_new_repository.h`
-- `common/repositories/aa_ability_repository.h`
-- `common/repositories/aa_ranks_repository.h`
-- `common/repositories/aa_rank_effects_repository.h`
-- Installation SQL examples now live outside this docs folder:
-  - `utils/sql/custom/abilities/heroic_throw.sql` (custom AA install script)
+## Next
 
-## Development Workflow
-
-1. **Design Phase**: Define what the ability should do
-2. **Database Phase**: Create entries in appropriate tables
-3. **Testing Phase**: Test in-game with GM commands
-4. **Implementation Phase**: Add C++ code if custom behavior needed
-5. **Integration Phase**: Ensure it works with existing systems
-6. **Documentation Phase**: Update these guides with your changes
-
-## GM Commands for Testing
-
-```
-/cast [spell_id]                    # Cast spell on target
-/castspell [spell_id]               # Cast spell on yourself
-/discipline [spell_id]              # Use discipline
-/grantaa [aa_id] [points]          # Grant AA ability
-/setaaxp [aa_points]               # Set AA points
-/memspell [spell_id] [slot]        # Memorize spell
-```
-
-## Common Use Cases
-
-### Damage Over Time Spell
-1. Use `SpellEffect::CurrentHP` (0) with negative value
-2. Set buff duration in ticks
-3. Set resist type and target type
-
-### Passive Stat Bonus AA
-1. Create AA with stat effect (e.g., `SpellEffect::STR`)
-2. Set `spell = -1` in rank (passive)
-3. Effect applied via `ApplyAABonuses()`
-
-### Active Click AA
-1. Create AA with spell_id in rank
-2. Set recast_time and spell_type
-3. Triggered via `ActivateAlternateAdvancementAbility()`
-
-### Proc on Hit
-1. Use `SpellEffect::WeaponProc` or `SpellEffect::AddMeleeProc`
-2. Set base1 = proc spell ID
-3. Set base2 = proc rate
-
-## Next Steps
-
-Read the detailed guides in this folder based on what you want to create:
-- Creating spells → **SPELLS_GUIDE.md**
-- Creating disciplines → **DISCIPLINES_GUIDE.md**
-- Creating AAs → **AA_GUIDE.md**
-- Need effect reference → **SPELL_EFFECTS_REFERENCE.md**
-- Ready to implement → **IMPLEMENTATION_CHECKLIST.md**
+- For spells: see `SPELLS_GUIDE.md`
+- For AAs: see `AA_GUIDE.md`
+- For full rollout checklist: see `IMPLEMENTATION_CHECKLIST.md`

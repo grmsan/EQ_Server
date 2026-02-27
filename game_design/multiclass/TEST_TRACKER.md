@@ -1,7 +1,7 @@
 # Multiclass Test Tracker
 
 **Status**: Active Testing
-**Last Updated**: 2026-02-26
+**Last Updated**: 2026-02-27
 **Technical Plan**: [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
 
 ## Purpose
@@ -27,6 +27,14 @@ Use it in two modes:
 - `#level <n>`
 - `#setskill <id> <value>`
 - `#autoskill list`
+- `#test list`: Show available in-game sanity tests
+- `#test packs`: Show named in-game test packs
+- `#test <id>`: Run one test (example: `#test 3`)
+- `#test <start-end>`: Run a range (example: `#test 1-10`)
+- `#test smoke`: Foundational sanity pack
+- `#test combat`: Combat/proc/pet/AA precheck pack
+- `#test regression`: Run full registered automated suite
+- `#test all`: Run all registered tests
 
 ## Run Packs
 
@@ -37,6 +45,59 @@ Run these first: `C-01, C-02, C-03, I-01, I-02, S-02, P-01, P-02, P-03, P-04, P-
 ### Full Regression
 
 Run all tests in this document.
+
+## `#test` Automation Coverage (Current)
+
+Legend:
+- `Auto`: `#test` can directly validate the server-side objective.
+- `Partial`: `#test` validates invariants/preconditions, but in-game behavior still needs manual play.
+- `Manual`: Not meaningfully covered by current `#test` harness.
+
+### Auto (2/57)
+
+| Tracker ID | Coverage | `#test` IDs | Notes |
+|---|---|---|---|
+| `C-06` | Auto | `5, 8` | Validates `GestaltClasses`/`PlayerProfile.classes` hydration consistency on live character state. |
+| `S-06` | Auto | `9, 10` | Validates multiclass spell timer and target transforms are active in loaded spell data. |
+
+### Partial (9/57)
+
+| Tracker ID | Coverage | `#test` IDs | Notes |
+|---|---|---|---|
+| `C-01` | Partial | `3, 4` | Confirms class bit integrity and max-class enforcement; does not execute add/remove flow by itself. |
+| `C-02` | Partial | `5, 8` | Confirms persistence state is internally consistent after login/zone; relog flow is still manual. |
+| `S-05` | Partial | `10` | Confirms spell target transform; actual group propagation cast remains manual. |
+| `A-04` | Partial | `12, 15` | Covers Mnemonic Retention override and Fury rank 6+ pure-caster gate policy check. |
+| `P-05` | Partial | `13` | Confirms THJ proc preconditions (rules + 2H/bow proc item coverage); live proc firing remains manual. |
+| `P-11` | Partial | `14` | Confirms pet bag rule + DB + merchant wiring; live summon/sync behavior remains manual. |
+| `P-13` | Partial | `6` | Confirms `HasClass` parity with bitmask; combat gate behavior remains manual. |
+| `B-08` | Partial | `6` | Confirms class ownership API consistency; title unlock UI/eligibility remains manual. |
+| `G-01` | Partial | `11` | Validates guild query projection shape; roster presentation validation remains manual. |
+
+### Manual (46/57)
+
+`T-01, T-02, C-03, C-04, C-05, S-01, S-02, S-03, S-04, P-01, P-02, P-03, P-04, P-06, P-07, P-08, P-09, P-10, P-12, K-01, K-02, K-03, K-04, I-01, I-02, I-03, I-04, I-05, X-01, X-02, X-03, A-01, A-02, A-03, Z-01, Z-02, Z-03, Z-04, B-01, B-02, B-03, B-04, B-05, B-06, B-07, B-09`
+
+### Fast Automation Commands
+
+- Baseline multiclass sanity: `#test 1-10` or `#test smoke`
+- Combat/proc/pet/AA prechecks: `#test combat` (IDs `6,12,13,14,15`)
+- Guild/AA sanity: `#test 11-15`
+- Full current automated suite: `#test all`
+
+## Automated Validation Snapshot (2026-02-26)
+
+- Build/runtime sanity:
+1. `cmake --build build --target zone world --parallel 8` -> passed.
+2. Zone CLI tests passed: `tests:databuckets`, `tests:zone-state`, `tests:npc-handins`, `tests:npc-handins-multiquest`.
+3. Full stack boot (`start_server.py`) succeeded; world/zone/login/ucs/queryserv/eqlaunch all connected and static zones launched.
+- DB checks:
+1. `Custom:MulticlassingEnabled=true`, `Custom:UseDynamicAATimers=true`.
+2. `data_buckets.GestaltClasses` rows present and readable.
+3. New guild projection join/query shape (`character_data` + `guild_members` + `data_buckets.GestaltClasses`) executes successfully.
+- Notes:
+1. This snapshot validates server health and multiclass plumbing, not player-input combat execution.
+2. `#test` now covers server-side assertions for `C-06` and `S-06`, and partial prechecks for `A-04`, `P-05`, and `P-11`; manual in-game behavior validation is still required.
 
 ---
 
@@ -613,6 +674,187 @@ Run all tests in this document.
 1. Trigger a Lua quest script path that uses `eq.is_static_instance()` or `eq.is_farming_instance()`.
 2. Repeat in both non-respawning and respawning instances.
 **Expected**: No Lua nil-function errors; helper-based branch behavior matches instance type.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+---
+
+## 8) THJ Bazaar + Waypoints
+
+### [B-01] Magic Map Door Opens Waypoint UI
+
+**Goal**: Verify Bazaar map object hook is wired (`doorid=146` -> `SendWaypointList`).
+**Steps**:
+
+1. Zone into `bazaar`.
+2. Click the magic map object/disc at the Bazaar hub.
+**Expected**: Waypoint list UI opens (no quest/script errors).
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [B-02] Tearel Group Feature Unlock
+
+**Goal**: Verify Tearel dialogue and group-feature unlock path.
+**Steps**:
+
+1. Hail `Tearel`.
+2. Follow dialogue for `[anchor yourself]` and pay required EOM.
+3. Re-open map UI.
+**Expected**: Group toggle / expedition return options are enabled after unlock.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [B-03] Waypoint Discovery Trigger
+
+**Goal**: Verify `#TPTriggerN` discovery unlock flow.
+**Setup**:
+
+1. Apply `utils/sql/custom/2026_02_26_thj_waypoints_bazaar_bootstrap.sql` (includes `#TPTriggerN` spawn seeding from `thj_waypoints`).
+**Steps**:
+
+1. Enter a zone with `#TPTriggerN` proximity trigger.
+2. Observe discovery message.
+3. Re-open map UI and confirm zone appears unlocked.
+**Expected**: First pass unlocks waypoint; repeat pass shows already-known messaging.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [B-04] Class Add NPCs (Guildmasters Class 20..35)
+
+**Goal**: Verify Bazaar class-add NPCs drive global multiclass add flow.
+**Steps**:
+
+1. Hail one of the Bazaar class guildmasters (class 20..35 NPC).
+2. Follow `class_select` -> `class_confirm`.
+3. Run `#mcdiag` / `#autoskill list` / class-sensitive command to confirm ownership.
+**Expected**: Class bitmask gains selected class and class systems react immediately.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [B-05] Vision_of_Ayonae Class Removal
+
+**Goal**: Verify class removal/reroll NPC path is available in Bazaar.
+**Steps**:
+
+1. Hail `Vision_of_Ayonae`.
+2. Choose class removal path for one owned class.
+3. Validate class is removed and cooldown/cost behavior is enforced.
+**Expected**: Removal succeeds when requirements are met; lockout/cost rules apply.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [B-06] Pet Armory Merchant in Bazaar
+
+**Goal**: Verify pet bag vendor availability in Bazaar.
+**Steps**:
+
+1. Open merchant window on `Pet_Armory_Quartermaster`.
+2. Confirm class pet armory items are listed.
+3. Purchase one bag and test active pet bag behavior with a pet class.
+**Expected**: Merchant sells THJ pet bags and purchased bag works with pet equipment sync.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [B-07] THJ Quest API Binding Smoke Test
+
+**Goal**: Verify imported THJ quest methods are fully bound (no undefined method errors at runtime).
+**Setup**:
+
+1. Use a build that includes the latest zone script binding changes.
+2. Ensure zone logs are visible in the runtime log viewer.
+**Steps**:
+
+1. Trigger a script path that calls `$client->HasClass(\"Cleric\")` (example: `ikkinz/#Phantasmal_Priest.pl` dialog).
+2. Trigger Bazaar pet rename path (`151061.pl`) that calls `$client->IsPetNameChangeAllowed()` and `GrantPetNameChange(class_id)`.
+3. Trigger spell script `quests/global/spells/17785.pl` (`ConsumeItemOnCursor`) and `36892.pl` (`ConsumeUnspentAA`).
+4. Trigger a progression/slayer script path using `IsSeasonal`, `GetKillCount`, and `CheckTitle`.
+**Expected**: No Perl/Lua undefined-method errors; script behaviors execute normally.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [C-06] Zone-Load GestaltClasses Hydration
+
+**Goal**: Verify `PlayerProfile.classes` is loaded from `data_buckets.GestaltClasses` on zone entry.
+**Steps**:
+
+1. Log out with a multi-class character.
+2. Log back in and run `#mcdiag` immediately after entering world.
+3. Zone once and run `#mcdiag` again.
+**Expected**: Class bitmask is correct immediately at login and remains stable after zoning.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [S-06] Multiclass Spell Timer/Target Transform
+
+**Goal**: Verify multiclass spell-load transforms in `shareddb` are active.
+**Steps**:
+
+1. Cast a spell with `ST_GroupClientAndPet` target behavior from a multiclass character and validate targeting behavior.
+2. Use two disciplines from different owned classes that normally share timer families.
+3. Re-use each discipline and observe lockout behavior.
+**Expected**: Group+pet target transforms to direct target under multiclass rules; discipline timers are deconflicted by class.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [A-04] AA Multiclass Special Gates (Mnemonic/Fury)
+
+**Goal**: Verify THJ-style AA special handling in multiclass mode.
+**Steps**:
+
+1. On a multiclass character, check visibility/usability of Mnemonic Retention.
+2. On a non-pure caster multiclass, attempt Fury of Magic rank 6+ progression.
+3. Repeat Fury of Magic rank 6+ on a pure caster multiclass.
+**Expected**: Mnemonic Retention is allowed; Fury rank 6+ is blocked for non-pure casters and allowed for pure casters.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [P-13] HasClass Combat Gate Parity (Ranger/Berserker)
+
+**Goal**: Verify combat gates use owned classes, not only base class.
+**Steps**:
+
+1. Use a non-ranger-base character with Ranger owned class; test archery double-damage conditions.
+2. Use a non-berserker-base character with Berserker owned class; test frenzy min-cap behavior.
+3. Confirm behavior disappears when those classes are removed.
+**Expected**: Ranger/Berserker combat gates trigger based on class ownership (`HasClass`) not base class.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [B-08] Multiclass Title Eligibility
+
+**Goal**: Verify titles gated by class can unlock via owned secondary classes.
+**Steps**:
+
+1. Acquire a title whose class requirement is a non-base owned class.
+2. Open title list and confirm eligibility.
+3. Remove that class and re-check eligibility.
+**Expected**: Eligibility follows `HasClass` ownership, not only base class.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [B-09] Bazaar and Back AA (Instance-Aware Return)
+
+**Goal**: Verify THJ-style `Bazaar and Back` AA is auto-granted, ports to Bazaar, and returns to saved location including instances across relog.
+**Steps**:
+
+1. Log in on a fresh character and open AA window; confirm `Bazaar and Back` is present.
+2. In a normal zone, activate `Bazaar and Back` and verify you port to Bazaar.
+3. Activate it again in Bazaar and verify you return to your original coordinates.
+4. Repeat from an instance (save location in instance, port to Bazaar, camp/relog in Bazaar, then use AA again).
+5. Trigger AA twice quickly and verify reuse lockout message/cooldown behavior (~60s).
+**Expected**: AA is auto-granted to all characters, uses 60s cooldown, and return location persists across relog with instance-aware restore.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [G-01] Guild Member Multiclass Projection
+
+**Goal**: Verify guild roster payload includes `GestaltClasses` projection behavior.
+**Steps**:
+
+1. Put a known multiclass character in a guild.
+2. Open guild member list (or inspect guild roster API output).
+3. Compare class/level presentation to expected multiclass representation.
+**Expected**: Guild member info reflects multiclass projection from `data_buckets.GestaltClasses`.
 **Status**: [ ] Pass  [ ] Fail
 **Notes**: ______________________________
 

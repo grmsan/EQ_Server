@@ -4361,9 +4361,17 @@ bool Mob::SpellOnTarget(
 		}
 	}
 
-	// invuln mobs can't be affected by any spells, good or bad, except if caster is casting a spell with 'cast_not_standing' on self.
+	// invuln mobs can't be affected by spells. For GM invul testing, allow self beneficial spells.
+	const bool allow_self_beneficial_on_gm_invul =
+		(spelltar == this) &&
+		spelltar->GetInvul() &&
+		!spelltar->DivineAura() &&
+		IsBeneficialSpell(spell_id) &&
+		IsClient() &&
+		CastToClient()->GetGM();
+
 	if (
-		(spelltar->GetInvul() && !spelltar->DivineAura()) ||
+		(spelltar->GetInvul() && !spelltar->DivineAura() && !allow_self_beneficial_on_gm_invul) ||
 		(spelltar != this && spelltar->DivineAura()) ||
 		(spelltar == this && spelltar->DivineAura() && !IsCastNotStandingSpell(spell_id))
 	) {

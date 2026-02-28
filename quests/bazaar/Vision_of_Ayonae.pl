@@ -3,6 +3,20 @@ sub EVENT_ITEM {
 	plugin::return_items(\%itemcount);
 }
 
+sub _yellow_text {
+    my ($message, $client_ref) = @_;
+    my $c = $client_ref || plugin::val('$client');
+    return unless $c;
+
+    if (defined &plugin::YellowText) {
+        plugin::YellowText($message, $c);
+        return;
+    }
+
+    # Fallback when plugin helper is missing/unloaded.
+    $c->Message(335, $message);
+}
+
 sub EVENT_SAY {
     if (!plugin::IsTHJ()) {
         return;
@@ -21,12 +35,12 @@ sub EVENT_SAY {
 
         my $free_class_remove = ($client->GetBucket("free_remove_class_used") || 0);
         if (!$free_class_remove) {
-            plugin::YellowText("You have a free class removal available. You will be given the option to use it by proceeding with the menu.");
+            _yellow_text("You have a free class removal available. You will be given the option to use it by proceeding with the menu.");
         }
 
         my $free_aa_reset_used = ($client->GetBucket("free_aa_reset_used") || 0);
         if (!$free_aa_reset_used) {
-            plugin::YellowText("You have a free AA Reset available. You will be given the option to use it by proceeding with the menu.");
+            _yellow_text("You have a free AA Reset available. You will be given the option to use it by proceeding with the menu.");
         }
 
         return;
@@ -35,7 +49,7 @@ sub EVENT_SAY {
     if ($text=~/blind fate/i) {
         if (plugin::GetClassesCount($client) == 1) {
             plugin::NPCTell("You will be put upon an irrevocable path, impossible to predict. Are you certain that you wish to do this?");
-            plugin::YellowText("WARNING: If you [".quest::saylink('randomize_me_bitch', 1, 'continue')."], you will be assigned three random classes. This decision cannot be reversed.");
+            _yellow_text("WARNING: If you [".quest::saylink('randomize_me_bitch', 1, 'continue')."], you will be assigned three random classes. This decision cannot be reversed.");
         } else {
             plugin::NPCTell("Mortal. You are unsuitable, your fate has already been tainted by your pathetic free will. Begone.");
         }
@@ -96,7 +110,7 @@ sub EVENT_SAY {
     if ($text=~/free_reset_aa/i) {
         my $free_aa_reset_used = ($client->GetBucket("free_aa_reset_used") || 0);
         if (!$free_aa_reset_used) {
-            plugin::YellowText("All of your AA have been refunded.");
+            _yellow_text("All of your AA have been refunded.");
             $client->SetBucket("free_aa_reset_used", 1);
             $client->ResetAA();
             plugin::CommonCharacterUpdate($client);
@@ -159,11 +173,11 @@ sub EVENT_SAY {
 
             # Display YellowText confirmation for level change
             if ($level_difference == 0) {
-                plugin::YellowText(
+                _yellow_text(
                     "You have selected your current level ($current_level). No changes are required, and no cost will be incurred."
                 );
             } else {
-                plugin::YellowText(
+                _yellow_text(
                     "Changing your level to $desired_level will cost $cost_in_platinum platinum pieces. "
                 . "Would you like to ["
                 . quest::saylink("confirm_level_change_$desired_level", 1, "confirm this adjustment")
@@ -193,7 +207,7 @@ sub EVENT_SAY {
                 . "Seek me again if you truly wish to adjust your path."
                 );
             } elsif ($client->TakeMoneyFromPP($cost_in_copper, 1)) {
-                plugin::YellowText("You spent $cost_in_platinum platinum pieces.");
+                _yellow_text("You spent $cost_in_platinum platinum pieces.");
                 $client->SetLevel($desired_level,1);
                 plugin::NPCTell(
                     "Your level has been adjusted to $desired_level for a cost of $cost_in_platinum platinum pieces. "
@@ -219,22 +233,22 @@ sub EVENT_SAY {
     if ($text eq 'reset_aa') {
         my $free_aa_reset_used = ($client->GetBucket("free_aa_reset_used") || 0);
         if (!$free_aa_reset_used) {
-            plugin::YellowText("You have a free AA Reset available. Would you like to [".quest::saylink("free_reset_aa", 1, "use it")."]?");
+            _yellow_text("You have a free AA Reset available. Would you like to [".quest::saylink("free_reset_aa", 1, "use it")."]?");
         }
        
         if (plugin::GetEOM($client) >= $reset_aa_cost) {
-                plugin::YellowText("It will cost $reset_aa_cost Echo of Memory in order to reset your AA. Would you like to ["
+                _yellow_text("It will cost $reset_aa_cost Echo of Memory in order to reset your AA. Would you like to ["
                                 .quest::saylink("confirm_reset_aa", 1, "Proceed")."]?");
         
         } else {
-                plugin::YellowText("It costs $reset_aa_cost Echo of Memory in order to reset your AA. You can obtain
+                _yellow_text("It costs $reset_aa_cost Echo of Memory in order to reset your AA. You can obtain
                                 Echo of Memory through contributions to the sever or purchase from other players in the Bazaar.");
         }  
     }
 
     if ($text eq 'confirm_reset_aa') {        
         if (plugin::SpendEOM($client, $reset_aa_cost)) {
-            plugin::YellowText("All of your AA have been refunded.");
+            _yellow_text("All of your AA have been refunded.");
             $client->ResetAA();
             plugin::CommonCharacterUpdate($client);
             $client->Save(1);                
@@ -246,22 +260,22 @@ sub EVENT_SAY {
 
         my $free_class_remove = ($client->GetBucket("free_remove_class_used") || 0);
         if (!$free_class_remove) {
-            plugin::YellowText("You have a free class removal available. Would you like to [".quest::saylink("free_$class_id", 1, "use it")."]? This will bypass any lockouts or costs.");
+            _yellow_text("You have a free class removal available. Would you like to [".quest::saylink("free_$class_id", 1, "use it")."]? This will bypass any lockouts or costs.");
         } else {
             if ($client->HasExpeditionLockout("Class Removal Lockout", "")) {
-                plugin::YellowText("You cannot remove a class at this time, you still are under cooldown from a previous class removal.");
+                _yellow_text("You cannot remove a class at this time, you still are under cooldown from a previous class removal.");
                 return 0;
             }
         }
 
         if (plugin::HasClass($client, $class_id)) {
             if (plugin::GetEOM($client) >= $remove_class_cost) {
-                 plugin::YellowText("It will cost $remove_class_cost Echo of Memory in order to remove a class. Additionally, 
+                 _yellow_text("It will cost $remove_class_cost Echo of Memory in order to remove a class. Additionally, 
                                     there is a $remove_class_lockout-day cooldown after removing a class before you can remove another.
                                     Would you like to [".quest::saylink("proceed_$class_id", 1, "Proceed")."]?");
             
             } else {
-                 plugin::YellowText("It costs $remove_class_cost Echo of Memory in order to remove a class. You can obtain
+                 _yellow_text("It costs $remove_class_cost Echo of Memory in order to remove a class. You can obtain
                                     Echo of Memory through contributions to the sever or purchase from other players in the Bazaar.");
             }           
         }
@@ -272,7 +286,7 @@ sub EVENT_SAY {
         my $class_id = $1; 
 
         if ($client->HasExpeditionLockout("Class Removal Lockout", "")) {
-            plugin::YellowText("You cannot remove a class at this time, you still are under cooldown from a previous class removal.");
+            _yellow_text("You cannot remove a class at this time, you still are under cooldown from a previous class removal.");
             return 0;
         }
 

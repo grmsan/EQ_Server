@@ -207,7 +207,7 @@ Tooling/Server Manager UI validation was moved to:
 2. `#camp`, then log back in
 3. `#addclass list`
 **Expected**: Warrior + Cleric still present.
-**Status**: [ ] Pass  [ ] Fail
+**Status**: [x] Pass  [ ] Fail
 **Notes**: ______________________________
 
 ### [C-03] Client Sync (Mana Bar)
@@ -232,7 +232,7 @@ Tooling/Server Manager UI validation was moved to:
 3. Cast beneficial single-target spell.
 4. Cast detrimental spell on same setup.
 **Expected**: Beneficial reroutes to valid friendly implied target; detrimental remains hostile.
-**Status**: [ ] Pass  [ ] Fail
+**Status**: [x] Pass  [ ] Fail
 **Notes**: ______________________________
 
 ### [C-05] Smart Melee Implied Targeting

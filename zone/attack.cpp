@@ -165,6 +165,62 @@ static float HeroicDexScale(float dex) {
 	return scaled_dex / 100.0f / scale_divide;
 }
 
+static bool IsProcTraceEnabled(const Mob* actor)
+{
+	return actor && actor->IsClient() && actor->CastToClient()->GetGM();
+}
+
+static void EmitProcTrace(
+	Mob* actor,
+	Mob* target,
+	const char* source,
+	uint16 spell_id,
+	int base_spell_id = SPELL_UNKNOWN,
+	int slot = -1,
+	float chance = -1.0f,
+	EQ::skills::SkillType skill = EQ::skills::HIGHEST_SKILL,
+	uint16 hand = 0,
+	bool ranged = false
+)
+{
+	if (!IsProcTraceEnabled(actor)) {
+		return;
+	}
+
+	const char* spell_name = IsValidSpell(spell_id) ? spells[spell_id].name : "UNKNOWN";
+	const char* target_name = target ? target->GetCleanName() : "NONE";
+
+	actor->Message(
+		Chat::Yellow,
+		"PROC_TRACE src=%s spell=%u(%s) base=%d slot=%d chance=%.3f skill=%d hand=%u ranged=%u target=%s",
+		source,
+		spell_id,
+		spell_name,
+		base_spell_id,
+		slot,
+		chance,
+		static_cast<int>(skill),
+		hand,
+		ranged ? 1 : 0,
+		target_name
+	);
+
+	LogInfo(
+		"PROC_TRACE actor=[{}] src=[{}] spell=[{}]({}) base=[{}] slot=[{}] chance=[{:.3f}] skill=[{}] hand=[{}] ranged=[{}] target=[{}]",
+		actor->GetCleanName(),
+		source,
+		spell_name,
+		spell_id,
+		base_spell_id,
+		slot,
+		chance,
+		static_cast<int>(skill),
+		hand,
+		ranged ? 1 : 0,
+		target_name
+	);
+}
+
 //SYNC WITH: tune.cpp, mob.h TuneAttackAnimation
 EQ::skills::SkillType Mob::AttackAnimation(int Hand, const EQ::ItemInstance* weapon, EQ::skills::SkillType skillinuse)
 {
@@ -5251,6 +5307,7 @@ void Mob::TryDefensiveProc(Mob *on, uint16 hand)
 				if (!IsProcLimitTimerActive(DefensiveProcs[i].base_spellID, DefensiveProcs[i].proc_reuse_time, ProcType::DEFENSIVE_PROC)) {
 					float chance = proc_chance * (static_cast<float>(DefensiveProcs[i].chance) / 100.0f);
 					if (zone->random.Roll(chance)) {
+						EmitProcTrace(this, on, "DefensiveProcs", DefensiveProcs[i].spellID, DefensiveProcs[i].base_spellID, i, chance, EQ::skills::HIGHEST_SKILL, hand, false);
 						ExecWeaponProc(nullptr, DefensiveProcs[i].spellID, on);
 						CheckNumHitsRemaining(NumHit::DefensiveSpellProcs, 0, DefensiveProcs[i].base_spellID);
 						SetProcLimitTimer(DefensiveProcs[i].base_spellID, DefensiveProcs[i].proc_reuse_time, ProcType::DEFENSIVE_PROC);
@@ -5271,6 +5328,7 @@ void Mob::TryDefensiveProc(Mob *on, uint16 hand)
 					if (!IsProcLimitTimerActive(-aa_rank_id, aa_proc_reuse_timer, ProcType::DEFENSIVE_PROC)) {
 						float chance = proc_chance * (static_cast<float>(aa_proc_chance) / 100.0f);
 						if (zone->random.Roll(chance) && IsValidSpell(aa_spell_id)) {
+							EmitProcTrace(this, on, "AADefensiveProc", aa_spell_id, aa_rank_id, i / 4, chance, EQ::skills::HIGHEST_SKILL, hand, false);
 							ExecWeaponProc(nullptr, aa_spell_id, on);
 							SetProcLimitTimer(-aa_rank_id, aa_proc_reuse_timer, ProcType::DEFENSIVE_PROC);
 						}
@@ -5357,6 +5415,18 @@ void Mob::TryWeaponProc(const EQ::ItemInstance *inst, const EQ::ItemData *weapon
 			if (!RollDexChainProc(this, i)) {
 				break;
 			}
+			EmitProcTrace(
+				this,
+				on,
+				"DexChainProc",
+				effect_id,
+				data_ref ? data_ref->ID : SPELL_UNKNOWN,
+				i,
+				-1.0f,
+				static_cast<EQ::skills::SkillType>(skillinuse),
+				hand,
+				hand == EQ::invslot::slotRange
+			);
 			ExecWeaponProc(inst_ref, effect_id, on);
 		}
 	};
@@ -5381,6 +5451,7 @@ void Mob::TryWeaponProc(const EQ::ItemInstance *inst, const EQ::ItemData *weapon
 			}
 			else {
 				LogCombat("Attacking weapon ([{}]) successfully procing spell [{}] ([{}] percent chance)", weapon->Name, weapon->Proc.Effect, WPC * 100);
+				EmitProcTrace(this, on, "WeaponProc", weapon->Proc.Effect, weapon->ID, -1, WPC, static_cast<EQ::skills::SkillType>(skillinuse), hand, hand == EQ::invslot::slotRange);
 				ExecWeaponProc(inst, weapon->Proc.Effect, on);
 				TryDexChain(inst, weapon, weapon->Proc.Effect);
 				proced = true;
@@ -5421,6 +5492,7 @@ void Mob::TryWeaponProc(const EQ::ItemInstance *inst, const EQ::ItemData *weapon
 						}
 					}
 					else {
+						EmitProcTrace(this, on, "AugmentProc", aug->Proc.Effect, aug->ID, r, APC, static_cast<EQ::skills::SkillType>(skillinuse), hand, hand == EQ::invslot::slotRange);
 						ExecWeaponProc(aug_i, aug->Proc.Effect, on);
 						TryDexChain(aug_i, aug, aug->Proc.Effect);
 						if (RuleB(Combat, OneProcPerWeapon))
@@ -5474,7 +5546,7 @@ void Mob::TrySpellProc(const EQ::ItemInstance *inst, const EQ::ItemData *weapon,
 	int16 poison_slot=-1;
 	int procCount = 0;
 
-	for (uint32 i = 0; i < MAX_PROCS; i++) {
+	for (int i = 0; i < m_max_procs; i++) {
 		if (IsPet() && hand != EQ::invslot::slotPrimary) //Pets can only proc spell procs from their primay hand (ie; beastlord pets)
 			continue; // If pets ever can proc from off hand, this will need to change
 
@@ -5489,6 +5561,7 @@ void Mob::TrySpellProc(const EQ::ItemInstance *inst, const EQ::ItemData *weapon,
 			if (IsValidSpell(PermaProcs[i].spellID)) {
 				if (zone->random.Roll(PermaProcs[i].chance)) { // TODO: Do these get spell bonus?
 					LogCombat("Permanent proc [{}] procing spell [{}] ([{}] percent chance)", i, PermaProcs[i].spellID, PermaProcs[i].chance);
+					EmitProcTrace(this, on, "PermaProc", PermaProcs[i].spellID, PermaProcs[i].base_spellID, i, PermaProcs[i].chance, skillinuse, hand, rangedattk);
 					ExecWeaponProc(nullptr, PermaProcs[i].spellID, on);
 				}
 				else {
@@ -5510,6 +5583,7 @@ void Mob::TrySpellProc(const EQ::ItemInstance *inst, const EQ::ItemData *weapon,
 					if (zone->random.Roll(chance)) {
 						LogCombat("Spell proc [{}] procing spell [{}] ([{}] percent chance)", i, SpellProcs[i].spellID, chance);
 						SendBeginCast(SpellProcs[i].spellID, 0);
+						EmitProcTrace(this, on, "SpellProc", SpellProcs[i].spellID, SpellProcs[i].base_spellID, i, chance, skillinuse, hand, rangedattk);
 						ExecWeaponProc(nullptr, SpellProcs[i].spellID, on, SpellProcs[i].level_override);
 						SetProcLimitTimer(SpellProcs[i].base_spellID, SpellProcs[i].proc_reuse_time, ProcType::MELEE_PROC);
 						CheckNumHitsRemaining(NumHit::OffensiveSpellProcs, 0, SpellProcs[i].base_spellID);
@@ -5535,6 +5609,7 @@ void Mob::TrySpellProc(const EQ::ItemInstance *inst, const EQ::ItemData *weapon,
 					float chance = ProcChance * (static_cast<float>(RangedProcs[i].chance) / 100.0f);
 					if (zone->random.Roll(chance)) {
 						LogCombat("Ranged proc [{}] procing spell [{}] ([{}] percent chance)", i, RangedProcs[i].spellID, chance);
+						EmitProcTrace(this, on, "RangedProc", RangedProcs[i].spellID, RangedProcs[i].base_spellID, i, chance, skillinuse, hand, rangedattk);
 						ExecWeaponProc(nullptr, RangedProcs[i].spellID, on);
 						CheckNumHitsRemaining(NumHit::OffensiveSpellProcs, 0, RangedProcs[i].base_spellID);
 						SetProcLimitTimer(RangedProcs[i].base_spellID, RangedProcs[i].proc_reuse_time, ProcType::RANGED_PROC);
@@ -5586,6 +5661,7 @@ void Mob::TrySpellProc(const EQ::ItemInstance *inst, const EQ::ItemData *weapon,
 					float chance = ProcChance * (static_cast<float>(aa_proc_chance) / 100.0f);
 					if (zone->random.Roll(chance) && IsValidSpell(aa_spell_id)) {
 						LogCombat("AA proc [{}] procing spell [{}] ([{}] percent chance)", aa_rank_id, aa_spell_id, chance);
+						EmitProcTrace(this, on, "AAProc", aa_spell_id, aa_rank_id, i / 4, chance, skillinuse, hand, rangedattk);
 						ExecWeaponProc(nullptr, aa_spell_id, on);
 						SetProcLimitTimer(-aa_rank_id, aa_proc_reuse_timer, proc_type);
 
@@ -5610,6 +5686,7 @@ void Mob::TrySpellProc(const EQ::ItemInstance *inst, const EQ::ItemData *weapon,
 		if (zone->random.Roll(chance)) {
 			LogCombat("Poison proc [{}] procing spell [{}] ([{}] percent chance)", poison_slot, spell_id, chance);
 			SendBeginCast(spell_id, 0);
+			EmitProcTrace(this, on, "PoisonProc", spell_id, SpellProcs[poison_slot].base_spellID, poison_slot, chance, skillinuse, hand, rangedattk);
 			ExecWeaponProc(nullptr, spell_id, on, SpellProcs[poison_slot].level_override);
 			if (one_shot) {
 				RemoveProcFromWeapon(spell_id);
@@ -6488,6 +6565,7 @@ void Mob::TrySkillProc(Mob *on, EQ::skills::SkillType skill, uint16 ReuseTime, b
 						if (CanProc && spells[base_spell_id].base_value[i] == skill && IsValidSpell(proc_spell_id)) {
 							float final_chance = chance * (ProcMod / 100.0f);
 							if (zone->random.Roll(final_chance)) {
+								EmitProcTrace(this, on, "SkillProcSpellBonus", proc_spell_id, base_spell_id, i, final_chance, skill, hand, hand == EQ::invslot::slotRange);
 								ExecWeaponProc(nullptr, proc_spell_id, on);
 								CheckNumHitsRemaining(NumHit::OffensiveSpellProcs, 0, base_spell_id);
 								CanProc = false;
@@ -6533,6 +6611,7 @@ void Mob::TrySkillProc(Mob *on, EQ::skills::SkillType skill, uint16 ReuseTime, b
 						if (CanProc && spells[base_spell_id].base_value[i] == skill && IsValidSpell(proc_spell_id)) {
 							float final_chance = chance * (ProcMod / 100.0f);
 							if (zone->random.Roll(final_chance)) {
+								EmitProcTrace(this, on, "SkillProcItemBonus", proc_spell_id, base_spell_id, i, final_chance, skill, hand, hand == EQ::invslot::slotRange);
 								ExecWeaponProc(nullptr, proc_spell_id, on);
 								CanProc = false;
 								break;
@@ -6595,6 +6674,7 @@ void Mob::TrySkillProc(Mob *on, EQ::skills::SkillType skill, uint16 ReuseTime, b
 								float final_chance = chance * (ProcMod / 100.0f);
 
 								if (zone->random.Roll(final_chance)) {
+									EmitProcTrace(this, on, "SkillProcAABonus", proc_spell_id, base_spell_id, i, final_chance, skill, hand, hand == EQ::invslot::slotRange);
 									ExecWeaponProc(nullptr, proc_spell_id, on);
 									CanProc = false;
 									break;
@@ -6658,6 +6738,18 @@ void Mob::TryCastOnSkillUse(Mob *on, EQ::skills::SkillType skill) {
 					IsValidSpell(spellbonuses.SkillAttackProc[i + SBIndex::SKILLATK_PROC_SPELL_ID]) &&
 					zone->random.Int(1, 1000) <= spellbonuses.SkillAttackProc[i + SBIndex::SKILLATK_PROC_CHANCE]
 				) {
+					EmitProcTrace(
+						this,
+						on,
+						"CastOnSkillUseSpellBonus",
+						spellbonuses.SkillAttackProc[i + SBIndex::SKILLATK_PROC_SPELL_ID],
+						SPELL_UNKNOWN,
+						i,
+						static_cast<float>(spellbonuses.SkillAttackProc[i + SBIndex::SKILLATK_PROC_CHANCE]) / 10.0f,
+						skill,
+						0,
+						false
+					);
 					SpellFinished(spellbonuses.SkillAttackProc[i + SBIndex::SKILLATK_PROC_SPELL_ID], on, EQ::spells::CastingSlot::Item, 0, -1, spells[spellbonuses.SkillAttackProc[i + SBIndex::SKILLATK_PROC_SPELL_ID]].resist_difficulty);
 				}
 			}
@@ -6674,6 +6766,18 @@ void Mob::TryCastOnSkillUse(Mob *on, EQ::skills::SkillType skill) {
 					IsValidSpell(itembonuses.SkillAttackProc[i + SBIndex::SKILLATK_PROC_SPELL_ID]) &&
 					zone->random.Int(1, 1000) <= itembonuses.SkillAttackProc[i + SBIndex::SKILLATK_PROC_CHANCE]
 				) {
+					EmitProcTrace(
+						this,
+						on,
+						"CastOnSkillUseItemBonus",
+						itembonuses.SkillAttackProc[i + SBIndex::SKILLATK_PROC_SPELL_ID],
+						SPELL_UNKNOWN,
+						i,
+						static_cast<float>(itembonuses.SkillAttackProc[i + SBIndex::SKILLATK_PROC_CHANCE]) / 10.0f,
+						skill,
+						0,
+						false
+					);
 					SpellFinished(itembonuses.SkillAttackProc[i + SBIndex::SKILLATK_PROC_SPELL_ID], on, EQ::spells::CastingSlot::Item, 0, -1, spells[itembonuses.SkillAttackProc[i + SBIndex::SKILLATK_PROC_SPELL_ID]].resist_difficulty);
 				}
 			}
@@ -6688,6 +6792,18 @@ void Mob::TryCastOnSkillUse(Mob *on, EQ::skills::SkillType skill) {
 				skill == aabonuses.SkillAttackProc[i + SBIndex::SKILLATK_PROC_SKILL]
 			) {
 				if (zone->random.Int(1, 1000) <= aabonuses.SkillAttackProc[i + SBIndex::SKILLATK_PROC_CHANCE]) {
+					EmitProcTrace(
+						this,
+						on,
+						"CastOnSkillUseAABonus",
+						aabonuses.SkillAttackProc[i + SBIndex::SKILLATK_PROC_SPELL_ID],
+						SPELL_UNKNOWN,
+						i,
+						static_cast<float>(aabonuses.SkillAttackProc[i + SBIndex::SKILLATK_PROC_CHANCE]) / 10.0f,
+						skill,
+						0,
+						false
+					);
 					SpellFinished(aabonuses.SkillAttackProc[i + SBIndex::SKILLATK_PROC_SPELL_ID], on, EQ::spells::CastingSlot::Item, 0, -1, spells[aabonuses.SkillAttackProc[i + SBIndex::SKILLATK_PROC_SPELL_ID]].resist_difficulty);
 				}
 			}

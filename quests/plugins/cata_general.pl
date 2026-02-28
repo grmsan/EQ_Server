@@ -251,3 +251,25 @@ sub transform_item {
     
     return $dst_item;
 }
+
+# THJ compatibility shim:
+# This server does not use Echo of Memory gating. Keep these helpers
+# globally available so THJ quest scripts run without per-script edits.
+sub GetEOM {
+    return 999999999;
+}
+
+sub SpendEOM {
+    return 1;
+}
+
+sub LootEOM {
+    my ($client, $amount) = @_;
+    return $amount || 0;
+}
+
+sub EOMLink {
+    return "Echo of Memory";
+}
+
+return 1;

@@ -347,10 +347,10 @@ Mob::Mob(
 	feigned = false;
 
 	int max_procs = MAX_PROCS;
-	m_max_procs = std::min(RuleI(Combat, MaxProcs), max_procs);
+	m_max_procs = std::max(0, std::min(RuleI(Combat, MaxProcs), max_procs));
 
 	// clear the proc arrays
-	for (int j = 0; j < m_max_procs; j++) {
+	for (int j = 0; j < max_procs; j++) {
 		PermaProcs[j].spellID             = SPELL_UNKNOWN;
 		PermaProcs[j].chance              = 0;
 		PermaProcs[j].base_spellID        = SPELL_UNKNOWN;

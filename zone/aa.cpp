@@ -54,8 +54,10 @@ constexpr uint32 kBazaarAndBackAARankID = 50001;
 constexpr uint32 kBazaarAndBackOriginAAAbilityID = 331;  // THJ-style alias
 constexpr uint32 kBazaarAndBackOriginAARankID = 1000;    // THJ-style alias
 constexpr uint32 kBazaarAndBackZoneID = 151; // bazaar
-constexpr float kBazaarAndBackX = -824.32f;
-constexpr float kBazaarAndBackY = 1.64f;
+// Note: in-game /loc prints as "Y, X, Z". MovePC expects "X, Y, Z".
+// Desired /loc landing near Bazaar staging area: -817.14, 1.98, 3.44.
+constexpr float kBazaarAndBackX = 1.98f;
+constexpr float kBazaarAndBackY = -817.14f;
 constexpr float kBazaarAndBackZ = 3.44f;
 constexpr float kBazaarAndBackH = 256.0f;
 constexpr const char* kBazaarAndBackBucketKey = "thj.bazaar_and_back.return";

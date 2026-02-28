@@ -17,16 +17,26 @@ constexpr uint32 kMaxPullCount = 20;
 constexpr float kTwoPi = 6.28318530718f;
 }
 
-static bool IsSpawnInBazaarStageGrid(Spawn2* spawn)
+static bool IsNPCInBazaarStageGrid(NPC* npc)
 {
-	if (!spawn) {
+	if (!npc) {
 		return false;
 	}
 
 	return
-		std::fabs(spawn->GetX() - kStageCenterX) <= kStageMaxOffset &&
-		std::fabs(spawn->GetY() - kStageCenterY) <= kStageMaxOffset &&
-		std::fabs(spawn->GetZ() - kStageCenterZ) <= kStageMaxZDelta;
+		std::fabs(npc->GetX() - kStageCenterX) <= kStageMaxOffset &&
+		std::fabs(npc->GetY() - kStageCenterY) <= kStageMaxOffset &&
+		std::fabs(npc->GetZ() - kStageCenterZ) <= kStageMaxZDelta;
+}
+
+static bool IsExcludedByDefault(NPC* npc)
+{
+	if (!npc) {
+		return true;
+	}
+
+	const auto clean_name = Strings::ToLower(npc->GetCleanName());
+	return clean_name == "a_horse" || clean_name == "a horse" || clean_name == "#tptriggern";
 }
 
 void command_bazaarpull(Client* c, const Seperator* sep)
@@ -41,15 +51,22 @@ void command_bazaarpull(Client* c, const Seperator* sep)
 	}
 
 	bool count_only = false;
+	bool include_all = false;
 	uint32 pull_count = kDefaultPullCount;
+	for (int i = 1; i <= sep->argnum; ++i) {
+		if (!sep->arg[i] || sep->arg[i][0] == '\0') {
+			continue;
+		}
 
-	if (sep->argnum >= 1 && sep->arg[1] && sep->arg[1][0] != '\0') {
-		const auto arg = Strings::ToLower(sep->arg[1]);
+		const auto arg = Strings::ToLower(sep->arg[i]);
 		if (arg == "count" || arg == "status") {
 			count_only = true;
 		}
-		else if (sep->IsNumber(1)) {
-			pull_count = Strings::ToUnsignedInt(sep->arg[1], kDefaultPullCount);
+		else if (arg == "all") {
+			include_all = true;
+		}
+		else if (sep->IsNumber(i)) {
+			pull_count = Strings::ToUnsignedInt(sep->arg[i], kDefaultPullCount);
 			if (pull_count < 1) {
 				pull_count = kDefaultPullCount;
 			}
@@ -58,13 +75,14 @@ void command_bazaarpull(Client* c, const Seperator* sep)
 			}
 		}
 		else {
-			c->Message(Chat::White, "Usage: #bazaarpull [count|status]");
+			c->Message(Chat::White, "Usage: #bazaarpull [count|status] [all]");
 			return;
 		}
 	}
 
 	std::vector<NPC*> staged_npcs;
 	staged_npcs.reserve(entity_list.GetNPCList().size());
+	uint32 excluded_by_filter = 0;
 
 	for (const auto& npc_entity : entity_list.GetNPCList()) {
 		auto* npc = npc_entity.second;
@@ -77,7 +95,11 @@ void command_bazaarpull(Client* c, const Seperator* sep)
 			continue;
 		}
 
-		if (IsSpawnInBazaarStageGrid(spawn)) {
+		if (IsNPCInBazaarStageGrid(npc)) {
+			if (!include_all && IsExcludedByDefault(npc)) {
+				++excluded_by_filter;
+				continue;
+			}
 			staged_npcs.emplace_back(npc);
 		}
 	}
@@ -99,8 +121,11 @@ void command_bazaarpull(Client* c, const Seperator* sep)
 		c->Message(
 			Chat::White,
 			fmt::format(
-				"Bazaar staged/unplaced NPCs currently spawned: {}",
-				staged_npcs.size()
+				"Bazaar staged/unplaced NPCs currently spawned: {}{}",
+				staged_npcs.size(),
+				(!include_all && excluded_by_filter > 0)
+					? fmt::format(" (filtered out {} horse/trigger placeholders; use #bazaarpull status all)", excluded_by_filter)
+					: ""
 			).c_str()
 		);
 		return;
@@ -141,6 +166,17 @@ void command_bazaarpull(Client* c, const Seperator* sep)
 			static_cast<uint32>(staged_npcs.size()) - to_move
 		).c_str()
 	);
+
+	if (!include_all && excluded_by_filter > 0) {
+		c->Message(
+			Chat::White,
+			fmt::format(
+				"Skipped {} horse/trigger placeholder NPC{} (use #bazaarpull all to include).",
+				excluded_by_filter,
+				excluded_by_filter == 1 ? "" : "s"
+			).c_str()
+		);
+	}
 
 	if (to_move == 1) {
 		c->Message(

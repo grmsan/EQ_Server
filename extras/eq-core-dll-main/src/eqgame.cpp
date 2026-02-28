@@ -906,6 +906,174 @@ static volatile LONG g_merchant_spell_best_class = 0;
 static volatile LONG g_merchant_spell_best_level = 0;
 static volatile LONG g_merchant_spell_base_class = 0;
 static volatile LONG g_merchant_spell_tick = 0;
+static uint32_t g_last_client_probe_command = 0;
+static uint32_t g_last_client_probe_nonce = 0;
+static uint32_t g_last_client_probe_test_id = 0;
+
+static void SendClientProbeReplyCommand(uint32_t test_id, uint32_t nonce)
+{
+	PSPAWNINFO me = reinterpret_cast<PSPAWNINFO>(pLocalPlayer);
+	if (!me || !GetCharInfo()) {
+		return;
+	}
+
+	const uint32_t spawn_id = me->SpawnID;
+	uint32_t target_id = 0;
+	if (pTarget) {
+		auto* target_spawn = reinterpret_cast<PSPAWNINFO>(pTarget);
+		if (target_spawn) {
+			target_id = target_spawn->SpawnID;
+		}
+	}
+
+	uint32_t effective_mask = (GetEffectiveUsableClassesMask() & 0xFFFF);
+	int game_state = 0;
+	__try {
+		game_state = GetGameState();
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		game_state = 0;
+	}
+
+	const int hp_cur = (g_serverCurHP >= 0) ? g_serverCurHP : 0;
+	const int hp_max = (g_serverMaxHP >= 0) ? g_serverMaxHP : 0;
+
+	char cmd[256] = { 0 };
+	_snprintf_s(
+		cmd,
+		sizeof(cmd),
+		_TRUNCATE,
+		"/say #test clientreply %u %u %d %u %u %u %d %d",
+		test_id,
+		nonce,
+		game_state,
+		spawn_id,
+		target_id,
+		effective_mask,
+		hp_cur,
+		hp_max
+	);
+
+	DoCommand(me, cmd);
+
+	if (isDebugLoggingEnabled) {
+		LogDebug(
+			"[CLIENT_TEST_PROBE_REPLY] test_id=%u nonce=%u gs=%d spawn=%u target=%u mask=0x%04X hp=%d/%d",
+			test_id,
+			nonce,
+			game_state,
+			spawn_id,
+			target_id,
+			effective_mask,
+			hp_cur,
+			hp_max
+		);
+	}
+}
+
+static void SendClientProbeReplyCommandV2(uint32_t test_id, uint32_t nonce, uint32_t requested_mask, int32_t arg0, int32_t arg1, int32_t arg2, int32_t arg3)
+{
+	(void)arg0;
+	(void)arg1;
+	(void)arg2;
+	(void)arg3;
+
+	PSPAWNINFO me = reinterpret_cast<PSPAWNINFO>(pLocalPlayer);
+	if (!me || !GetCharInfo()) {
+		return;
+	}
+
+	constexpr uint32_t kProbeFieldGameState = 1u << 0;
+	constexpr uint32_t kProbeFieldSpawnId = 1u << 1;
+	constexpr uint32_t kProbeFieldTargetId = 1u << 2;
+	constexpr uint32_t kProbeFieldHp = 1u << 3;
+	constexpr uint32_t kProbeFieldMana = 1u << 4;
+	constexpr uint32_t kProbeFieldEndurance = 1u << 5;
+	constexpr uint32_t kProbeFieldClassMask = 1u << 6;
+
+	uint32_t response_mask = 0;
+	int game_state = 0;
+	__try {
+		game_state = GetGameState();
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		game_state = 0;
+	}
+	response_mask |= kProbeFieldGameState;
+
+	const uint32_t spawn_id = me->SpawnID;
+	response_mask |= kProbeFieldSpawnId;
+
+	uint32_t target_id = 0;
+	if (pTarget) {
+		auto* target_spawn = reinterpret_cast<PSPAWNINFO>(pTarget);
+		if (target_spawn) {
+			target_id = target_spawn->SpawnID;
+		}
+	}
+	response_mask |= kProbeFieldTargetId;
+
+	const int hp_cur = (g_serverCurHP >= 0) ? g_serverCurHP : 0;
+	const int hp_max = (g_serverMaxHP >= 0) ? g_serverMaxHP : 0;
+	response_mask |= kProbeFieldHp;
+
+	const int mana_cur = (g_serverCurMana >= 0) ? g_serverCurMana : 0;
+	const int mana_max = (g_serverMaxMana >= 0) ? g_serverMaxMana : 0;
+	response_mask |= kProbeFieldMana;
+
+	const int end_cur = (g_serverCurEnd >= 0) ? g_serverCurEnd : 0;
+	const int end_max = (g_serverMaxEnd >= 0) ? g_serverMaxEnd : 0;
+	response_mask |= kProbeFieldEndurance;
+
+	uint32_t class_mask = (GetEffectiveUsableClassesMask() & 0xFFFF);
+	response_mask |= kProbeFieldClassMask;
+
+	// Keep response lean: only emit requested fields + mandatory routing bits.
+	const uint32_t output_mask = response_mask & (requested_mask | kProbeFieldGameState | kProbeFieldSpawnId);
+
+	char cmd[320] = { 0 };
+	_snprintf_s(
+		cmd,
+		sizeof(cmd),
+		_TRUNCATE,
+		"/say #test clientreplyv2 %u %u %u %d %u %u %d:%d %d:%d %d:%d %u",
+		test_id,
+		nonce,
+		output_mask,
+		game_state,
+		spawn_id,
+		target_id,
+		hp_cur,
+		hp_max,
+		mana_cur,
+		mana_max,
+		end_cur,
+		end_max,
+		class_mask
+	);
+
+	DoCommand(me, cmd);
+
+	if (isDebugLoggingEnabled) {
+		LogDebug(
+			"[CLIENT_TEST_PROBE_REPLY_V2] test_id=%u nonce=%u req=0x%04X out=0x%04X gs=%d spawn=%u target=%u hp=%d/%d mana=%d/%d end=%d/%d class=0x%04X",
+			test_id,
+			nonce,
+			requested_mask & 0xFFFF,
+			output_mask & 0xFFFF,
+			game_state,
+			spawn_id,
+			target_id,
+			hp_cur,
+			hp_max,
+			mana_cur,
+			mana_max,
+			end_cur,
+			end_max,
+			class_mask & 0xFFFF
+		);
+	}
+}
 
 static void ApplyEdgeStatLabelPacket(const char* buf, size_t size)
 {
@@ -956,6 +1124,15 @@ static void ApplyEdgeStatLabelPacket(const char* buf, size_t size)
 	constexpr uint32_t kCHA     = 30;
 	// Custom keys (server-side: zone/client.cpp::SendEdgeStats)
 	constexpr uint32_t kClassesBitmask = 200;
+	constexpr uint32_t kTestProbeCommand = 900;
+	constexpr uint32_t kTestProbeId      = 901;
+	constexpr uint32_t kTestProbeNonce   = 902;
+	constexpr uint32_t kTestProbeVersion = 903;
+	constexpr uint32_t kTestProbeMask    = 904;
+	constexpr uint32_t kTestProbeArg0    = 905;
+	constexpr uint32_t kTestProbeArg1    = 906;
+	constexpr uint32_t kTestProbeArg2    = 907;
+	constexpr uint32_t kTestProbeArg3    = 908;
 
 	auto get_i32 = [](uint32_t key) -> int {
 		if (key >= kEdgeStatMaxKey || !g_edgeStatHas[key]) {
@@ -966,6 +1143,13 @@ static void ApplyEdgeStatLabelPacket(const char* buf, size_t size)
 			return INT_MAX - 1;
 		}
 		return static_cast<int>(v);
+	};
+
+	auto get_u32 = [](uint32_t key) -> uint32_t {
+		if (key >= kEdgeStatMaxKey || !g_edgeStatHas[key]) {
+			return 0;
+		}
+		return static_cast<uint32_t>(g_edgeStatValue[key] & 0xFFFFFFFFu);
 	};
 
 	const int cur_hp = get_i32(kCurHP);
@@ -1010,6 +1194,29 @@ static void ApplyEdgeStatLabelPacket(const char* buf, size_t size)
 				g_serverUsableClassesMask,
 				g_serverUsableClassesMask
 			);
+		}
+	}
+
+	const uint32_t probe_command = get_u32(kTestProbeCommand);
+	const uint32_t probe_test_id = get_u32(kTestProbeId);
+	const uint32_t probe_nonce = get_u32(kTestProbeNonce);
+	const uint32_t probe_version = get_u32(kTestProbeVersion);
+	const uint32_t probe_mask = get_u32(kTestProbeMask);
+	const int32_t probe_arg0 = static_cast<int32_t>(get_u32(kTestProbeArg0));
+	const int32_t probe_arg1 = static_cast<int32_t>(get_u32(kTestProbeArg1));
+	const int32_t probe_arg2 = static_cast<int32_t>(get_u32(kTestProbeArg2));
+	const int32_t probe_arg3 = static_cast<int32_t>(get_u32(kTestProbeArg3));
+	if ((probe_command == 1 || probe_command == 2) && probe_test_id > 0 && probe_nonce > 0) {
+		if (probe_nonce != g_last_client_probe_nonce || probe_test_id != g_last_client_probe_test_id || probe_command != g_last_client_probe_command) {
+			g_last_client_probe_command = probe_command;
+			g_last_client_probe_nonce = probe_nonce;
+			g_last_client_probe_test_id = probe_test_id;
+			if (probe_command == 1) {
+				SendClientProbeReplyCommand(probe_test_id, probe_nonce);
+			} else {
+				(void)probe_version;
+				SendClientProbeReplyCommandV2(probe_test_id, probe_nonce, probe_mask, probe_arg0, probe_arg1, probe_arg2, probe_arg3);
+			}
 		}
 	}
 }
@@ -3129,7 +3336,18 @@ void InitHooks()
 	InitOffsets();
 	LogDebug("InitHooks: InitOffsets returned");
 	GetEQPath(gszEQPath);
-	InitializeCriticalSection(&gDetourCS);
+	if (isMQ2CoreDetoursEnabled) {
+		LogDebug("InitHooks: Initializing MQ2 core detours");
+		InitializeMQ2Detours();
+	} else {
+		LogDebug("InitHooks: MQ2 core detours disabled, initializing detour critical section only");
+		InitializeCriticalSection(&gDetourCS);
+	}
+
+	if (isMQ2ParserEnabled) {
+		LogDebug("InitHooks: Initializing MQ2 parser/data");
+		InitializeParser();
+	}
 
 	if (isMQInjectsEnabled) {
 		LogDebug("InitHooks: Applying mq2 injects");
@@ -3140,9 +3358,13 @@ void InitHooks()
 		InitializeMQ2Pulse();
 		InitializeMQ2Spawns();
 		InitializeMapPlugin();
-		// DISABLED: Testing if MQ2ItemDisplay causes item tooltip corruption
-		// InitializeMQ2ItemDisplay();
+		if (isMQ2ItemDisplayEnabled) {
+			InitializeMQ2ItemDisplay();
+		}
 		InitializeMQ2Labels();
+		if (isMQ2KeyBindsEnabled) {
+			InitializeMQ2KeyBinds();
+		}
 	} else {
 		LogDebug("InitHooks: MQ2 injects disabled");
 	}

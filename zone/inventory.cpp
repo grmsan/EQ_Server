@@ -179,6 +179,7 @@ bool Client::CheckLoreConflict(const EQ::ItemData* item)
 	if (!item) { return false; }
 	if (!item->LoreFlag) { return false; }
 	if (item->LoreGroup == 0) { return false; }
+	if (RuleB(Items, LoreEquippedOnly)) { return false; }
 
 	if (item->LoreGroup == -1) // Standard lore items; look everywhere except the shared bank, return the result
 		return (m_inv.HasItem(item->ID, 0, ~invWhereSharedBank) != INVALID_INDEX);
@@ -936,6 +937,10 @@ void Client::SendCursorBuffer()
 	if (test_inst == nullptr) { return; }
 	auto test_item = test_inst->GetItem();
 	if (test_item == nullptr) { return; }
+	if (RuleB(Items, LoreEquippedOnly)) {
+		SendItemPacket(EQ::invslot::slotCursor, test_inst, ItemPacketLimbo);
+		return;
+	}
 
 	bool lore_pass = true;
 	if (test_item->LoreGroup == -1) {
@@ -1664,6 +1669,7 @@ bool Client::SwapItem(MoveItem_Struct* move_in) {
 			auto test_item = test_inst->GetItem();
 			if (test_item == nullptr) { return true; }
 			if (!test_item->LoreFlag) { return true; }
+			if (RuleB(Items, LoreEquippedOnly)) { return true; }
 
 			bool lore_pass = true;
 			if (test_item->LoreGroup == -1) {
@@ -2161,6 +2167,8 @@ bool Client::SwapItem(MoveItem_Struct* move_in) {
 			}
 			else if (fail_state == EQ::InventoryProfile::swapLevel)
 				fail_message = "You are not sufficient level to use this item.";
+			else if (fail_state == EQ::InventoryProfile::swapLore)
+				fail_message = "You may only equip one of that lore item.";
 
 			if (fail_message)
 				Message(Chat::Red, "%s", fail_message);
@@ -2945,7 +2953,8 @@ void Client::RemoveDuplicateLore()
 			if (!inst) {
 				continue;
 			}
-			if (!inst->GetItem()->LoreFlag ||
+			if (RuleB(Items, LoreEquippedOnly) ||
+				!inst->GetItem()->LoreFlag ||
 				((inst->GetItem()->LoreGroup == -1) &&
 				 (m_inv.HasItem(inst->GetID(), 0, invWhereCursor) == INVALID_INDEX)) ||
 				(inst->GetItem()->LoreGroup && (~inst->GetItem()->LoreGroup) &&

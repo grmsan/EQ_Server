@@ -98,11 +98,30 @@ struct Entry {
 | 7 | Max Endurance | int |
 | 24-30 | STR/STA/DEX/AGI/INT/WIS/CHA | int |
 | **200** | **Classes Bitmask** | uint16 |
+| **900** | **Test Probe Command** | uint32 |
+| **901** | **Test Probe ID** | uint32 |
+| **902** | **Test Probe Nonce** | uint32 |
+| **903** | **Test Probe Version** | uint32 |
+| **904** | **Test Probe Field Mask** | uint32 |
+| **905-908** | **Test Probe Args (arg0-arg3)** | int32 |
 
 **Key 200 (Classes Bitmask):**
 - Sent as uint64 but only lower 16 bits used
 - Same format as item/spell class bitmasks
 - Bit N set = character owns class (N+1)
+
+**Keys 900-908 (Client Test Probe v2):**
+- Server can trigger generic client probe callbacks using `#test 16-20` (or packs like `#test automated`).
+- Current probe-backed tests:
+  - `#test 16`: baseline round-trip probe
+  - `#test 17`: class-mask mutation parity + auto-restore
+  - `#test 18`: mana mutation parity + auto-restore
+  - `#test 19`: snapshot parity (`class/hp/mana/end`)
+  - `#test 20`: persisted class-mask parity (`runtime/profile/buckets` + DLL callback)
+- DLL detects `{900=2, 901=test_id, 902=nonce, 904=field_mask}` and sends:
+  - `#test clientreplyv2 <test_id> <nonce> <response_mask> <game_state> <spawn_id> <target_id> <hp_cur:hp_max> <mana_cur:mana_max> <end_cur:end_max> <class_mask>`
+- Server validates nonce, timeout, and required field mask, then prints `CLIENT PASS/FAIL`.
+- Legacy probe format (`900=1` -> `#test clientreply ...`) is still supported for backward compatibility.
 
 ---
 

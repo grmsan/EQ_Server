@@ -305,6 +305,25 @@ REPLACE INTO spawn2 (id, spawngroupID, zone, version, x, y, z, heading, respawnt
 	(991134, 990134, 'bazaar', 0, -24.00,  96.00,  0.72, 128.00, 120, 0),
 	(991135, 990135, 'bazaar', 0,  24.00,  96.00,  0.72, 128.00, 120, 0);
 
+-- Mirror core Bazaar NPC spawns into bazaar version 1 if missing.
+-- This avoids "NPC exists in DB but not in zone" issues when launcher boots version 1.
+INSERT INTO spawn2 (
+	spawngroupID, zone, version, x, y, z, heading, respawntime, variance
+)
+SELECT
+	s.spawngroupID, s.zone, 1, s.x, s.y, s.z, s.heading, s.respawntime, s.variance
+FROM spawn2 s
+WHERE s.zone = 'bazaar'
+  AND s.version = 0
+  AND s.spawngroupID BETWEEN 990100 AND 990135
+  AND NOT EXISTS (
+	SELECT 1
+	FROM spawn2 s2
+	WHERE s2.zone = 'bazaar'
+	  AND s2.version = 1
+	  AND s2.spawngroupID = s.spawngroupID
+  );
+
 -- Waypoint discovery proximity triggers used by quests/global/#TPTriggerN.pl
 -- Spawn one trigger per waypoint location.
 REPLACE INTO spawngroup (id, name)
@@ -340,5 +359,11 @@ REPLACE INTO doors (
 )
 VALUES
 	(990146, 146, 'bazaar', 0, 'PORTAL_DISC', -15.00, 24.00, 0.72, 256.00, 58, 100, 4294967295);
+
+REPLACE INTO doors (
+	id, doorid, zone, version, name, pos_y, pos_x, pos_z, heading, opentype, size, client_version_mask
+)
+VALUES
+	(990147, 146, 'bazaar', 1, 'PORTAL_DISC', -15.00, 24.00, 0.72, 256.00, 58, 100, 4294967295);
 
 COMMIT;

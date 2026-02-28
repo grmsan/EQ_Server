@@ -14343,6 +14343,7 @@ void Client::SendEdgeStats()
 	constexpr uint32 kINT     = 28;
 	constexpr uint32 kWIS     = 29;
 	constexpr uint32 kCHA     = 30;
+	constexpr uint32 kClassesBitmask = 200;
 
 	struct Pair {
 		uint32 key;
@@ -14362,12 +14363,70 @@ void Client::SendEdgeStats()
 		{ kAGI,     static_cast<uint64>(GetAGI()) },
 		{ kINT,     static_cast<uint64>(GetINT()) },
 		{ kWIS,     static_cast<uint64>(GetWIS()) },
-		{ kCHA,     static_cast<uint64>(GetCHA()) }
-		// , { kClassesBitmask, static_cast<uint64>(GetClassesBits()) } // THJ parity: multiclass mask comes from PlayerProfile
+		{ kCHA,     static_cast<uint64>(GetCHA()) },
+		// Send multiclass class bitmask explicitly for client DLL parity checks.
+		{ kClassesBitmask, static_cast<uint64>(GetClassesBits() & 0xFFFF) }
 	};
 
 	constexpr uint32 count = static_cast<uint32>(sizeof(pairs) / sizeof(pairs[0]));
 	constexpr uint16 edge_opcode = 0x1338;
+	const uint32 payload_size = sizeof(uint32) + count * (sizeof(uint32) + sizeof(uint64));
+
+	auto *outapp = new EQApplicationPacket(OP_Unknown, payload_size);
+	outapp->SetOpcodeBypass(edge_opcode);
+	outapp->priority = 5;
+
+	auto *buf = outapp->pBuffer;
+	*reinterpret_cast<uint32 *>(buf) = count;
+	size_t off = sizeof(uint32);
+	for (const auto &p : pairs) {
+		*reinterpret_cast<uint32 *>(buf + off) = p.key;
+		off += sizeof(uint32);
+		*reinterpret_cast<uint64 *>(buf + off) = p.value;
+		off += sizeof(uint64);
+	}
+
+	FastQueuePacket(&outapp);
+}
+
+void Client::SendEdgeTestProbe(uint32 test_id, uint32 nonce, uint32 field_mask, int32 arg0, int32 arg1, int32 arg2, int32 arg3)
+{
+	// Reuse EdgeStatLabel custom/raw opcode path to request a client DLL probe callback.
+	if (ClientVersion() != EQ::versions::ClientVersion::RoF2) {
+		return;
+	}
+
+	constexpr uint32 kTestProbeCommand = 900; // 2 = generic callback request
+	constexpr uint32 kTestProbeId      = 901;
+	constexpr uint32 kTestProbeNonce   = 902;
+	constexpr uint32 kTestProbeVersion = 903;
+	constexpr uint32 kTestProbeMask    = 904;
+	constexpr uint32 kTestProbeArg0    = 905;
+	constexpr uint32 kTestProbeArg1    = 906;
+	constexpr uint32 kTestProbeArg2    = 907;
+	constexpr uint32 kTestProbeArg3    = 908;
+	constexpr uint32 kClassesBitmask   = 200;
+	constexpr uint16 edge_opcode       = 0x1338;
+
+	struct Pair {
+		uint32 key;
+		uint64 value;
+	};
+
+	const Pair pairs[] = {
+		{ kTestProbeCommand, static_cast<uint64>(2) },
+		{ kTestProbeId,      static_cast<uint64>(test_id) },
+		{ kTestProbeNonce,   static_cast<uint64>(nonce) },
+		{ kTestProbeVersion, static_cast<uint64>(2) },
+		{ kTestProbeMask,    static_cast<uint64>(field_mask) },
+		{ kTestProbeArg0,    static_cast<uint64>(static_cast<uint32>(arg0)) },
+		{ kTestProbeArg1,    static_cast<uint64>(static_cast<uint32>(arg1)) },
+		{ kTestProbeArg2,    static_cast<uint64>(static_cast<uint32>(arg2)) },
+		{ kTestProbeArg3,    static_cast<uint64>(static_cast<uint32>(arg3)) },
+		{ kClassesBitmask,   static_cast<uint64>(GetClassesBits() & 0xFFFF) }
+	};
+
+	constexpr uint32 count = static_cast<uint32>(sizeof(pairs) / sizeof(pairs[0]));
 	const uint32 payload_size = sizeof(uint32) + count * (sizeof(uint32) + sizeof(uint64));
 
 	auto *outapp = new EQApplicationPacket(OP_Unknown, payload_size);

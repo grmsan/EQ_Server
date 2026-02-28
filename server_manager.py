@@ -10,6 +10,8 @@ from datetime import datetime
 import shutil
 import json
 import shlex
+import re
+import tempfile
 import mysql.connector
 
 class ServerManagerApp(tk.Tk):
@@ -19,6 +21,9 @@ class ServerManagerApp(tk.Tk):
         self.title("EQEmu Server Manager")
         self.geometry("1100x850")
         self.portrait_breakpoint = 1300
+        self._early_logs = []
+        self._file_write_lock = threading.Lock()
+        self._settings_save_job = None
 
         self.processes = {}
         self.settings_path = os.path.join(os.getcwd(), ".server_manager_settings.json")
@@ -44,20 +49,68 @@ class ServerManagerApp(tk.Tk):
         self.eq_dir_var = tk.StringVar(value=self._settings.get("eq_dir", r"D:\Rof2"))
         self.build_target_var = tk.StringVar(value=self._settings.get("build_target", "all"))
         self.layout_mode_var = tk.StringVar(value=self._settings.get("layout_mode", "auto"))
+        self.multiclass_tracker_default_path = os.path.join(
+            os.getcwd(), "game_design", "multiclass", "TEST_TRACKER.md"
+        )
+        self.operations_tracker_default_path = os.path.join(
+            os.getcwd(), "game_design", "operations", "WORK_TRACKER.md"
+        )
+        self.classes_tracker_default_path = os.path.join(
+            os.getcwd(), "game_design", "classes", "TEST_TRACKER.md"
+        )
+        self.mechanics_tracker_default_path = os.path.join(
+            os.getcwd(), "game_design", "mechanics", "TEST_TRACKER.md"
+        )
+        self.quests_tracker_default_path = os.path.join(
+            os.getcwd(), "game_design", "quests", "TEST_TRACKER.md"
+        )
+        self.qol_tracker_default_path = os.path.join(
+            os.getcwd(), "game_design", "qol", "TEST_TRACKER.md"
+        )
+        self.tooling_tracker_default_path = os.path.join(
+            os.getcwd(), "game_design", "tooling", "TEST_TRACKER.md"
+        )
+        self.test_tracker_path_var = tk.StringVar(
+            value=self._settings.get(
+                "test_tracker_path",
+                self.multiclass_tracker_default_path
+            )
+        )
+        self.test_tracker_picker_var = tk.StringVar(value="")
+        self.test_show_concepts_var = tk.BooleanVar(value=bool(self._settings.get("test_show_concepts", False)))
         self.log_follow_var = tk.BooleanVar(value=True)
         self.selected_log_path_var = tk.StringVar(value="")
         self.log_source_var = tk.StringVar(value="Source: none")
         self.process_summary_var = tk.StringVar(value="Running: 0/0  |  External: 0")
+        self.test_filter_var = tk.StringVar(value="All")
+        self.test_category_var = tk.StringVar(value="All")
+        self.test_jump_id_var = tk.StringVar(value="")
+        self.test_progress_var = tk.StringVar(value="Tests: 0")
+        self.test_tracker_summary_var = tk.StringVar(value="Tracker: (none)")
+        self.test_selected_var = tk.StringVar(value="No test selected")
+        self.test_status_var = tk.StringVar(value="Status: Not Run")
         self.log_file_entries = {}
         self._log_tail_pos = 0
         self._active_layout_mode = None
         self._active_proc_cols = None
+        self.test_manager_state_path = os.path.join(os.getcwd(), ".server_manager_test_state.json")
+        self.test_outcomes = self._load_test_manager_state()
+        self.test_records = []
+        self._filtered_test_indexes = []
+        self.test_tracker_catalog = {}
+        self.current_tracker_metadata = {}
+        self.test_pane_sash_position = self._settings.get("test_pane_sash_position")
+        self.test_pane_sash_ratio = self._settings.get("test_pane_sash_ratio")
+        self._last_test_pane_width = 0
 
         self.create_widgets()
+        self._flush_early_logs()
         self._apply_saved_process_settings()
         self.eq_dir_var.trace_add("write", self._on_setting_changed)
         self.build_target_var.trace_add("write", self._on_setting_changed)
         self.layout_mode_var.trace_add("write", self._on_layout_mode_changed)
+        self.test_tracker_path_var.trace_add("write", self._on_setting_changed)
+        self.test_show_concepts_var.trace_add("write", self._on_setting_changed)
         self.bind("<Configure>", self._on_window_configure)
         self.update_status_loop()
 
@@ -91,13 +144,23 @@ class ServerManagerApp(tk.Tk):
             self.build_status_lbl.config(text=text)
 
     def _set_text_widget(self, widget, text):
+        prior_state = str(widget.cget("state"))
+        if prior_state == "disabled":
+            widget.config(state="normal")
         widget.delete(1.0, "end")
         widget.insert("end", text)
         widget.see("end")
+        if prior_state == "disabled":
+            widget.config(state="disabled")
 
     def _append_text_widget(self, widget, text):
+        prior_state = str(widget.cget("state"))
+        if prior_state == "disabled":
+            widget.config(state="normal")
         widget.insert("end", text)
         widget.see("end")
+        if prior_state == "disabled":
+            widget.config(state="disabled")
 
     def _load_manager_settings(self):
         try:
@@ -106,9 +169,53 @@ class ServerManagerApp(tk.Tk):
                     data = json.load(f)
                 if isinstance(data, dict):
                     return data
-        except Exception:
-            pass
+                self.log(f"Warning: settings file has unexpected format, ignoring: {self.settings_path}")
+        except json.JSONDecodeError as e:
+            self._quarantine_corrupt_file(self.settings_path, "settings", e)
+            self.log(f"Warning: failed to load manager settings: {e}")
+        except Exception as e:
+            self.log(f"Warning: failed to load manager settings: {e}")
         return {}
+
+    def _quarantine_corrupt_file(self, path, label, error):
+        try:
+            if not path or not os.path.exists(path):
+                return
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            quarantine = f"{path}.{ts}.corrupt"
+            os.replace(path, quarantine)
+            self.log(f"Quarantined corrupt {label} file to {quarantine} ({error})")
+        except Exception:
+            # Best effort only; caller will continue with defaults.
+            pass
+
+    def _atomic_write_text(self, path, text, encoding="utf-8", newline=None):
+        path = os.path.abspath(path)
+        directory = os.path.dirname(path) or os.getcwd()
+        os.makedirs(directory, exist_ok=True)
+        fd = None
+        tmp_path = None
+        with self._file_write_lock:
+            try:
+                fd, tmp_path = tempfile.mkstemp(prefix=".tmp_server_manager_", suffix=".tmp", dir=directory)
+                with os.fdopen(fd, "w", encoding=encoding, newline=newline) as f:
+                    fd = None
+                    f.write(text)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(tmp_path, path)
+            except Exception:
+                if fd is not None:
+                    try:
+                        os.close(fd)
+                    except Exception:
+                        pass
+                if tmp_path and os.path.exists(tmp_path):
+                    try:
+                        os.remove(tmp_path)
+                    except Exception:
+                        pass
+                raise
 
     def _save_manager_settings(self):
         try:
@@ -116,6 +223,10 @@ class ServerManagerApp(tk.Tk):
                 "eq_dir": self.eq_dir_var.get(),
                 "build_target": self.build_target_var.get(),
                 "layout_mode": self.layout_mode_var.get(),
+                "test_tracker_path": self.test_tracker_path_var.get(),
+                "test_show_concepts": bool(self.test_show_concepts_var.get()),
+                "test_pane_sash_position": self.test_pane_sash_position,
+                "test_pane_sash_ratio": self.test_pane_sash_ratio,
                 "process_args": {},
                 "process_console": {},
             }
@@ -123,17 +234,40 @@ class ServerManagerApp(tk.Tk):
                 for name, widgets in self.proc_widgets.items():
                     data["process_args"][name] = widgets["args_var"].get()
                     data["process_console"][name] = bool(widgets["console_var"].get())
-            with open(self.settings_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2)
+            serialized = json.dumps(data, indent=2) + "\n"
+            self._atomic_write_text(self.settings_path, serialized, encoding="utf-8", newline="")
         except Exception as e:
             self.log(f"Warning: failed to save manager settings: {e}")
 
     def _on_setting_changed(self, *_):
-        self._save_manager_settings()
+        self._schedule_settings_save()
 
     def _on_layout_mode_changed(self, *_):
-        self._save_manager_settings()
+        self._schedule_settings_save(delay_ms=0)
         self._apply_main_layout(force=True)
+
+    def _schedule_settings_save(self, delay_ms=200):
+        if self._settings_save_job is not None:
+            try:
+                self.after_cancel(self._settings_save_job)
+            except Exception:
+                pass
+            self._settings_save_job = None
+
+        def _flush():
+            self._settings_save_job = None
+            self._save_manager_settings()
+
+        self._settings_save_job = self.after(max(0, int(delay_ms)), _flush)
+
+    def _flush_settings_save(self):
+        if self._settings_save_job is not None:
+            try:
+                self.after_cancel(self._settings_save_job)
+            except Exception:
+                pass
+            self._settings_save_job = None
+        self._save_manager_settings()
 
     def _apply_saved_process_settings(self):
         saved_args = self._settings.get("process_args", {})
@@ -184,10 +318,12 @@ class ServerManagerApp(tk.Tk):
         self.main_tab = ttk.Frame(tab_control)
         self.database_tab = ttk.Frame(tab_control)
         self.tools_tab = ttk.Frame(tab_control)
+        self.test_tab = ttk.Frame(tab_control)
 
         tab_control.add(self.main_tab, text="Server Control")
         tab_control.add(self.database_tab, text="Database Tools")
         tab_control.add(self.tools_tab, text="Quick Actions & Scripts")
+        tab_control.add(self.test_tab, text="Test Manager")
         tab_control.pack(expand=1, fill="both")
 
         # --- Main Tab ---
@@ -198,6 +334,9 @@ class ServerManagerApp(tk.Tk):
 
         # --- Tools Tab ---
         self.create_tools_tab()
+
+        # --- Test Tab ---
+        self.create_test_tab()
 
         # Kick off initial status checks
         self.after(100, self.refresh_status_indicators)
@@ -630,6 +769,915 @@ class ServerManagerApp(tk.Tk):
         ttk.Button(btn_row, text="Refresh List", command=self.refresh_scripts).pack(side="left", padx=5)
         ttk.Button(btn_row, text="Run Selected Script", command=self.run_selected_script).pack(side="left", padx=5)
 
+    def create_test_tab(self):
+        test_frame = ttk.Frame(self.test_tab)
+        test_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        test_frame.grid_columnconfigure(0, weight=1)
+        test_frame.grid_rowconfigure(1, weight=1)
+
+        path_frame = ttk.LabelFrame(test_frame, text="Tracker Source")
+        path_frame.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        path_frame.grid_columnconfigure(1, weight=1)
+
+        ttk.Label(path_frame, text="File").grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        ttk.Entry(path_frame, textvariable=self.test_tracker_path_var).grid(row=0, column=1, padx=5, pady=5, sticky="ew")
+        ttk.Button(path_frame, text="Browse", command=self.browse_test_tracker).grid(row=0, column=2, padx=5, pady=5, sticky="ew")
+        ttk.Button(path_frame, text="Reload", command=self.reload_tests_from_tracker).grid(row=0, column=3, padx=5, pady=5, sticky="ew")
+        ttk.Button(path_frame, text="Open Tracker", command=self.open_test_tracker_file).grid(row=0, column=4, padx=5, pady=5, sticky="ew")
+        ttk.Label(path_frame, text="Quick").grid(row=1, column=0, padx=5, pady=(0, 5), sticky="w")
+        quick_tracker_row = ttk.Frame(path_frame)
+        quick_tracker_row.grid(row=1, column=1, columnspan=4, padx=5, pady=(0, 5), sticky="w")
+        ttk.Button(quick_tracker_row, text="Multiclass", command=self.load_multiclass_tracker).pack(side="left", padx=(0, 4))
+        ttk.Button(quick_tracker_row, text="Operations", command=self.load_operations_tracker).pack(side="left", padx=4)
+        ttk.Button(quick_tracker_row, text="Classes", command=self.load_classes_tracker).pack(side="left", padx=4)
+        ttk.Button(quick_tracker_row, text="Mechanics", command=self.load_mechanics_tracker).pack(side="left", padx=4)
+        ttk.Button(quick_tracker_row, text="Quests", command=self.load_quests_tracker).pack(side="left", padx=4)
+        ttk.Button(quick_tracker_row, text="QoL", command=self.load_qol_tracker).pack(side="left", padx=4)
+        ttk.Button(quick_tracker_row, text="Tooling", command=self.load_tooling_tracker).pack(side="left", padx=4)
+        ttk.Label(path_frame, text="Tracker").grid(row=2, column=0, padx=5, pady=(0, 5), sticky="w")
+        self.test_tracker_picker_combo = ttk.Combobox(
+            path_frame,
+            textvariable=self.test_tracker_picker_var,
+            state="readonly",
+            width=52,
+            values=[],
+        )
+        self.test_tracker_picker_combo.grid(row=2, column=1, padx=5, pady=(0, 5), sticky="ew")
+        self.test_tracker_picker_combo.bind("<<ComboboxSelected>>", lambda _e: self.load_tracker_from_picker())
+        ttk.Button(path_frame, text="Refresh List", command=lambda: self.refresh_tracker_catalog(select_current=True)).grid(row=2, column=2, padx=5, pady=(0, 5), sticky="ew")
+        ttk.Button(path_frame, text="Load Selected", command=self.load_tracker_from_picker).grid(row=2, column=3, padx=5, pady=(0, 5), sticky="ew")
+        ttk.Checkbutton(
+            path_frame,
+            text="Show Concept Trackers",
+            variable=self.test_show_concepts_var,
+            command=lambda: self.refresh_tracker_catalog(select_current=True)
+        ).grid(row=2, column=4, padx=5, pady=(0, 5), sticky="w")
+        ttk.Label(path_frame, textvariable=self.test_tracker_summary_var).grid(row=3, column=0, columnspan=5, padx=5, pady=(0, 5), sticky="w")
+
+        content = ttk.Panedwindow(test_frame, orient=tk.HORIZONTAL)
+        content.grid(row=1, column=0, sticky="nsew")
+        self.test_paned = content
+
+        left = ttk.LabelFrame(content, text="Tests")
+        left.grid_columnconfigure(0, weight=1)
+        left.grid_rowconfigure(4, weight=1)
+
+        filter_row = ttk.Frame(left)
+        filter_row.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
+        filter_row.grid_columnconfigure(3, weight=1)
+        ttk.Label(filter_row, text="Status").grid(row=0, column=0, sticky="w")
+        self.test_filter_combo = ttk.Combobox(
+            filter_row,
+            textvariable=self.test_filter_var,
+            state="readonly",
+            width=12,
+            values=["All", "Not Run", "In Progress", "Pass", "Fail"],
+        )
+        self.test_filter_combo.grid(row=0, column=1, padx=(5, 10), sticky="w")
+        self.test_filter_combo.bind("<<ComboboxSelected>>", lambda _e: self._refresh_test_list())
+
+        ttk.Label(filter_row, text="Category").grid(row=0, column=2, sticky="w")
+        self.test_category_combo = ttk.Combobox(
+            filter_row,
+            textvariable=self.test_category_var,
+            state="readonly",
+            width=56,
+            values=["All"],
+        )
+        self.test_category_combo.grid(row=0, column=3, padx=(5, 0), sticky="ew")
+        self.test_category_combo.bind("<<ComboboxSelected>>", lambda _e: self._refresh_test_list())
+
+        jump_row = ttk.Frame(left)
+        jump_row.grid(row=1, column=0, sticky="ew", padx=5, pady=(0, 5))
+        ttk.Label(jump_row, text="Jump ID").pack(side="left")
+        jump_entry = ttk.Entry(jump_row, textvariable=self.test_jump_id_var, width=12)
+        jump_entry.pack(side="left", padx=(5, 4))
+        jump_entry.bind("<Return>", lambda _e: self.jump_to_test_id())
+        ttk.Button(jump_row, text="Go", command=self.jump_to_test_id).pack(side="left", padx=2)
+        ttk.Button(jump_row, text="Next Unrun", command=self.select_next_unrun_test).pack(side="left", padx=8)
+        ttk.Button(jump_row, text="Next Fail", command=self.select_next_failed_test).pack(side="left", padx=2)
+
+        ttk.Label(left, textvariable=self.test_progress_var).grid(row=2, column=0, sticky="w", padx=5, pady=(0, 2))
+        ttk.Label(left, text="Tip: drag the divider between Tests and Test Details to resize both panes.").grid(
+            row=3, column=0, sticky="w", padx=5, pady=(0, 5)
+        )
+
+        list_container = ttk.Frame(left)
+        list_container.grid(row=4, column=0, sticky="nsew", padx=5, pady=(0, 5))
+        list_container.grid_rowconfigure(0, weight=1)
+        list_container.grid_columnconfigure(0, weight=1)
+
+        self.test_listbox = tk.Listbox(list_container, width=68, font=("Consolas", 9))
+        self.test_listbox.grid(row=0, column=0, sticky="nsew")
+        self.test_listbox.bind("<<ListboxSelect>>", self.on_test_selected)
+
+        test_scroll = ttk.Scrollbar(list_container, orient="vertical", command=self.test_listbox.yview)
+        test_scroll.grid(row=0, column=1, sticky="ns")
+        self.test_listbox.config(yscrollcommand=test_scroll.set)
+
+        right = ttk.LabelFrame(content, text="Test Details")
+        right.grid_columnconfigure(0, weight=1)
+        right.grid_rowconfigure(2, weight=1)
+
+        header = ttk.Frame(right)
+        header.grid(row=0, column=0, sticky="ew", padx=6, pady=6)
+        header.grid_columnconfigure(0, weight=1)
+        ttk.Label(header, textvariable=self.test_selected_var, font=("Segoe UI Semibold", 11)).grid(row=0, column=0, sticky="w")
+        ttk.Label(header, textvariable=self.test_status_var).grid(row=1, column=0, sticky="w", pady=(2, 0))
+
+        actions = ttk.Frame(right)
+        actions.grid(row=1, column=0, sticky="ew", padx=6, pady=(0, 6))
+        ttk.Button(actions, text="Mark Not Run", command=lambda: self.set_selected_test_status("Not Run")).pack(side="left", padx=(0, 4))
+        ttk.Button(actions, text="Mark In Progress", command=lambda: self.set_selected_test_status("In Progress")).pack(side="left", padx=4)
+        ttk.Button(actions, text="Mark Pass", command=lambda: self.set_selected_test_status("Pass")).pack(side="left", padx=4)
+        ttk.Button(actions, text="Mark Fail", command=lambda: self.set_selected_test_status("Fail")).pack(side="left", padx=4)
+
+        self.test_detail_text = scrolledtext.ScrolledText(right, height=16, font=("Consolas", 9), state="disabled")
+        self.test_detail_text.grid(row=2, column=0, sticky="nsew", padx=6, pady=(0, 6))
+
+        notes_frame = ttk.LabelFrame(right, text="Session Notes / Evidence / Logs")
+        notes_frame.grid(row=3, column=0, sticky="ew", padx=6, pady=(0, 6))
+        notes_frame.grid_columnconfigure(0, weight=1)
+        self.test_notes_text = scrolledtext.ScrolledText(notes_frame, height=12, font=("Consolas", 9), wrap="none")
+        self.test_notes_text.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
+
+        note_actions = ttk.Frame(notes_frame)
+        note_actions.grid(row=1, column=0, sticky="e", padx=5, pady=(0, 5))
+        ttk.Button(note_actions, text="Save Note", command=self.save_selected_test_notes).pack(side="left", padx=3)
+        ttk.Button(note_actions, text="Copy Feedback", command=self.copy_selected_test_feedback).pack(side="left", padx=3)
+
+        content.add(left, weight=2)
+        content.add(right, weight=4)
+        content.bind("<ButtonRelease-1>", lambda _e: self._capture_test_pane_sash())
+        content.bind("<Configure>", self._on_test_pane_configure)
+        self.after(100, self._set_test_pane_default_split)
+
+        self.refresh_tracker_catalog(select_current=True)
+        self.reload_tests_from_tracker()
+
+    def _set_test_pane_default_split(self):
+        if not hasattr(self, "test_paned"):
+            return
+        try:
+            pane_width = self.test_paned.winfo_width()
+            if pane_width <= 1:
+                return
+            saved_ratio = self._normalized_test_sash_ratio(self.test_pane_sash_ratio)
+            if saved_ratio is not None:
+                desired_left_width = self._clamp_test_sash_pos(int(pane_width * saved_ratio), pane_width)
+                self.test_paned.sashpos(0, desired_left_width)
+                return
+
+            saved_pos = self.test_pane_sash_position
+            if isinstance(saved_pos, int):
+                clamped_saved = self._clamp_test_sash_pos(saved_pos, pane_width)
+                if clamped_saved == saved_pos:
+                    self.test_paned.sashpos(0, clamped_saved)
+                    return
+
+            default_ratio = self._default_test_sash_ratio(pane_width)
+            desired_left_width = self._clamp_test_sash_pos(int(pane_width * default_ratio), pane_width)
+            self.test_paned.sashpos(0, desired_left_width)
+        except Exception:
+            pass
+
+    def _capture_test_pane_sash(self):
+        if not hasattr(self, "test_paned"):
+            return
+        try:
+            pane_width = self.test_paned.winfo_width()
+            if pane_width <= 1:
+                return
+            pos = int(self.test_paned.sashpos(0))
+            ratio = self._normalized_test_sash_ratio(pos / pane_width)
+            if pos > 0 and pos != self.test_pane_sash_position:
+                self.test_pane_sash_position = pos
+                self.test_pane_sash_ratio = ratio
+                self._schedule_settings_save(delay_ms=0)
+            elif ratio is not None and ratio != self.test_pane_sash_ratio:
+                self.test_pane_sash_ratio = ratio
+                self._schedule_settings_save(delay_ms=0)
+        except Exception:
+            pass
+
+    def _on_test_pane_configure(self, event=None):
+        if event is not None and hasattr(self, "test_paned") and event.widget is not self.test_paned:
+            return
+        if not hasattr(self, "test_paned"):
+            return
+        try:
+            pane_width = self.test_paned.winfo_width()
+            if pane_width <= 1:
+                return
+            if abs(pane_width - self._last_test_pane_width) < 100:
+                return
+            self._last_test_pane_width = pane_width
+
+            ratio = self._normalized_test_sash_ratio(self.test_pane_sash_ratio)
+            if ratio is None:
+                ratio = self._default_test_sash_ratio(pane_width)
+            desired = self._clamp_test_sash_pos(int(pane_width * ratio), pane_width)
+            current = int(self.test_paned.sashpos(0))
+            if abs(current - desired) >= 60:
+                self.test_paned.sashpos(0, desired)
+        except Exception:
+            pass
+
+    def _normalized_test_sash_ratio(self, ratio):
+        try:
+            if ratio is None:
+                return None
+            value = float(ratio)
+        except (TypeError, ValueError):
+            return None
+        return max(0.28, min(0.70, value))
+
+    def _clamp_test_sash_pos(self, pos, pane_width):
+        min_left = max(320, int(pane_width * 0.28))
+        max_left = pane_width - max(360, int(pane_width * 0.26))
+        if max_left < min_left:
+            min_left = max(220, int(pane_width * 0.22))
+            max_left = pane_width - max(240, int(pane_width * 0.22))
+        return max(min_left, min(max_left, int(pos)))
+
+    def _default_test_sash_ratio(self, pane_width):
+        if pane_width <= 1250:
+            return 0.54
+        if pane_width <= 1600:
+            return 0.49
+        if pane_width <= 2100:
+            return 0.44
+        return 0.40
+
+    # ==================== Test Manager ====================
+
+    def _load_test_manager_state(self):
+        try:
+            if os.path.exists(self.test_manager_state_path):
+                with open(self.test_manager_state_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                tests = data.get("tests", {})
+                if isinstance(tests, dict):
+                    return tests
+                self.log(f"Warning: test manager state has unexpected format, ignoring: {self.test_manager_state_path}")
+        except json.JSONDecodeError as e:
+            self._quarantine_corrupt_file(self.test_manager_state_path, "test state", e)
+            self.log(f"Warning: failed to load test manager state: {e}")
+        except Exception as e:
+            self.log(f"Warning: failed to load test manager state: {e}")
+        return {}
+
+    def _save_test_manager_state(self):
+        try:
+            payload = {
+                "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "tests": self.test_outcomes,
+            }
+            serialized = json.dumps(payload, indent=2) + "\n"
+            self._atomic_write_text(self.test_manager_state_path, serialized, encoding="utf-8", newline="")
+        except Exception as e:
+            self.log(f"Warning: failed to save test manager state: {e}")
+
+    def browse_test_tracker(self):
+        path = filedialog.askopenfilename(
+            initialdir=os.path.dirname(self.test_tracker_path_var.get() or os.getcwd()),
+            title="Select Test Tracker Markdown",
+            filetypes=[("Markdown", "*.md"), ("All files", "*.*")],
+        )
+        if path:
+            self.test_tracker_path_var.set(path)
+            self.refresh_tracker_catalog(select_current=True)
+            self.reload_tests_from_tracker()
+
+    def _canonical_tracker_path(self, path):
+        if not path:
+            return ""
+        return os.path.normcase(os.path.abspath(path.strip()))
+
+    def _display_path(self, path):
+        canonical = self._canonical_tracker_path(path)
+        if not canonical:
+            return ""
+        try:
+            return os.path.relpath(canonical, os.getcwd())
+        except ValueError:
+            return canonical
+
+    def _tracker_history_key(self):
+        return self._canonical_tracker_path(self.test_tracker_path_var.get())
+
+    def _make_test_outcome_key(self, test_id):
+        return f"{self._tracker_history_key()}::{str(test_id).upper()}"
+
+    def _is_valid_test_id(self, test_id):
+        return bool(re.match(r"^[A-Z][A-Z0-9_]*-\d+$", str(test_id).strip().upper()))
+
+    def _normalize_tracker_state(self, raw_state):
+        state = (raw_state or "").strip().lower()
+        if not state:
+            return "active"
+        if "concept" in state:
+            return "concept"
+        if "wip" in state or "draft" in state:
+            return "wip"
+        if "active" in state:
+            return "active"
+        return state
+
+    def _read_tracker_metadata(self, path):
+        metadata = {
+            "area": "",
+            "state": "active",
+        }
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                for idx, line in enumerate(f):
+                    if idx > 60:
+                        break
+                    stripped = line.strip()
+                    if not stripped.startswith("**"):
+                        continue
+                    m = re.match(r"^\*\*(.+?)\*\*:\s*(.+?)\s*$", stripped)
+                    if not m:
+                        continue
+                    key = m.group(1).strip().lower()
+                    value = m.group(2).strip()
+                    if key == "tracker area":
+                        metadata["area"] = value
+                    elif key == "tracker state":
+                        metadata["state"] = self._normalize_tracker_state(value)
+        except Exception:
+            pass
+        return metadata
+
+    def _has_tracker_cases(self, path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                content = f.read()
+            return bool(re.search(r"^###\s+\[[A-Z][A-Z0-9_]*-\d+\]", content, re.MULTILINE | re.IGNORECASE))
+        except Exception:
+            return False
+
+    def _discover_tracker_candidates(self):
+        root = os.path.join(os.getcwd(), "game_design")
+        patterns = [
+            os.path.join(root, "**", "TEST_TRACKER.md"),
+            os.path.join(root, "**", "WORK_TRACKER.md"),
+            os.path.join(root, "**", "*_TRACKER.md"),
+        ]
+        discovered = {}
+        for pattern in patterns:
+            for path in glob.glob(pattern, recursive=True):
+                canonical = self._canonical_tracker_path(path)
+                if canonical in discovered:
+                    continue
+                if not os.path.isfile(path):
+                    continue
+
+                meta = self._read_tracker_metadata(canonical)
+                tracker_state = meta.get("state", "active")
+                if tracker_state == "concept" and not bool(self.test_show_concepts_var.get()):
+                    continue
+                if not self._has_tracker_cases(canonical):
+                    continue
+
+                rel_path = os.path.relpath(path, root)
+                label = rel_path.replace(os.sep, "/")
+                discovered[canonical] = {
+                    "label": label,
+                    "path": canonical,
+                    "metadata": meta,
+                }
+        return sorted(discovered.values(), key=lambda x: x["label"].lower())
+
+    def _sync_tracker_picker_to_path(self):
+        if not hasattr(self, "test_tracker_picker_combo"):
+            return
+        current_path = self._canonical_tracker_path(self.test_tracker_path_var.get())
+        if not current_path:
+            self.test_tracker_picker_var.set("")
+            return
+
+        for label, entry in self.test_tracker_catalog.items():
+            entry_path = entry.get("path") if isinstance(entry, dict) else entry
+            if self._canonical_tracker_path(entry_path) == current_path:
+                self.test_tracker_picker_var.set(label)
+                return
+
+        fallback_label = f"custom / {self._display_path(current_path)}"
+        self.test_tracker_catalog[fallback_label] = {
+            "path": current_path,
+            "metadata": self._read_tracker_metadata(current_path),
+        }
+        values = sorted(self.test_tracker_catalog.keys(), key=str.lower)
+        self.test_tracker_picker_combo.config(values=values)
+        self.test_tracker_picker_var.set(fallback_label)
+
+    def refresh_tracker_catalog(self, select_current=False):
+        if not hasattr(self, "test_tracker_picker_combo"):
+            return
+
+        catalog = {}
+        for entry in self._discover_tracker_candidates():
+            catalog[entry["label"]] = {
+                "path": entry["path"],
+                "metadata": entry.get("metadata", {}),
+            }
+        self.test_tracker_catalog = catalog
+        values = sorted(catalog.keys(), key=str.lower)
+        self.test_tracker_picker_combo.config(values=values)
+
+        if select_current:
+            self._sync_tracker_picker_to_path()
+        elif values and self.test_tracker_picker_var.get() not in values:
+            self.test_tracker_picker_var.set(values[0])
+
+    def load_tracker_from_picker(self):
+        label = self.test_tracker_picker_var.get().strip()
+        if not label:
+            return
+        tracker_entry = self.test_tracker_catalog.get(label)
+        tracker_path = tracker_entry.get("path") if isinstance(tracker_entry, dict) else ""
+        if not tracker_path:
+            self.refresh_tracker_catalog(select_current=True)
+            tracker_entry = self.test_tracker_catalog.get(self.test_tracker_picker_var.get().strip())
+            tracker_path = tracker_entry.get("path") if isinstance(tracker_entry, dict) else ""
+            if not tracker_path:
+                messagebox.showerror("Error", f"Unknown tracker selection: {label}")
+                return
+        self._load_tracker_path(tracker_path, "Tracker")
+
+    def _load_tracker_path(self, tracker_path, tracker_label):
+        if not tracker_path or not os.path.exists(tracker_path):
+            messagebox.showerror("Error", f"{tracker_label} not found:\n{tracker_path}")
+            return
+        self.test_tracker_path_var.set(self._canonical_tracker_path(tracker_path))
+        self.refresh_tracker_catalog(select_current=True)
+        self.reload_tests_from_tracker()
+
+    def load_multiclass_tracker(self):
+        self._load_tracker_path(self.multiclass_tracker_default_path, "Multiclass tracker")
+
+    def load_operations_tracker(self):
+        self._load_tracker_path(self.operations_tracker_default_path, "Operations tracker")
+
+    def load_classes_tracker(self):
+        self._load_tracker_path(self.classes_tracker_default_path, "Classes tracker")
+
+    def load_mechanics_tracker(self):
+        self._load_tracker_path(self.mechanics_tracker_default_path, "Mechanics tracker")
+
+    def load_quests_tracker(self):
+        self._load_tracker_path(self.quests_tracker_default_path, "Quests tracker")
+
+    def load_qol_tracker(self):
+        self._load_tracker_path(self.qol_tracker_default_path, "QoL tracker")
+
+    def load_tooling_tracker(self):
+        self._load_tracker_path(self.tooling_tracker_default_path, "Tooling tracker")
+
+    def open_test_tracker_file(self):
+        path = self._canonical_tracker_path(self.test_tracker_path_var.get())
+        if not path or not os.path.exists(path):
+            messagebox.showerror("Error", f"Tracker file not found:\n{path}")
+            return
+        try:
+            if sys.platform == "win32":
+                os.startfile(path)
+            else:
+                subprocess.Popen(["xdg-open", path])
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to open tracker file: {e}")
+
+    def _status_from_markdown_section(self, text):
+        lowered = text.lower()
+        if "[x] pass" in lowered:
+            return "Pass"
+        if "[x] fail" in lowered:
+            return "Fail"
+        return None
+
+    def _parse_tests_from_markdown(self, text):
+        tests = []
+        headings = list(re.finditer(r"^##\s+(.+?)\s*$", text, re.MULTILINE))
+
+        def nearest_heading(pos):
+            last = ""
+            for h in headings:
+                if h.start() >= pos:
+                    break
+                last = h.group(1).strip()
+            return last
+
+        pattern = re.compile(r"^###\s+\[([A-Z][A-Z0-9_]*-\d+)\]\s*(.+?)\s*$", re.MULTILINE | re.IGNORECASE)
+        matches = list(pattern.finditer(text))
+        for i, m in enumerate(matches):
+            start = m.start()
+            end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+            section_raw = text[start:end]
+            section_display = section_raw.strip()
+            test_id = m.group(1).strip().upper()
+            title = m.group(2).strip()
+            category_code = test_id.split("-")[0]
+            heading = nearest_heading(start)
+            heading_clean = re.sub(r"^\d+\)\s*", "", heading).strip() if heading else ""
+            category_display = f"{category_code} - {heading_clean}" if heading_clean else category_code
+            tests.append({
+                "id": test_id,
+                "title": title,
+                "section_raw": section_raw,
+                "section": section_display,
+                "line": text.count("\n", 0, start) + 1,
+                "start": start,
+                "end": end,
+                "category_code": category_code,
+                "category_display": category_display,
+                "md_status": self._status_from_markdown_section(section_display),
+            })
+        return tests
+
+    def _normalize_test_status(self, status):
+        allowed = {"Not Run", "In Progress", "Pass", "Fail"}
+        return status if status in allowed else "Not Run"
+
+    def _get_test_outcome(self, test_id):
+        entry = self.test_outcomes.get(self._make_test_outcome_key(test_id))
+        if not isinstance(entry, dict):
+            entry = {}
+        return {
+            "status": self._normalize_test_status(entry.get("status", "Not Run")),
+            "notes": entry.get("notes", ""),
+            "updated_at": entry.get("updated_at", ""),
+        }
+
+    def _set_test_outcome(self, test_id, outcome):
+        self.test_outcomes[self._make_test_outcome_key(test_id)] = outcome
+
+    def _migrate_legacy_outcomes_for_tracker(self):
+        # Legacy flat keys existed before we namespaced outcomes by tracker path.
+        current_tracker = self._canonical_tracker_path(self.test_tracker_path_var.get())
+        multiclass_default = self._canonical_tracker_path(self.multiclass_tracker_default_path)
+        if current_tracker != multiclass_default:
+            return
+
+        migrated = False
+        for record in self.test_records:
+            legacy_key = record["id"]
+            legacy_entry = self.test_outcomes.get(legacy_key)
+            new_key = self._make_test_outcome_key(record["id"])
+            if isinstance(legacy_entry, dict) and new_key not in self.test_outcomes:
+                self.test_outcomes[new_key] = dict(legacy_entry)
+                migrated = True
+
+        if migrated:
+            for record in self.test_records:
+                legacy_key = record["id"]
+                if isinstance(self.test_outcomes.get(legacy_key), dict):
+                    del self.test_outcomes[legacy_key]
+
+    def _refresh_tracker_summary(self):
+        tracker_path = self._canonical_tracker_path(self.test_tracker_path_var.get())
+        if not tracker_path:
+            self.test_tracker_summary_var.set("Tracker: (none)")
+            return
+
+        counts = {"Not Run": 0, "In Progress": 0, "Pass": 0, "Fail": 0}
+        for record in self.test_records:
+            status = self._get_test_outcome(record["id"])["status"]
+            counts[status] = counts.get(status, 0) + 1
+
+        next_unrun = next((r["id"] for r in self.test_records if self._get_test_outcome(r["id"])["status"] == "Not Run"), "-")
+        next_fail = next((r["id"] for r in self.test_records if self._get_test_outcome(r["id"])["status"] == "Fail"), "-")
+
+        state = self.current_tracker_metadata.get("state", "active").upper()
+        self.test_tracker_summary_var.set(
+            f"Tracker: {self._display_path(tracker_path)} [{state}]  |  Total: {len(self.test_records)}  Pass: {counts['Pass']}  Fail: {counts['Fail']}  In Progress: {counts['In Progress']}  Not Run: {counts['Not Run']}  |  Next Unrun: {next_unrun}  Next Fail: {next_fail}"
+        )
+
+    def reload_tests_from_tracker(self, selected_test_id=None, quiet=False):
+        path = self._canonical_tracker_path(self.test_tracker_path_var.get())
+        if not path or not os.path.exists(path):
+            if not quiet:
+                messagebox.showerror("Error", f"Tracker file not found:\n{path}")
+            return
+
+        try:
+            self.test_tracker_path_var.set(path)
+            self._sync_tracker_picker_to_path()
+            if not selected_test_id and self.test_listbox.curselection():
+                selected_test_id = self._get_selected_test_record().get("id")
+            with open(path, "r", encoding="utf-8") as f:
+                content = f.read()
+            self.current_tracker_metadata = self._read_tracker_metadata(path)
+            self.test_records = self._parse_tests_from_markdown(content)
+            self._migrate_legacy_outcomes_for_tracker()
+            for record in self.test_records:
+                outcome_key = self._make_test_outcome_key(record["id"])
+                if record.get("md_status") and outcome_key not in self.test_outcomes:
+                    self.test_outcomes[outcome_key] = {
+                        "status": record["md_status"],
+                        "notes": "",
+                        "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    }
+            self._save_test_manager_state()
+            self._refresh_category_filter_options()
+            self._refresh_test_list()
+            if self.test_records:
+                if selected_test_id and not self._select_test_by_id(selected_test_id):
+                    if self.test_listbox.size() > 0:
+                        self.test_listbox.selection_clear(0, "end")
+                        self.test_listbox.selection_set(0)
+                        self.test_listbox.activate(0)
+                        self.on_test_selected()
+                    else:
+                        self.test_selected_var.set("No tests match current filter")
+                        self.test_status_var.set("Status: Not Run")
+                        self._set_text_widget(self.test_detail_text, "")
+                        self._set_text_widget(self.test_notes_text, "")
+                elif not selected_test_id and self.test_listbox.size() > 0:
+                    self.test_listbox.selection_clear(0, "end")
+                    self.test_listbox.selection_set(0)
+                    self.test_listbox.activate(0)
+                    self.on_test_selected()
+            else:
+                self.test_selected_var.set("No tests found")
+                self.test_status_var.set("Status: Not Run")
+                self._set_text_widget(self.test_detail_text, "")
+                self._set_text_widget(self.test_notes_text, "")
+            self._refresh_tracker_summary()
+        except Exception as e:
+            if not quiet:
+                messagebox.showerror("Error", f"Failed to parse tracker:\n{e}")
+            else:
+                self.log(f"Failed to parse tracker: {e}")
+
+    def _refresh_category_filter_options(self):
+        if not hasattr(self, "test_category_combo"):
+            return
+        categories = sorted({r.get("category_display", "Unknown") for r in self.test_records})
+        values = ["All"] + categories
+        self.test_category_combo.config(values=values)
+        if self.test_category_var.get() not in values:
+            self.test_category_var.set("All")
+
+    def _format_test_row(self, record):
+        outcome = self._get_test_outcome(record["id"])
+        status = outcome["status"]
+        marker = {
+            "Not Run": "  ",
+            "In Progress": "~ ",
+            "Pass": "P ",
+            "Fail": "F ",
+        }.get(status, "  ")
+        return f"{marker}[{record['id']}] {record['title']} ({record.get('category_code', '?')})"
+
+    def _refresh_test_progress(self):
+        counts = {"Not Run": 0, "In Progress": 0, "Pass": 0, "Fail": 0}
+        for record in self.test_records:
+            status = self._get_test_outcome(record["id"])["status"]
+            counts[status] = counts.get(status, 0) + 1
+        total = len(self.test_records)
+        self.test_progress_var.set(
+            f"Total: {total}  |  Pass: {counts['Pass']}  Fail: {counts['Fail']}  In Progress: {counts['In Progress']}  Not Run: {counts['Not Run']}"
+        )
+        self._refresh_tracker_summary()
+
+    def _refresh_test_list(self):
+        selected_id = None
+        if self.test_listbox.curselection():
+            selected_id = self._get_selected_test_record().get("id")
+
+        self.test_listbox.delete(0, "end")
+        self._filtered_test_indexes = []
+        active_filter = self.test_filter_var.get().strip()
+        active_category = self.test_category_var.get().strip()
+        for idx, record in enumerate(self.test_records):
+            status = self._get_test_outcome(record["id"])["status"]
+            if active_filter != "All" and status != active_filter:
+                continue
+            category_display = record.get("category_display", "")
+            if active_category != "All" and category_display != active_category:
+                continue
+            self._filtered_test_indexes.append(idx)
+            self.test_listbox.insert("end", self._format_test_row(record))
+
+        self._refresh_test_progress()
+
+        if selected_id:
+            for display_idx, src_idx in enumerate(self._filtered_test_indexes):
+                if self.test_records[src_idx]["id"] == selected_id:
+                    self.test_listbox.selection_set(display_idx)
+                    self.test_listbox.activate(display_idx)
+                    self.on_test_selected()
+                    break
+
+    def _select_test_by_id(self, test_id):
+        if not test_id:
+            return False
+        sought = test_id.strip().upper()
+        for display_idx, src_idx in enumerate(self._filtered_test_indexes):
+            if self.test_records[src_idx]["id"].upper() == sought:
+                self.test_listbox.selection_clear(0, "end")
+                self.test_listbox.selection_set(display_idx)
+                self.test_listbox.activate(display_idx)
+                self.test_listbox.see(display_idx)
+                self.on_test_selected()
+                return True
+        return False
+
+    def jump_to_test_id(self):
+        raw = self.test_jump_id_var.get().strip().upper()
+        if not raw:
+            return
+        if not self._is_valid_test_id(raw):
+            messagebox.showerror("Invalid Test ID", "Use format like C-01, P-11, B-09, IP-101, QOL-1001.")
+            return
+
+        if self._select_test_by_id(raw):
+            return
+
+        self.test_filter_var.set("All")
+        self.test_category_var.set("All")
+        self._refresh_test_list()
+        if not self._select_test_by_id(raw):
+            messagebox.showinfo("Not Found", f"Test ID {raw} was not found in current tracker.")
+
+    def _get_selected_test_record(self):
+        if not self.test_listbox.curselection():
+            return {}
+        display_idx = int(self.test_listbox.curselection()[0])
+        if display_idx < 0 or display_idx >= len(self._filtered_test_indexes):
+            return {}
+        src_idx = self._filtered_test_indexes[display_idx]
+        if src_idx < 0 or src_idx >= len(self.test_records):
+            return {}
+        return self.test_records[src_idx]
+
+    def on_test_selected(self, _event=None):
+        record = self._get_selected_test_record()
+        if not record:
+            return
+        outcome = self._get_test_outcome(record["id"])
+        self.test_selected_var.set(f"[{record['id']}] {record['title']}")
+        self.test_status_var.set(f"Status: {outcome['status']}")
+        self._set_text_widget(self.test_detail_text, record["section"])
+        self._set_text_widget(self.test_notes_text, outcome["notes"])
+
+    def _format_status_checkbox_line(self, status):
+        normalized = self._normalize_test_status(status)
+        pass_checked = "x" if normalized == "Pass" else " "
+        fail_checked = "x" if normalized == "Fail" else " "
+        return f"**Status**: [{pass_checked}] Pass  [{fail_checked}] Fail"
+
+    def _apply_outcome_to_section(self, section_raw, status, notes):
+        newline = "\r\n" if "\r\n" in section_raw else "\n"
+        has_trailing_newline = section_raw.endswith("\n") or section_raw.endswith("\r\n")
+        lines = section_raw.splitlines()
+
+        status_idx = next((i for i, line in enumerate(lines) if line.strip().startswith("**Status**:")), -1)
+        status_line = self._format_status_checkbox_line(status)
+        if status_idx >= 0:
+            lines[status_idx] = status_line
+        else:
+            expected_idx = next((i for i, line in enumerate(lines) if line.strip().startswith("**Expected**:")), -1)
+            insert_at = expected_idx + 1 if expected_idx >= 0 else len(lines)
+            lines.insert(insert_at, status_line)
+            status_idx = insert_at
+
+        notes_line_default = "**Notes**: ______________________________"
+        notes_idx = next((i for i, line in enumerate(lines) if line.strip().startswith("**Notes**:")), -1)
+        if notes_idx < 0:
+            notes_idx = len(lines)
+            lines.append(notes_line_default)
+
+        start_marker = "<!-- TEST_MANAGER_NOTES_START -->"
+        end_marker = "<!-- TEST_MANAGER_NOTES_END -->"
+        marker_start = next((i for i, line in enumerate(lines) if line.strip() == start_marker), -1)
+        if marker_start >= 0:
+            marker_end = next((i for i, line in enumerate(lines[marker_start + 1:], marker_start + 1) if line.strip() == end_marker), -1)
+            if marker_end >= marker_start:
+                del lines[marker_start:marker_end + 1]
+
+        notes_idx = next((i for i, line in enumerate(lines) if line.strip().startswith("**Notes**:")), -1)
+        if notes_idx < 0:
+            lines.append(notes_line_default)
+            notes_idx = len(lines) - 1
+        notes_text = (notes or "").strip()
+        if notes_text:
+            lines[notes_idx] = "**Notes**: See managed notes block below."
+            note_block = [start_marker, "```text"]
+            note_block.extend(notes_text.splitlines())
+            note_block.extend(["```", end_marker])
+            lines[notes_idx + 1:notes_idx + 1] = note_block
+        else:
+            lines[notes_idx] = notes_line_default
+
+        updated = newline.join(lines)
+        if has_trailing_newline:
+            updated += newline
+        return updated
+
+    def _write_test_outcome_to_tracker(self, test_id):
+        path = self._canonical_tracker_path(self.test_tracker_path_var.get())
+        if not path or not os.path.exists(path):
+            self.log(f"Test tracker not found, cannot write back: {path}")
+            return False
+
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                content = f.read()
+            parsed = self._parse_tests_from_markdown(content)
+            match = next((record for record in parsed if record["id"] == test_id), None)
+            if not match:
+                self.log(f"Test ID {test_id} not found in tracker; write-back skipped")
+                return False
+
+            outcome = self._get_test_outcome(test_id)
+            updated_section = self._apply_outcome_to_section(match["section_raw"], outcome["status"], outcome["notes"])
+            new_content = content[:match["start"]] + updated_section + content[match["end"]:]
+            if new_content != content:
+                self._atomic_write_text(path, new_content, encoding="utf-8", newline="")
+            return True
+        except Exception as e:
+            self.log(f"Failed to write test {test_id} back to tracker: {e}")
+            return False
+
+    def set_selected_test_status(self, status):
+        record = self._get_selected_test_record()
+        if not record:
+            return
+        normalized = self._normalize_test_status(status)
+        outcome = self._get_test_outcome(record["id"])
+        outcome["status"] = normalized
+        outcome["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self._set_test_outcome(record["id"], outcome)
+        self._save_test_manager_state()
+        self._write_test_outcome_to_tracker(record["id"])
+        self.reload_tests_from_tracker(selected_test_id=record["id"], quiet=True)
+        self.log(f"Test {record['id']} marked {normalized}")
+
+    def save_selected_test_notes(self):
+        record = self._get_selected_test_record()
+        if not record:
+            return
+        notes = self.test_notes_text.get("1.0", "end").strip()
+        outcome = self._get_test_outcome(record["id"])
+        outcome["notes"] = notes
+        outcome["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self._set_test_outcome(record["id"], outcome)
+        self._save_test_manager_state()
+        self._write_test_outcome_to_tracker(record["id"])
+        self.reload_tests_from_tracker(selected_test_id=record["id"], quiet=True)
+        self.log(f"Saved notes for {record['id']}")
+
+    def copy_selected_test_feedback(self):
+        record = self._get_selected_test_record()
+        if not record:
+            return
+        outcome = self._get_test_outcome(record["id"])
+        notes = self.test_notes_text.get("1.0", "end").strip()
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        tracker_rel = self._display_path(self.test_tracker_path_var.get())
+        feedback = (
+            f"[{timestamp}] [{record['id']}] {record['title']}\n"
+            f"Tracker: {tracker_rel}\n"
+            f"Category: {record.get('category_display', record.get('category_code', 'Unknown'))}\n"
+            f"Status: {outcome['status']}\n"
+            f"Notes: {notes if notes else '(none)'}"
+        )
+        self.clipboard_clear()
+        self.clipboard_append(feedback)
+        self.update_idletasks()
+        self.log(f"Copied feedback for {record['id']} to clipboard")
+
+    def select_next_unrun_test(self):
+        if not self.test_records:
+            return
+        for display_idx, src_idx in enumerate(self._filtered_test_indexes):
+            record = self.test_records[src_idx]
+            if self._get_test_outcome(record["id"])["status"] == "Not Run":
+                self.test_listbox.selection_clear(0, "end")
+                self.test_listbox.selection_set(display_idx)
+                self.test_listbox.activate(display_idx)
+                self.on_test_selected()
+                self.test_listbox.see(display_idx)
+                return
+        messagebox.showinfo("Next Unrun", "No remaining 'Not Run' tests in the current filter.")
+
+    def select_next_failed_test(self):
+        if not self.test_records:
+            return
+        for display_idx, src_idx in enumerate(self._filtered_test_indexes):
+            record = self.test_records[src_idx]
+            if self._get_test_outcome(record["id"])["status"] == "Fail":
+                self.test_listbox.selection_clear(0, "end")
+                self.test_listbox.selection_set(display_idx)
+                self.test_listbox.activate(display_idx)
+                self.on_test_selected()
+                self.test_listbox.see(display_idx)
+                return
+        messagebox.showinfo("Next Fail", "No 'Fail' tests in the current filter.")
+
     # ==================== Database Methods ====================
 
     def reset_password(self):
@@ -969,12 +2017,29 @@ class ServerManagerApp(tk.Tk):
         if os.path.exists(path):
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
             new_name = f"{path}.{ts}.old"
-            os.rename(path, new_name)
+            suffix = 1
+            while os.path.exists(new_name):
+                suffix += 1
+                new_name = f"{path}.{ts}.{suffix}.old"
+            os.replace(path, new_name)
             self.log(f"Backed up existing file to {new_name}")
 
     def _load_db_config(self):
-        with open("eqemu_config.json", "r") as f:
-            cfg = json.load(f)["server"]["database"]
+        config_path = "eqemu_config.json"
+        with open(config_path, "r", encoding="utf-8") as f:
+            root = json.load(f)
+        if not isinstance(root, dict):
+            raise ValueError(f"{config_path} root object must be a JSON object")
+        server = root.get("server")
+        if not isinstance(server, dict):
+            raise ValueError(f"{config_path} missing object: server")
+        cfg = server.get("database")
+        if not isinstance(cfg, dict):
+            raise ValueError(f"{config_path} missing object: server.database")
+        required = ["host", "port", "username", "password", "db"]
+        missing = [k for k in required if k not in cfg]
+        if missing:
+            raise ValueError(f"{config_path} missing database keys: {', '.join(missing)}")
         return {
             "host": cfg["host"],
             "port": int(cfg["port"]),
@@ -1397,16 +2462,36 @@ class ServerManagerApp(tk.Tk):
             subprocess.Popen([sys.executable, script_name])
 
     def log(self, message):
+        if not hasattr(self, "log_text"):
+            # During startup some loaders can emit warnings before widgets are built.
+            self._early_logs.append(str(message))
+            return
+
         def _do_log():
-            self.log_text.config(state="normal")
-            self.log_text.insert("end", f"{message}\n")
-            self.log_text.see("end")
-            self.log_text.config(state="disabled")
+            try:
+                if not hasattr(self, "log_text") or not self.log_text.winfo_exists():
+                    return
+                self.log_text.config(state="normal")
+                self.log_text.insert("end", f"{message}\n")
+                self.log_text.see("end")
+                self.log_text.config(state="disabled")
+            except Exception:
+                pass
         # Thread-safe: always dispatch to main thread
         try:
             self.after(0, _do_log)
         except Exception:
             pass
+
+    def _flush_early_logs(self):
+        if not hasattr(self, "log_text"):
+            return
+        if not self._early_logs:
+            return
+        buffered = list(self._early_logs)
+        self._early_logs.clear()
+        for msg in buffered:
+            self.log(msg)
 
     def _get_logs_dir(self):
         return os.path.join(os.getcwd(), "logs")
@@ -2198,7 +3283,7 @@ class ServerManagerApp(tk.Tk):
         self.after(1000, self.update_status_loop)
 
     def on_closing(self):
-        self._save_manager_settings()
+        self._flush_settings_save()
         if self.processes:
             if messagebox.askokcancel("Quit", "Running processes will be stopped. Do you want to quit?"):
                 self.stop_all_processes()

@@ -280,6 +280,34 @@ bool EQ::InventoryProfile::SwapItem(
 
 	// THJServer parity: if classes_bits provided, use it; otherwise fall back to single class
 	uint16 effective_class_bits = classes_bits ? classes_bits : GetPlayerClassBit(class_id);
+	auto has_equipped_lore_conflict = [&](const ItemData *item, int16 moving_slot, int16 vacated_slot) -> bool {
+		if (!item || !item->LoreFlag || item->LoreGroup == 0) {
+			return false;
+		}
+
+		for (int16 slot_id = invslot::EQUIPMENT_BEGIN; slot_id <= invslot::EQUIPMENT_END; ++slot_id) {
+			// The source slot and destination slot are transient during a swap.
+			if (slot_id == moving_slot || slot_id == vacated_slot) {
+				continue;
+			}
+
+			auto equipped_inst = GetItem(slot_id);
+			if (!equipped_inst) {
+				continue;
+			}
+
+			auto equipped_item = equipped_inst->GetItem();
+			if (!equipped_item || !equipped_item->LoreFlag || equipped_item->LoreGroup == 0) {
+				continue;
+			}
+
+			if (ItemData::CheckLoreConflict(item, equipped_item)) {
+				return true;
+			}
+		}
+
+		return false;
+	};
 
 	if (EQ::ValueWithin(source_slot, EQ::invslot::POSSESSIONS_BEGIN, EQ::invslot::POSSESSIONS_END)) {
 		if ((((uint64)1 << source_slot) & m_lookup->PossessionsBitmask) == 0) {
@@ -365,6 +393,12 @@ bool EQ::InventoryProfile::SwapItem(
 				fail_state = swapLevel;
 				return false;
 			}
+
+			if (has_equipped_lore_conflict(source_item, source_slot, destination_slot)) {
+				fail_state = swapLore;
+				return false;
+			}
+
 			if (source_item_instance->IsEvolving() > 0) {
 				source_item_instance->SetEvolveEquipped(true);
 			}
@@ -399,6 +433,12 @@ bool EQ::InventoryProfile::SwapItem(
 				fail_state = swapLevel;
 				return false;
 			}
+
+			if (has_equipped_lore_conflict(destination_item, destination_slot, source_slot)) {
+				fail_state = swapLore;
+				return false;
+			}
+
 			if (destination_item_instance->IsEvolving()) {
 				destination_item_instance->SetEvolveEquipped(true);
 			}

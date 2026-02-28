@@ -31,8 +31,15 @@ sub EVENT_SAY {
             );
 
             my $greeting = $class_greetings{$player_class_id} // "Greetings, traveler. Are you seeking guidance or knowledge?";
-            if (!($classes & plugin::GetClassBitmask($player_class_id)) && plugin::GetClassesCount($client) < 3) {
+            my $has_class = ($classes & plugin::GetClassBitmask($player_class_id));
+            my $class_count = plugin::GetClassesCount($client);
+
+            if (!$has_class && $class_count < 3) {
                 plugin::NPCTell($greeting);
+            } elsif ($has_class) {
+                plugin::NPCTell("You already walk the path of the $class_name. Seek another path, or remove one through the Vision of Ayonae if you wish to change your fate.");
+            } else {
+                plugin::NPCTell("You already carry the maximum number of classes. Remove one through the Vision of Ayonae before I can teach you another way.");
             }
         }
 
@@ -80,7 +87,14 @@ sub EVENT_SAY {
         }
 
         if ($text eq "class_confirm") {
-            if (plugin::GetClassesCount($client) < 3) {
+            my $has_class = ($classes & plugin::GetClassBitmask($player_class_id));
+            my $class_count = plugin::GetClassesCount($client);
+
+            if ($has_class) {
+                plugin::NPCTell("You already possess the $class_name path.");
+            } elsif ($class_count >= 3) {
+                plugin::NPCTell("Your soul already bears three class paths. Remove one first through the Vision of Ayonae.");
+            } else {
                 plugin::AddClass($player_class_id);
                 plugin::NPCTell("Welcome, $class_name, and be known!");
             }

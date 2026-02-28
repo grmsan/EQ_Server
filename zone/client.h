@@ -1106,6 +1106,7 @@ public:
 	void SendAlternateAdvancementTable();
 	void SendAlternateAdvancementStats();
 	void SendEdgeStats();
+	void SendEdgeTestProbe(uint32 test_id, uint32 nonce, uint32 field_mask = 0, int32 arg0 = 0, int32 arg1 = 0, int32 arg2 = 0, int32 arg3 = 0);
 	void PurchaseAlternateAdvancementRank(int rank_id);
 	bool GrantAlternateAdvancementAbility(int aa_id, int points, bool ignore_cost = false);
 	void IncrementAlternateAdvancementRank(int rank_id);

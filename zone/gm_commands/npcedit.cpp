@@ -36,6 +36,7 @@ void SendNPCEditSubCommands(Client *c)
 	c->Message(Chat::White, "Usage: #npcedit aggroradius [Radius] - Sets an NPC's Aggro Radius");
 	c->Message(Chat::White, "Usage: #npcedit assistradius [Radius] - Sets an NPC's Assist Radius");
 	c->Message(Chat::White, "Usage: #npcedit featuresave - Saves an NPC's current facial features to the database");
+	c->Message(Chat::White, "Usage: #npcedit save - Saves an NPC's current visual appearance and spawn location/heading to the database");
 	c->Message(Chat::White, "Usage: #npcedit armortint_id [Armor Tint ID] - Sets an NPC's Armor Tint ID");
 	c->Message(Chat::White, "Usage: #npcedit color [Red] [Green] [Blue] - Sets an NPC's Red, Green, and Blue armor tint");
 	c->Message(Chat::White, "Usage: #npcedit ammoidfile [ID File] - Sets an NPC's Ammo ID File");
@@ -582,6 +583,74 @@ void command_npcedit(Client *c, const Seperator *sep)
 			c->Message(Chat::White, "Usage: #npcedit assistradius [Radius] - Sets an NPC's Assist Radius");
 			return;
 		}
+	} else if (!strcasecmp(sep->arg[1], "save")) {
+		auto texture_from_slot = [&](uint8 slot, uint32 fallback) -> uint32 {
+			const auto profile_texture = t->GetTextureProfileMaterial(slot);
+			return profile_texture ? profile_texture : fallback;
+		};
+
+		const auto head_texture = texture_from_slot(EQ::textures::armorHead, t->GetHelmTexture());
+		const auto chest_texture = texture_from_slot(EQ::textures::armorChest, t->GetTexture());
+		const auto arm_texture = texture_from_slot(EQ::textures::armorArms, t->GetArmTexture());
+		const auto bracer_texture = texture_from_slot(EQ::textures::armorWrist, t->GetBracerTexture());
+		const auto hand_texture = texture_from_slot(EQ::textures::armorHands, t->GetHandTexture());
+		const auto leg_texture = texture_from_slot(EQ::textures::armorLegs, t->GetLegTexture());
+		const auto feet_texture = texture_from_slot(EQ::textures::armorFeet, t->GetFeetTexture());
+		const auto weapon_primary = texture_from_slot(EQ::textures::weaponPrimary, t->GetMeleeTexture1());
+		const auto weapon_secondary = texture_from_slot(EQ::textures::weaponSecondary, t->GetMeleeTexture2());
+
+		n.race = t->GetRace();
+		n.gender = t->GetGender();
+		n.size = t->GetSize();
+		n.texture = static_cast<uint8>(chest_texture);
+		n.helmtexture = static_cast<uint8>(head_texture);
+		n.armtexture = static_cast<int8>(arm_texture);
+		n.bracertexture = static_cast<int8>(bracer_texture);
+		n.handtexture = static_cast<int8>(hand_texture);
+		n.legtexture = static_cast<int8>(leg_texture);
+		n.feettexture = static_cast<int8>(feet_texture);
+		n.d_melee_texture1 = weapon_primary;
+		n.d_melee_texture2 = weapon_secondary;
+		n.face = t->GetLuclinFace();
+		n.luclin_hairstyle = t->GetHairStyle();
+		n.luclin_haircolor = t->GetHairColor();
+		n.luclin_eyecolor = t->GetEyeColor1();
+		n.luclin_eyecolor2 = t->GetEyeColor2();
+		n.luclin_beardcolor = t->GetBeardColor();
+		n.luclin_beard = t->GetBeard();
+		n.drakkin_heritage = t->GetDrakkinHeritage();
+		n.drakkin_tattoo = t->GetDrakkinTattoo();
+		n.drakkin_details = t->GetDrakkinDetails();
+
+		const auto chest_tint = t->GetArmorTint(EQ::textures::armorChest);
+		n.armortint_id = 0;
+		n.armortint_red = static_cast<uint8>((chest_tint >> 16) & 0xFF);
+		n.armortint_green = static_cast<uint8>((chest_tint >> 8) & 0xFF);
+		n.armortint_blue = static_cast<uint8>(chest_tint & 0xFF);
+
+		bool spawn_updated = false;
+		if (t->respawn2) {
+			const auto pos = t->GetPosition();
+			const auto fixed_z = t->GetFixedZ(pos);
+			const auto spawn_query = fmt::format(
+				"UPDATE spawn2 SET x = {:.2f}, y = {:.2f}, z = {:.2f}, heading = {:.2f} WHERE id = {}",
+				pos.x,
+				pos.y,
+				fixed_z,
+				pos.w,
+				t->respawn2->GetID()
+			);
+			const auto spawn_result = content_db.QueryDatabase(spawn_query);
+			spawn_updated = spawn_result.Success() && spawn_result.RowsAffected();
+		}
+
+		d = fmt::format(
+			"{} saved current appearance. {}",
+			npc_id_string,
+			spawn_updated ?
+				"Spawn location/heading also updated." :
+				"Spawn location not updated (no DB-backed spawn2 found)."
+		);
 	} else if (!strcasecmp(sep->arg[1], "featuresave")) {
 		d = fmt::format(
 			"{} saved with all current body and facial feature settings.",

@@ -198,6 +198,8 @@ int command_init(void)
 		command_add("profanity", "Manage censored language.", AccountStatus::GMLeadAdmin, command_profanity) ||
 		command_add("push", "[Back Push] [Up Push] - Lets you do spell push on an NPC", AccountStatus::GMLeadAdmin, command_push) ||
 		command_add("raidloot", "[All|GroupLeader|RaidLeader|Selected] - Sets your Raid Loot Type if you have permission to do so.", AccountStatus::Player, command_raidloot) ||
+		command_add("randomize", "[mirror [npc_type_id]|look|gear] - Mirror a DB NPC look (default), or use full random look/gear randomization.", AccountStatus::QuestTroupe, command_randomize) ||
+		command_add("randomizegear", "- Randomize your target materials/tints only (race/gender untouched).", AccountStatus::QuestTroupe, command_randomizegear) ||
 		command_add("randomfeatures", "Temporarily randomizes the Facial Features of your target", AccountStatus::QuestTroupe, command_randomfeatures) ||
 		command_add("refreshgroup", "Refreshes Group for you or your player target.", AccountStatus::Player, command_refreshgroup) ||
 		command_add("reload", "Reloads different types of server data globally, use no argument for help menu.", AccountStatus::GMMgmt, command_reload) ||
@@ -233,7 +235,7 @@ int command_init(void)
 		command_add("suspendmulti", "[Character Name One|Character Name Two|etc] [Days] [Reason] - Suspend multiple characters by name for specified number of days", AccountStatus::GMLeadAdmin, command_suspendmulti) ||
 		command_add("takeplatinum", "[Platinum] - Takes specified amount of platinum from you or your player target", AccountStatus::GMMgmt, command_takeplatinum) ||
 		command_add("task", "(subcommand) - Task system commands", AccountStatus::GMLeadAdmin, command_task) ||
-		command_add("test", "[list|packs|all|smoke|combat|regression|<id>|<start-end>] - Run in-game multiclass sanity tests (example: #test smoke)", AccountStatus::Player, command_test) ||
+		command_add("test", "[list|packs|all|smoke|combat|automated|regression|<id>|<start-end>] - Run in-game multiclass sanity tests (example: #test smoke)", AccountStatus::Player, command_test) ||
 		command_add("petname", "[newname] - Temporarily renames your pet. Leave name blank to restore the original name.", AccountStatus::GMAdmin, command_petname) ||
 		command_add("traindisc", "[level] - Trains all the disciplines usable by the target, up to level specified. (may freeze client for a few seconds)", AccountStatus::GMLeadAdmin, command_traindisc) ||
 		command_add("tune", "Calculate statistical values related to combat.", AccountStatus::GMAdmin, command_tune) ||
@@ -453,7 +455,8 @@ uint8 GetCommandStatus(std::string command_name)
  */
 int command_realdispatch(Client *c, std::string message, bool ignore_status)
 {
-	Seperator sep(message.c_str(), ' ', 10, 100, true); // "three word argument" should be considered 1 arg
+	// Allow higher-arity GM command payloads (for example, #test clientreplyv2).
+	Seperator sep(message.c_str(), ' ', 32, 100, true); // "three word argument" should be considered 1 arg
 
 	std::string command(sep.arg[0] + 1);
 

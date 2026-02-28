@@ -2,6 +2,10 @@
   "eq_dir": "D:\\Rof2",
   "build_target": "zone",
   "layout_mode": "auto",
+  "test_tracker_path": "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\multiclass\\test_tracker.md",
+  "test_show_concepts": false,
+  "test_pane_sash_position": 917,
+  "test_pane_sash_ratio": 0.3615930599369085,
   "process_args": {
     "loginserver": "",
     "world": "",

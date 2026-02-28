@@ -14,7 +14,19 @@ bool isEQGOverrideEnabled = false;
 // isMQInjectsEnabled if set to true will cause some edge-inspired features to work:
 // MQ2Spawns, MQ2Maps, MQ2Commands, MQ2Pulse, MQ2Spawns, MapPlugin, MQ2ItemDisplay, MQ2Labels
 // NOT RECOMMENDED. Known to cause memory leaks due to mq2maps strings
-bool isMQInjectsEnabled = true;  // TESTING: disabled to isolate spell tooltip issue
+bool isMQInjectsEnabled = true;
+
+// isMQ2CoreDetoursEnabled installs core MQ2 detours and support glue.
+bool isMQ2CoreDetoursEnabled = true;
+
+// isMQ2ParserEnabled enables MQ2 parser/data initialization for macro/data features.
+bool isMQ2ParserEnabled = true;
+
+// isMQ2ItemDisplayEnabled enables MQ2 ItemDisplay hooks (tooltip/spell effect text features).
+bool isMQ2ItemDisplayEnabled = true;
+
+// isMQ2KeyBindsEnabled enables MQ2 keybind hooks.
+bool isMQ2KeyBindsEnabled = true;
 
 // isMapWindowDisabled if set to true will do a soft patch to disable the map in game. If disabled, I suggest isMQInjectsEnabled being false as well, else npc data is still populated
 bool isMapWindowDisabled = false;

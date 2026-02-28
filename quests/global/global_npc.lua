@@ -38,6 +38,130 @@ local function safe_tostring(value)
     return '<unprintable>'
 end
 
+local class_name_map = {
+	[1] = "Warrior",
+	[2] = "Cleric",
+	[3] = "Paladin",
+	[4] = "Ranger",
+	[5] = "Shadow Knight",
+	[6] = "Druid",
+	[7] = "Monk",
+	[8] = "Bard",
+	[9] = "Rogue",
+	[10] = "Shaman",
+	[11] = "Necromancer",
+	[12] = "Wizard",
+	[13] = "Magician",
+	[14] = "Enchanter",
+	[15] = "Beastlord",
+	[16] = "Berserker"
+}
+
+local function has_class_from_mask(mask, class_id)
+	if not class_id or class_id < 1 or class_id > 16 then
+		return false
+	end
+
+	local bit = math.floor(2 ^ (class_id - 1))
+	return (math.floor(mask / bit) % 2) == 1
+end
+
+local function count_classes_from_mask(mask)
+	local count = 0
+	for class_id = 1, 16 do
+		if has_class_from_mask(mask, class_id) then
+			count = count + 1
+		end
+	end
+
+	return count
+end
+
+function event_say(e)
+	if not e.other or not e.other:IsClient() then
+		return
+	end
+
+	-- Bazaar custom class-add guildmasters (THJ-style): npc class 20..35 maps to player class 1..16.
+	-- Keep this scoped to Bazaar so legacy guildmasters elsewhere remain untouched.
+	if eq.get_zone_id() ~= 151 then
+		return
+	end
+
+	if eq.get_rule("Custom:MulticlassingEnabled") ~= "true" then
+		return
+	end
+
+	local npc_class = e.self:GetClass()
+	if npc_class < 20 or npc_class > 35 then
+		return
+	end
+
+	local class_id = npc_class - 19
+	local class_name = class_name_map[class_id] or "Unknown"
+	local class_bits = e.other:GetClassesBitmask()
+	local has_class = has_class_from_mask(class_bits, class_id)
+	local max_classes = tonumber(eq.get_rule("Custom:MulticlassMaxClasses")) or 3
+	local class_count = count_classes_from_mask(class_bits)
+
+	if e.message:findi("hail") then
+		if has_class then
+			e.self:Say("You already walk the path of the " .. class_name .. ". Seek another path, or remove one through the Vision of Ayonae.")
+			return
+		end
+
+		if class_count >= max_classes then
+			e.self:Say("You already carry the maximum number of classes. Remove one through the Vision of Ayonae before I can teach you another way.")
+			return
+		end
+
+		local select_link = eq.say_link("class_select", false, "become a " .. class_name)
+		e.self:Say("Your fate is not yet fixed. If you wish, I can help you " .. select_link .. ".")
+		return
+	end
+
+	if e.message:findi("class_select") then
+		if has_class then
+			e.self:Say("You already possess the " .. class_name .. " path.")
+			return
+		end
+
+		if class_count >= max_classes then
+			e.self:Say("Your soul already bears the maximum number of class paths. Remove one first through the Vision of Ayonae.")
+			return
+		end
+
+		local confirm_link = eq.say_link("class_confirm", false, "commit to the path of the " .. class_name)
+		e.self:Say("This choice binds your fate. Are you ready to " .. confirm_link .. "?")
+		return
+	end
+
+	if e.message:findi("class_confirm") then
+		-- Re-evaluate at confirmation time in case state changed between clicks.
+		class_bits = e.other:GetClassesBitmask()
+		has_class = has_class_from_mask(class_bits, class_id)
+		class_count = count_classes_from_mask(class_bits)
+
+		if has_class then
+			e.self:Say("You already possess the " .. class_name .. " path.")
+			return
+		end
+
+		if class_count >= max_classes then
+			e.self:Say("Your soul already bears the maximum number of class paths. Remove one first through the Vision of Ayonae.")
+			return
+		end
+
+		-- Use server command dispatch with ignore_status=true so this quest path works for all players.
+		local ok = e.other:SendGMCommand("#addclass " .. tostring(class_id), true)
+		if ok then
+			e.self:Say("Welcome, " .. class_name .. ".")
+		else
+			e.self:Say("I was unable to bind that class path right now. Try again in a moment.")
+		end
+	end
+end
+
 -- Toggleable debug output for the upgrade script
 -- Set to true to enable debug logging; false to disable all debug lines
 local UPGRADE_DEBUG = false

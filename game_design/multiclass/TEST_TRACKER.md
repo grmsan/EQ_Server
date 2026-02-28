@@ -1,38 +1,103 @@
 # Multiclass Test Tracker
 
 **Status**: Active Testing
+**Tracker Area**: Multiclass
+**Tracker State**: Active
 **Last Updated**: 2026-02-27
 **Technical Plan**: [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
 
 ## Purpose
 
-This tracker is structured for fast in-game verification.
+This tracker is the single source of truth for multiclass validation across long dev gaps.
 
 Use it in two modes:
 
-1. `Smoke Run` (15-25 min): critical go/no-go checks.
-2. `Full Regression` (60-120 min): broader multiclass coverage.
+1. `Smoke Run` (15-25 min): go/no-go checks after fresh code changes.
+2. `Full Regression` (60-120 min): broad validation before merge/release.
+
+## Return-After-Break Quickstart (10 Minutes)
+
+Use this when it has been days/weeks since last test session.
+
+1. Fill out `Session Header` first (date, build/branch, key rules).
+2. Verify you are on the expected zone build and database.
+3. Run `#test smoke` and `#test combat` to catch obvious wiring regressions.
+4. Pick one known-good sanity test (`C-01` or `P-01`) and confirm expected output still matches prior behavior.
+5. Start full testing only after the sanity pass is stable.
+
+## End-To-End Workflow
+
+1. Select scope: `Smoke Run`, `Full Regression`, or one category (`P-*`, `B-*`, etc.).
+2. Read each test's `Goal`, then execute listed `Steps` exactly.
+3. Validate against `Expected` and collect objective evidence:
+   - in-game chat lines,
+   - server log lines,
+   - rule values/command output.
+4. Mark `Status` as `Pass` or `Fail`.
+5. Add concise notes with reproduction commands and what actually happened.
+6. If failing, include one immediate next action (code path or SQL/data target).
+
+## Pass/Fail Rules
+
+- `Pass`: Expected behavior occurs consistently without manual interpretation.
+- `Fail`: Any mismatch, intermittency, missing output, or dependency break.
+- `Blocker`: If environment is invalid (missing SQL, stale assets, wrong rules), mark `Fail` and note `Blocked by environment`.
+
+## Evidence Format (Use in Notes)
+
+Keep notes short but reproducible:
+
+`Observed:` actual behavior in one line.
+`Evidence:` exact chat/log snippet or command output.
+`Commands:` minimal command sequence to reproduce.
+`Next:` likely code/data area if failed.
+
+## Confirmation Guidance By Category
+
+- `C-*` core/persistence: confirm with `#addclass list` and `#multiclassdiag` before/after relog/zone.
+- `S-*` spells/casting: confirm cast result, mana/timer behavior, and target correctness.
+- `P-*` combat/procs/pets: gather multiple rounds (not one hit) and verify cooldown/proc cadence.
+- `I-*` item/equip: verify both allow and deny paths to avoid false positives.
+- `A-*` AA: verify visibility, purchase, activate, and cooldown behavior.
+- `B-*` bazaar/scripts: verify NPC presence, dialogue branches, and quest/script side effects.
+
+## Related Trackers
+
+- Class/ability combat and class-specific AA tests: [../classes/TEST_TRACKER.md](../classes/TEST_TRACKER.md)
+- Core combat/proc mechanics tests: [../mechanics/TEST_TRACKER.md](../mechanics/TEST_TRACKER.md)
+- Quest and instance script flow tests: [../quests/TEST_TRACKER.md](../quests/TEST_TRACKER.md)
+- QoL travel/system tests: [../qol/TEST_TRACKER.md](../qol/TEST_TRACKER.md)
+- Server manager tooling tests: [../tooling/TEST_TRACKER.md](../tooling/TEST_TRACKER.md)
 
 ## How To Use
 
-1. Run tests in ID order.
-2. Mark each test `Pass` or `Fail`.
-3. Add one-line notes with evidence (chat line, behavior, log file).
+1. Run tests in ID order unless doing a scoped run.
+2. Mark each test `Pass` or `Fail` immediately after execution.
+3. Record notes with enough detail to retest the same case a month later.
 
 ## Global Commands
 
 - `#addclass <id>`: Add class (`1=WAR, 2=CLR, 3=PAL, 4=RNG, 5=SHD, 6=DRU, 7=MNK, 8=BRD, 9=ROG, 10=SHM, 11=NEC, 12=WIZ, 13=MAG, 14=ENC, 15=BST, 16=BER`)
 - `#removeclass <id>`
 - `#addclass list`
+- `#multiclassdiag`: Show multiclass diagnostics for current character
 - `#level <n>`
 - `#setskill <id> <value>`
+- `#set aa_points <n>`
 - `#autoskill list`
+- `#showstats`
 - `#test list`: Show available in-game sanity tests
 - `#test packs`: Show named in-game test packs
 - `#test <id>`: Run one test (example: `#test 3`)
 - `#test <start-end>`: Run a range (example: `#test 1-10`)
+- `#test 16`: Validate DLL client probe round-trip (`EdgeStatLabel` request -> `clientreplyv2` callback)
+- `#test 17`: Validate class-mask mutation propagation + auto-restore
+- `#test 18`: Validate mana mutation parity via DLL callback + auto-restore
+- `#test 19`: Validate client snapshot parity (`class/hp/mana/end`) via DLL callback
+- `#test 20`: Validate runtime/profile/bucket class-mask persistence + DLL callback parity
 - `#test smoke`: Foundational sanity pack
 - `#test combat`: Combat/proc/pet/AA precheck pack
+- `#test automated`: Run all automated checks (server + DLL probe callbacks)
 - `#test regression`: Run full registered automated suite
 - `#test all`: Run all registered tests
 
@@ -40,7 +105,7 @@ Use it in two modes:
 
 ### Smoke Run
 
-Run these first: `C-01, C-02, C-03, I-01, I-02, S-02, P-01, P-02, P-03, P-04, P-11, Z-01, Z-02`
+Run these first: `C-01, C-02, C-03, S-02, P-01, P-02, P-03, P-04, C-06, S-06`
 
 ### Full Regression
 
@@ -53,14 +118,14 @@ Legend:
 - `Partial`: `#test` validates invariants/preconditions, but in-game behavior still needs manual play.
 - `Manual`: Not meaningfully covered by current `#test` harness.
 
-### Auto (2/57)
+### Auto (2/39)
 
 | Tracker ID | Coverage | `#test` IDs | Notes |
 |---|---|---|---|
 | `C-06` | Auto | `5, 8` | Validates `GestaltClasses`/`PlayerProfile.classes` hydration consistency on live character state. |
 | `S-06` | Auto | `9, 10` | Validates multiclass spell timer and target transforms are active in loaded spell data. |
 
-### Partial (9/57)
+### Partial (8/39)
 
 | Tracker ID | Coverage | `#test` IDs | Notes |
 |---|---|---|---|
@@ -68,22 +133,22 @@ Legend:
 | `C-02` | Partial | `5, 8` | Confirms persistence state is internally consistent after login/zone; relog flow is still manual. |
 | `S-05` | Partial | `10` | Confirms spell target transform; actual group propagation cast remains manual. |
 | `A-04` | Partial | `12, 15` | Covers Mnemonic Retention override and Fury rank 6+ pure-caster gate policy check. |
-| `P-05` | Partial | `13` | Confirms THJ proc preconditions (rules + 2H/bow proc item coverage); live proc firing remains manual. |
 | `P-11` | Partial | `14` | Confirms pet bag rule + DB + merchant wiring; live summon/sync behavior remains manual. |
 | `P-13` | Partial | `6` | Confirms `HasClass` parity with bitmask; combat gate behavior remains manual. |
 | `B-08` | Partial | `6` | Confirms class ownership API consistency; title unlock UI/eligibility remains manual. |
 | `G-01` | Partial | `11` | Validates guild query projection shape; roster presentation validation remains manual. |
 
-### Manual (46/57)
+### Manual (29/39)
 
-`T-01, T-02, C-03, C-04, C-05, S-01, S-02, S-03, S-04, P-01, P-02, P-03, P-04, P-06, P-07, P-08, P-09, P-10, P-12, K-01, K-02, K-03, K-04, I-01, I-02, I-03, I-04, I-05, X-01, X-02, X-03, A-01, A-02, A-03, Z-01, Z-02, Z-03, Z-04, B-01, B-02, B-03, B-04, B-05, B-06, B-07, B-09`
+`C-03, C-04, C-05, S-01, S-02, S-03, S-04, P-01, P-02, P-03, P-04, P-12, K-01, K-02, K-03, K-04, I-01, I-02, I-03, I-04, I-05, X-01, X-02, X-03, A-01, A-02, A-03, B-04, B-05`
 
 ### Fast Automation Commands
 
 - Baseline multiclass sanity: `#test 1-10` or `#test smoke`
-- Combat/proc/pet/AA prechecks: `#test combat` (IDs `6,12,13,14,15`)
+- Combat/proc/pet/AA prechecks: `#test combat` (IDs `6,12,14,15`; mechanics tracker covers proc parity follow-up)
 - Guild/AA sanity: `#test 11-15`
-- Full current automated suite: `#test all`
+- DLL probe suite: `#test 16-20`
+- Full current automated suite: `#test automated` (alias: `#test regression` / `#test all`)
 
 ## Automated Validation Snapshot (2026-02-26)
 
@@ -97,7 +162,7 @@ Legend:
 3. New guild projection join/query shape (`character_data` + `guild_members` + `data_buckets.GestaltClasses`) executes successfully.
 - Notes:
 1. This snapshot validates server health and multiclass plumbing, not player-input combat execution.
-2. `#test` now covers server-side assertions for `C-06` and `S-06`, and partial prechecks for `A-04`, `P-05`, and `P-11`; manual in-game behavior validation is still required.
+2. `#test` now covers server-side assertions for `C-06` and `S-06`, and partial prechecks for `A-04` and `P-11`; manual in-game behavior validation is still required.
 
 ---
 
@@ -111,33 +176,10 @@ Legend:
 
 ---
 
-## 0) Tooling UX (Optional)
+## 0) Tooling UX (Moved)
 
-### [T-01] Server Manager Main Layout
-
-**Goal**: Verify new layout is usable for live operation.
-**Steps**:
-
-1. Open `server_manager.py`.
-2. Go to `Server Control`.
-3. Confirm left operations rail + right live workspace are visible.
-4. Confirm service cards and runtime log viewer are usable.
-**Expected**: Layout is coherent and actions are discoverable quickly.
-**Status**: [ ] Pass  [ ] Fail
-**Notes**: ______________________________
-
-### [T-02] Runtime Log Focus Buttons
-
-**Goal**: Verify rapid log targeting.
-**Steps**:
-
-1. Open Runtime Log Viewer.
-2. Click `Active Zone Log`.
-3. Click `Active World Log`.
-4. Click `Most Recent Log`.
-**Expected**: Log source changes correctly each time.
-**Status**: [ ] Pass  [ ] Fail
-**Notes**: ______________________________
+Tooling/Server Manager UI validation was moved to:
+[../tooling/TEST_TRACKER.md](../tooling/TEST_TRACKER.md)
 
 ---
 
@@ -317,99 +359,11 @@ Legend:
 **Status**: [ ] Pass  [ ] Fail
 **Notes**: ______________________________
 
-### [P-05] Proc Parity: 2H and Bow
+Core proc/combat-system parity validations were moved to:
+[../mechanics/TEST_TRACKER.md](../mechanics/TEST_TRACKER.md)
 
-**Goal**: Verify THJ-aligned proc behavior.
-**Steps**:
-
-1. Verify `MultipleTwoHandedProcs = true`.
-2. Test 2H weapon + proc aug rounds.
-3. Test bow/ranged proc rounds.
-**Expected**: 2H and bow proc behavior follows configured parity expectations.
-**Status**: [ ] Pass  [ ] Fail
-**Notes**: ______________________________
-
-### [P-06] Ranger Point-Blank Autofire
-
-**Goal**: Verify close-range ranger autofire behavior.
-**Steps**:
-
-1. Ranger class available, bow equipped.
-2. Stand at melee distance.
-3. Enable autofire.
-**Expected**: No `RANGED_TOO_CLOSE` rejection for ranger path.
-**Status**: [X] Pass  [ ] Fail
-**Notes**: Good as of 2/24
-
-### [P-07] Bow Augment Self-Heal Proc (THJ Style)
-
-**Goal**: Verify bow-only heal proc augments trigger and heal self during ranged combat.
-**Setup**:
-
-1. Buy one of the new augs from `Gemcrafter_Tessu` (`NPC 52099`) or `Gemcrafter_Anuk` (`NPC 382051`) or `Gemcrafter_Lentos` (`NPC 394174`):
-2. `1152012000` (`Lesser Bowstone of Mending`) `Level 20`
-3. `1152012001` (`Bowstone of Mending`) `Level 40`
-4. `1152012002` (`Greater Bowstone of Mending`) `Level 60`
-5. `1152012003` (`Grand Bowstone of Mending`) `Level 80`
-**Steps**:
-
-1. Insert selected augment into bow.
-2. Enable autofire and fight a valid target for multiple rounds.
-3. Watch combat/chat output for heal proc messages.
-4. Repeat at a level below the augment gate to verify it does not proc early.
-**Expected**: Proc fires during ranged combat and heal lands on self; proc is blocked below its required level.
-**Status**: [ ] Pass  [ ] Fail
-**Notes**: ______________________________
-
-### [P-08] Legacy Bow Scaling (hDEX + Minimum Clamp)
-
-**Goal**: Verify THJ-style legacy bow scaling behavior when new dex formulas are disabled.
-**Setup**:
-
-1. Confirm `Combat:UseNewDexFormulas = false`.
-2. Confirm `Custom:ScaleBowByHDex > 0`.
-3. Confirm `Custom:ScaleBowMinimumDamageDivisor > 0` and `Custom:ScaleBowMinimumDamageMultiplier > 0`.
-**Steps**:
-
-1. Use a bow with low base damage and engage a valid target with autofire.
-2. Record several hit values with low hDEX gear.
-3. Repeat with high hDEX gear.
-**Expected**: Higher hDEX produces higher ranged damage profile; floor clamping prevents unexpectedly low legacy-archery hits.
-**Status**: [ ] Pass  [ ] Fail
-**Notes**: ______________________________
-
-### [P-09] Devastating Frenzy Legacy Scaling
-
-**Goal**: Verify THJ-style berserker frenzy scaling against lower target HP.
-**Setup**:
-
-1. Confirm `Combat:UseNewDexFormulas = false`.
-2. Confirm `Custom:DevastatingFrenzyDamageMultiplier > 0`.
-3. Test character has Berserker class and uses Frenzy.
-**Steps**:
-
-1. Hit a target near full HP with Frenzy and record crit/frenzy damage range.
-2. Lower target HP in ~20% bands and continue Frenzy attacks.
-3. Compare damage profile as target HP drops.
-**Expected**: Frenzy critical output scales upward as target HP decreases, with occasional large spike behavior matching THJ-style legacy scaling.
-**Status**: [ ] Pass  [ ] Fail
-**Notes**: ______________________________
-
-### [P-10] Pet/NPC Weapon Instance Proc Parity
-
-**Goal**: Verify pet/NPC attacks evaluate weapon-instance proc paths (including aug-based procs).
-**Setup**:
-
-1. Use a pet or controlled NPC with an equipped weapon instance (not just raw item ID fallback).
-2. Ensure weapon/aug proc effects are valid for level and proc rules.
-**Steps**:
-
-1. Engage a target and let pet/NPC perform sustained melee rounds.
-2. Observe combat output for innate weapon procs and augment procs.
-3. Repeat with offhand if applicable.
-**Expected**: Proc checks include instance-backed weapon data, and expected weapon/aug procs can fire during pet/NPC attacks.
-**Status**: [ ] Pass  [ ] Fail
-**Notes**: ______________________________
+Class-specific ranged/frenzy and custom combat ability validations were moved to:
+[../classes/TEST_TRACKER.md](../classes/TEST_TRACKER.md)
 
 ### [P-11] Pet Bag Equip Sync (Per Pet Class)
 
@@ -628,96 +582,17 @@ Legend:
 
 ---
 
-## 7) Custom Instances (THJ-Style)
+## 7) Custom Instances (Moved)
 
-### [Z-01] Non-Respawning Instance Request + Daily Lockout
-
-**Goal**: Verify non-respawning expedition request is available and locked out for 24 hours after creation.
-**Steps**:
-
-1. Hail `Echo_of_the_Past` and choose `Non-Respawning`.
-2. Confirm expedition is created and can be entered.
-3. Attempt to request another non-respawning instance immediately.
-**Expected**: First request succeeds; second request is blocked by replay lockout until 24 hours have elapsed.
-**Status**: [ ] Pass  [ ] Fail
-**Notes**: ______________________________
-
-### [Z-02] Non-Respawning Spawn Behavior
-
-**Goal**: Verify static instance kills do not naturally repop while instance is active.
-**Steps**:
-
-1. Enter a `Non-Respawning` instance and kill a normal mob.
-2. Wait longer than that mob's normal respawn window.
-3. Zone out/in and re-check the kill location.
-**Expected**: Killed mob does not return during normal respawn windows.
-**Status**: [ ] Pass  [ ] Fail
-**Notes**: ______________________________
-
-### [Z-03] Farming Instance Raid Suppression
-
-**Goal**: Verify `Respawning` farming instance suppresses long-respawn/raid-style spawns.
-**Steps**:
-
-1. Enter a `Respawning` instance of a zone with known long-respawn raid targets.
-2. Verify trash/XP mobs spawn as expected.
-3. Verify known long-respawn raid target spawn points remain suppressed.
-**Expected**: XP/trash population exists; raid-style long-respawn bosses are not present.
-**Status**: [ ] Pass  [ ] Fail
-**Notes**: ______________________________
-
-### [Z-04] Lua Helper Availability (`eq.is_static_instance`, `eq.is_farming_instance`)
-
-**Goal**: Verify THJ quest scripts can call custom instance helpers without runtime errors.
-**Steps**:
-
-1. Trigger a Lua quest script path that uses `eq.is_static_instance()` or `eq.is_farming_instance()`.
-2. Repeat in both non-respawning and respawning instances.
-**Expected**: No Lua nil-function errors; helper-based branch behavior matches instance type.
-**Status**: [ ] Pass  [ ] Fail
-**Notes**: ______________________________
+Instance and quest-helper validation moved to:
+[../quests/TEST_TRACKER.md](../quests/TEST_TRACKER.md)
 
 ---
 
-## 8) THJ Bazaar + Waypoints
+## 8) THJ Bazaar + Waypoints (Multiclass-Specific Subset)
 
-### [B-01] Magic Map Door Opens Waypoint UI
-
-**Goal**: Verify Bazaar map object hook is wired (`doorid=146` -> `SendWaypointList`).
-**Steps**:
-
-1. Zone into `bazaar`.
-2. Click the magic map object/disc at the Bazaar hub.
-**Expected**: Waypoint list UI opens (no quest/script errors).
-**Status**: [ ] Pass  [ ] Fail
-**Notes**: ______________________________
-
-### [B-02] Tearel Group Feature Unlock
-
-**Goal**: Verify Tearel dialogue and group-feature unlock path.
-**Steps**:
-
-1. Hail `Tearel`.
-2. Follow dialogue for `[anchor yourself]` and pay required EOM.
-3. Re-open map UI.
-**Expected**: Group toggle / expedition return options are enabled after unlock.
-**Status**: [ ] Pass  [ ] Fail
-**Notes**: ______________________________
-
-### [B-03] Waypoint Discovery Trigger
-
-**Goal**: Verify `#TPTriggerN` discovery unlock flow.
-**Setup**:
-
-1. Apply `utils/sql/custom/2026_02_26_thj_waypoints_bazaar_bootstrap.sql` (includes `#TPTriggerN` spawn seeding from `thj_waypoints`).
-**Steps**:
-
-1. Enter a zone with `#TPTriggerN` proximity trigger.
-2. Observe discovery message.
-3. Re-open map UI and confirm zone appears unlocked.
-**Expected**: First pass unlocks waypoint; repeat pass shows already-known messaging.
-**Status**: [ ] Pass  [ ] Fail
-**Notes**: ______________________________
+Bazaar waypoint/map/quest API smoke tests moved to:
+[../quests/TEST_TRACKER.md](../quests/TEST_TRACKER.md)
 
 ### [B-04] Class Add NPCs (Guildmasters Class 20..35)
 
@@ -726,7 +601,7 @@ Legend:
 
 1. Hail one of the Bazaar class guildmasters (class 20..35 NPC).
 2. Follow `class_select` -> `class_confirm`.
-3. Run `#mcdiag` / `#autoskill list` / class-sensitive command to confirm ownership.
+3. Run `#multiclassdiag` / `#autoskill list` / class-sensitive command to confirm ownership.
 **Expected**: Class bitmask gains selected class and class systems react immediately.
 **Status**: [ ] Pass  [ ] Fail
 **Notes**: ______________________________
@@ -743,43 +618,14 @@ Legend:
 **Status**: [ ] Pass  [ ] Fail
 **Notes**: ______________________________
 
-### [B-06] Pet Armory Merchant in Bazaar
-
-**Goal**: Verify pet bag vendor availability in Bazaar.
-**Steps**:
-
-1. Open merchant window on `Pet_Armory_Quartermaster`.
-2. Confirm class pet armory items are listed.
-3. Purchase one bag and test active pet bag behavior with a pet class.
-**Expected**: Merchant sells THJ pet bags and purchased bag works with pet equipment sync.
-**Status**: [ ] Pass  [ ] Fail
-**Notes**: ______________________________
-
-### [B-07] THJ Quest API Binding Smoke Test
-
-**Goal**: Verify imported THJ quest methods are fully bound (no undefined method errors at runtime).
-**Setup**:
-
-1. Use a build that includes the latest zone script binding changes.
-2. Ensure zone logs are visible in the runtime log viewer.
-**Steps**:
-
-1. Trigger a script path that calls `$client->HasClass(\"Cleric\")` (example: `ikkinz/#Phantasmal_Priest.pl` dialog).
-2. Trigger Bazaar pet rename path (`151061.pl`) that calls `$client->IsPetNameChangeAllowed()` and `GrantPetNameChange(class_id)`.
-3. Trigger spell script `quests/global/spells/17785.pl` (`ConsumeItemOnCursor`) and `36892.pl` (`ConsumeUnspentAA`).
-4. Trigger a progression/slayer script path using `IsSeasonal`, `GetKillCount`, and `CheckTitle`.
-**Expected**: No Perl/Lua undefined-method errors; script behaviors execute normally.
-**Status**: [ ] Pass  [ ] Fail
-**Notes**: ______________________________
-
 ### [C-06] Zone-Load GestaltClasses Hydration
 
 **Goal**: Verify `PlayerProfile.classes` is loaded from `data_buckets.GestaltClasses` on zone entry.
 **Steps**:
 
 1. Log out with a multi-class character.
-2. Log back in and run `#mcdiag` immediately after entering world.
-3. Zone once and run `#mcdiag` again.
+2. Log back in and run `#multiclassdiag` immediately after entering world.
+3. Zone once and run `#multiclassdiag` again.
 **Expected**: Class bitmask is correct immediately at login and remains stable after zoning.
 **Status**: [ ] Pass  [ ] Fail
 **Notes**: ______________________________
@@ -832,20 +678,6 @@ Legend:
 **Status**: [ ] Pass  [ ] Fail
 **Notes**: ______________________________
 
-### [B-09] Bazaar and Back AA (Instance-Aware Return)
-
-**Goal**: Verify THJ-style `Bazaar and Back` AA is auto-granted, ports to Bazaar, and returns to saved location including instances across relog.
-**Steps**:
-
-1. Log in on a fresh character and open AA window; confirm `Bazaar and Back` is present.
-2. In a normal zone, activate `Bazaar and Back` and verify you port to Bazaar.
-3. Activate it again in Bazaar and verify you return to your original coordinates.
-4. Repeat from an instance (save location in instance, port to Bazaar, camp/relog in Bazaar, then use AA again).
-5. Trigger AA twice quickly and verify reuse lockout message/cooldown behavior (~60s).
-**Expected**: AA is auto-granted to all characters, uses 60s cooldown, and return location persists across relog with instance-aware restore.
-**Status**: [ ] Pass  [ ] Fail
-**Notes**: ______________________________
-
 ### [G-01] Guild Member Multiclass Projection
 
 **Goal**: Verify guild roster payload includes `GestaltClasses` projection behavior.
@@ -862,8 +694,17 @@ Legend:
 
 ## Suggested Workflow
 
-If this still feels heavy, use this weekly cadence:
+Recommended cadence:
 
-1. Daily dev loop: run only `Smoke Run`.
-2. Pre-merge gate: run `Smoke Run` + all `P-*` tests.
-3. Release candidate: run full tracker once.
+1. Daily coding loop: run `#test smoke` plus changed-category tests only.
+2. Before DB/script changes go live: run multiclass ownership/state checks (`C-01`, `C-02`, `C-06`) and then run domain-specific trackers (`quests`, `qol`, `classes`) as needed.
+3. Pre-merge gate: run `Smoke Run` + full `P-*` + full `A-*`.
+4. Release candidate: run full tracker once with clean session notes.
+
+Handoff format for failed items:
+
+1. `Test ID`: example `C-01`.
+2. `Build`: git hash/branch.
+3. `Repro`: exact command sequence.
+4. `Observed vs Expected`: one-line delta.
+5. `Evidence`: chat/log snippet.

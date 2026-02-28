@@ -382,6 +382,8 @@ EQLIB_API BOOL GetMQ2KeyBind(PCHAR name, BOOL Alt, KeyCombo &Combo);
 /* PULSING */
 EQLIB_API VOID InitializeMQ2Pulse();
 EQLIB_API VOID ShutdownMQ2Pulse();
+EQLIB_API VOID InitializeMQ2KeyBinds();
+EQLIB_API VOID ShutdownMQ2KeyBinds();
 
 /* OTHER IMPORTED FROM EQ */
 EQLIB_API int CastRay(PSPAWNINFO,float y,float x,float z);
@@ -644,4 +646,3 @@ LEGACY_API BOOL Calculate(PCHAR szFormula, DOUBLE& Dest);
 
 EQLIB_API VOID memchecks_tramp(PCHAR,DWORD,PVOID,DWORD,BOOL);
 EQLIB_API VOID memchecks(PCHAR,DWORD,PVOID,DWORD,BOOL);
-

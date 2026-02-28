@@ -430,6 +430,7 @@ set(gm_command_sources
     gm_commands/profanity.cpp
     gm_commands/push.cpp
     gm_commands/raidloot.cpp
+    gm_commands/randomize.cpp
     gm_commands/randomfeatures.cpp
     gm_commands/refreshgroup.cpp
     gm_commands/reload.cpp

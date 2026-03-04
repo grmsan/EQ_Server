@@ -130,6 +130,7 @@ void command_mysql(Client *c, const Seperator *sep);
 void command_mystats(Client *c, const Seperator *sep);
 void command_hpdiag(Client *c, const Seperator *sep);
 void command_multiclassdiag(Client *c, const Seperator *sep);
+void command_ilevel(Client *c, const Seperator *sep);
 void command_itemdiag(Client *c, const Seperator *sep);
 void command_hptest(Client *c, const Seperator *sep);
 void command_npccast(Client *c, const Seperator *sep);

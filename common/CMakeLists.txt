@@ -53,6 +53,7 @@ SET(common_sources
     ipc_mutex.cpp
     ip_util.cpp
     item_data.cpp
+    item_ilevel.cpp
     item_instance.cpp
     item_scaling_config.cpp
     json_config.cpp
@@ -604,6 +605,7 @@ SET(common_headers
     ipc_mutex.h
     ip_util.h
     item_data.h
+    item_ilevel.h
     item_instance.h
     json_config.h
     light_source.h

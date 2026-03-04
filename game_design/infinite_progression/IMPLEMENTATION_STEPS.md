@@ -20,7 +20,7 @@
 
 | Step | Name | Status | Date Started | Date Completed |
 | --- | --- | --- | --- | --- |
-| 1 | iLevel Calculation Engine | ⬜ Not Started | | |
+| 1 | iLevel Calculation Engine | ✅ Complete | 2025-07-15 | 2026-03-03 |
 | 2 | Item Tier Storage + Stat Scaling | ⬜ Not Started | | |
 | 3 | Power Slot XP + Kill-Based Tier-Up | ⬜ Not Started | | |
 | 4 | Essence Currency + Salvage System | ⬜ Not Started | | |
@@ -88,19 +88,33 @@ Before Step 1, ensure the following exist (most already do):
 
 ### Progress Checklist
 
-- [ ] Create `common/item_ilevel.h` and `common/item_ilevel.cpp`
-- [ ] Implement `CalculateILevel()` with weapon + armor formulas
-- [ ] Wire weights to rules (not hardcoded)
-- [ ] DB migration: `calculated_ilevel` column on `items`
-- [ ] `#item ilevel <item_id>` command
-- [ ] `#item ilevel_all` batch command
-- [ ] Verify output matches `tools/validate_ilevel.py`
-- [ ] Build passes, no lint errors
+- [x] Create `common/item_ilevel.h` and `common/item_ilevel.cpp`
+- [x] Implement `CalculateILevel()` with weapon + armor formulas
+- [x] Wire weights to rules (not hardcoded) — `RULE_CATEGORY(ItemProgression)` with 22 rules
+- [x] DB migration: `calculated_ilevel` column on `items` — auto-created by `tools/populate_ilevel.py`
+- [x] `#ilevel <item_id>` command (also: `#ilevel` for equipped, `#ilevel all` for batch)
+- [x] `#ilevel all` batch command — iterates all items, writes `calculated_ilevel`
+- [x] Verify output matches `tools/validate_ilevel.py` — 117,958 items verified, 0 mismatches
+- [x] Build passes, no lint errors
 
 ### Post-Implementation Notes
 
-> *Fill in after completing this step. Capture: code patterns discovered, gotchas,
-> useful functions/hooks found, anything future steps should know about.*
+> **Implementation Notes (2025-07-15, updated 2026-03-03):**
+>
+> - Command is `#ilevel` (not `#item ilevel`). Registered at Guide+ access level.
+> - Three modes: `#ilevel` (equipped on target), `#ilevel <id>` (single item), `#ilevel all` (batch DB update).
+> - New files: `common/item_ilevel.h`, `common/item_ilevel.cpp`, `zone/gm_commands/ilevel.cpp`.
+> - All formula weights live in `RULE_CATEGORY(ItemProgression)` — 22 rules total
+>   (12 iLevel weights, 2 salvage economy, 2 salvage tier bonuses, 6 tier cost floor/scale).
+> - `IsWeaponType()` checks: 1HSlash, 2HSlash, 1HPiercing, 1HBlunt, 2HBlunt, Bow, Martial, 2HPiercing.
+> - `CalculateEssenceYield()` and `CalculateTierCost()` also implemented in `item_ilevel.cpp`
+>   (needed by Steps 4-5 but share the same file).
+> - **Python script `tools/populate_ilevel.py`** is the preferred way to batch-populate iLevel.
+>   Auto-creates column + index if missing. Supports `--dry-run`, `--verify`, `--report-only`,
+>   `--config <weights.json>` for override testing. 117,958 items calc'd in <0.3s.
+> - UNK columns examined — 16 are fully zero in DB, but we added a clean new column instead
+>   (UNK columns are part of ItemData struct/packets, repurposing would risk client confusion).
+> - The `#ilevel all` in-game command also works but Python script is better for batch ops.
 
 ---
 

@@ -1157,6 +1157,35 @@ RULE_INT(EvolvingItems, DelayUponEquipping, 30000, "Delay in ms before an evolvi
 RULE_BOOL(EvolvingItems, DestroyAugmentsOnEvolve, false, "If this is enabled, any augments in an item will be destroyed when the item evolves. Otherwise, send augments to the player via the parcel system (requires that the Parcel System be enabled).")
 RULE_CATEGORY_END()
 
+RULE_CATEGORY(ItemProgression)
+// iLevel formula weights — Weapons
+RULE_REAL(ItemProgression, WeaponACWeight, 3.0f, "AC contribution to weapon iLevel power score.")
+RULE_REAL(ItemProgression, WeaponHPWeight, 0.3f, "HP contribution to weapon iLevel power score.")
+RULE_REAL(ItemProgression, WeaponManaWeight, 0.3f, "Mana contribution to weapon iLevel power score.")
+RULE_REAL(ItemProgression, WeaponAttrWeight, 2.0f, "Attribute (STR+STA+...) contribution to weapon iLevel power score.")
+RULE_REAL(ItemProgression, WeaponHasteWeight, 10.0f, "Haste contribution to weapon iLevel power score.")
+RULE_REAL(ItemProgression, WeaponHeroicWeight, 5.0f, "Heroic stat contribution to weapon iLevel power score.")
+// iLevel formula weights — Armor
+RULE_REAL(ItemProgression, ArmorACWeight, 15.0f, "AC contribution to armor iLevel power score.")
+RULE_REAL(ItemProgression, ArmorHPWeight, 0.5f, "HP contribution to armor iLevel power score.")
+RULE_REAL(ItemProgression, ArmorManaWeight, 0.5f, "Mana contribution to armor iLevel power score.")
+RULE_REAL(ItemProgression, ArmorAttrWeight, 3.0f, "Attribute (STR+STA+...) contribution to armor iLevel power score.")
+RULE_REAL(ItemProgression, ArmorResistWeight, 0.5f, "Resist (MR+FR+...) contribution to armor iLevel power score.")
+RULE_REAL(ItemProgression, ArmorHeroicWeight, 5.0f, "Heroic stat contribution to armor iLevel power score.")
+// Salvage economy
+RULE_INT(ItemProgression, EssenceOffset, 100, "Subtracted from iLevel before Essence yield calculation.")
+RULE_BOOL(ItemProgression, SalvageRequireMagic, true, "Only items with the magic flag can be salvaged for Essence.")
+RULE_REAL(ItemProgression, SalvageTierBonusEnchanted, 1.15f, "Enchanted salvage bonus multiplier (+15%).")
+RULE_REAL(ItemProgression, SalvageTierBonusLegendary, 1.35f, "Legendary salvage bonus multiplier (+35%).")
+// Tier cost — iLevel² power curve floors and scales
+RULE_INT(ItemProgression, TierFloorBaseToEnchanted, 1, "Fixed Essence floor for Base to Enchanted tier-up.")
+RULE_REAL(ItemProgression, TierScaleBaseToEnchanted, 0.008f, "iLevel² scale factor for Base to Enchanted tier-up.")
+RULE_INT(ItemProgression, TierFloorEnchantedToLegendary, 25, "Fixed Essence floor for Enchanted to Legendary tier-up.")
+RULE_REAL(ItemProgression, TierScaleEnchantedToLegendary, 0.033f, "iLevel² scale factor for Enchanted to Legendary tier-up.")
+RULE_INT(ItemProgression, TierFloorLegendaryToMythic, 1500, "Fixed Essence floor for Legendary to Mythic tier-up.")
+RULE_REAL(ItemProgression, TierScaleLegendaryToMythic, 0.121f, "iLevel² scale factor for Legendary to Mythic tier-up.")
+RULE_CATEGORY_END()
+
 RULE_CATEGORY(Custom)
 RULE_BOOL(Custom, MulticlassingEnabled, true, "Enable multiclass foundations (server-side class bitmask stored in data buckets).")
 RULE_INT(Custom, MulticlassMaxClasses, 3, "Maximum number of classes allowed in the classes bitmask (includes base class).")

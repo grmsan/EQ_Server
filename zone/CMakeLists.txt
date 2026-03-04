@@ -384,6 +384,7 @@ set(gm_command_sources
     gm_commands/hpdiag.cpp
     gm_commands/multiclassdiag.cpp
     gm_commands/hptest.cpp
+    gm_commands/ilevel.cpp
     gm_commands/itemdiag.cpp
     gm_commands/illusion_block.cpp
     gm_commands/instance.cpp

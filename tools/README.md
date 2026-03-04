@@ -1,20 +1,28 @@
-Multiclass Scan Tool
+# tools/
 
-This tool scans the `extras/THJServer` tree for multiclass-related references and
-produces CSV and JSON outputs listing file, relative path, function/context,
-line number, matched snippet, inferred type, and confidence.
+Developer utilities for the EQ_Server project.  
+All scripts read DB credentials from `../eqemu_config.json`.
 
-Run:
+## Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `db_viewer.py` | General-purpose DB query CLI. `python tools/db_viewer.py --query "SELECT ..."` |
+| `model_raid_economy.py` | Queries live loot tables to validate the Essence economy (iLevel 1:1 model, tier costs, per-zone totals). |
+| `validate_ilevel.py` | Tests the power-score → iLevel algorithm against real DB items. Shows distribution histogram and economy spot-check. |
+| `item_scale_preview.py` | Tkinter GUI for previewing `item_scaling.json` tier scaling values. Separate from iLevel/Essence system. |
+
+## Quick Start
 
 ```bash
-python tools/multiclass_scan.py --root extras/THJServer --out tools/output
+# From repo root
+python tools/validate_ilevel.py          # iLevel algorithm against live items
+python tools/model_raid_economy.py       # Full raid economy analysis
+python tools/db_viewer.py --query "SELECT name FROM items LIMIT 5"
 ```
 
-Outputs:
-- `tools/output/multiclass_references.csv`
-- `tools/output/multiclass_references.json`
+## Design References
 
-Notes:
-- File scanning includes common extensions: `.cpp, .h, .md, .sql, .lua, .py`.
-- The script is heuristic-based and will catch a broad set of matches. Use the
-CSV/JSON for triage and manual review.
+- [ITEM_LEVEL_SYSTEM.md](../game_design/infinite_progression/ITEM_LEVEL_SYSTEM.md) — iLevel algorithm spec
+- [INFINITE_ITEM_PROGRESSION_DESIGN.md](../game_design/infinite_progression/INFINITE_ITEM_PROGRESSION_DESIGN.md) — Master design doc
+- [AUGMENT_SYSTEM.md](../game_design/infinite_progression/AUGMENT_SYSTEM.md) — Augment subsystem deep-dive

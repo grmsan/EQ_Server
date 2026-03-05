@@ -36,6 +36,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 #include "mob.h"
 #include "npc.h"
 #include "combat_balance_config.h"
+#include "power_slot_xp.h"
 
 #include <cmath>
 
@@ -3012,6 +3013,31 @@ bool NPC::Death(Mob* killer_mob, int64 damage, uint16 spell, EQ::skills::SkillTy
 			}
 		}
 	}
+
+	// ── Power Slot Item XP (Step 3 — Infinite Item Progression) ──────
+	// Award item XP to all clients who earned kill credit.
+	// For solo: give_exp_client. For groups/raids: iterate members.
+	if (give_exp_client && !IsCorpse() && !is_ldon_treasure && MerchantType == 0) {
+		Group* kg = entity_list.GetGroupByClient(give_exp_client);
+		Raid*  kr = entity_list.GetRaidByClient(give_exp_client);
+
+		if (kr) {
+			for (const auto& m : kr->members) {
+				if (m.member && !m.is_bot && m.member->IsClient()) {
+					PowerSlotXP::AwardKillXP(m.member->CastToClient(), this);
+				}
+			}
+		} else if (kg) {
+			for (const auto& m : kg->members) {
+				if (m && m->IsClient()) {
+					PowerSlotXP::AwardKillXP(m->CastToClient(), this);
+				}
+			}
+		} else {
+			PowerSlotXP::AwardKillXP(give_exp_client, this);
+		}
+	}
+	// ── End Power Slot Item XP ───────────────────────────────────────
 
 	const bool allow_merchant_corpse = RuleB(Merchant, AllowCorpse);
 	const bool is_merchant           = (class_ == Class::Merchant || class_ == Class::AdventureMerchant || MerchantType != 0);

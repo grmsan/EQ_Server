@@ -11,6 +11,7 @@
 */
 
 #include "item_tier.h"
+#include "item_ilevel.h"
 #include "rulesys.h"
 #include "emu_constants.h"
 
@@ -112,21 +113,21 @@ void ApplyTierScaling(EQ::ItemData* scaledItem, const EQ::ItemData* baseItem, in
 		scaledItem->Mana   = static_cast<int32>(std::round(baseItem->Mana * mult));
 		scaledItem->Endur  = static_cast<int32>(std::round(baseItem->Endur * mult));
 
-		// Attributes × mult
-		scaledItem->AStr = clamp8(baseItem->AStr * mult);
-		scaledItem->ASta = clamp8(baseItem->ASta * mult);
-		scaledItem->AAgi = clamp8(baseItem->AAgi * mult);
-		scaledItem->ADex = clamp8(baseItem->ADex * mult);
-		scaledItem->AInt = clamp8(baseItem->AInt * mult);
-		scaledItem->AWis = clamp8(baseItem->AWis * mult);
-		scaledItem->ACha = clamp8(baseItem->ACha * mult);
+		// Attributes × mult (negative stats never get worse on upgrades)
+		scaledItem->AStr = (baseItem->AStr < 0) ? baseItem->AStr : clamp8(baseItem->AStr * mult);
+		scaledItem->ASta = (baseItem->ASta < 0) ? baseItem->ASta : clamp8(baseItem->ASta * mult);
+		scaledItem->AAgi = (baseItem->AAgi < 0) ? baseItem->AAgi : clamp8(baseItem->AAgi * mult);
+		scaledItem->ADex = (baseItem->ADex < 0) ? baseItem->ADex : clamp8(baseItem->ADex * mult);
+		scaledItem->AInt = (baseItem->AInt < 0) ? baseItem->AInt : clamp8(baseItem->AInt * mult);
+		scaledItem->AWis = (baseItem->AWis < 0) ? baseItem->AWis : clamp8(baseItem->AWis * mult);
+		scaledItem->ACha = (baseItem->ACha < 0) ? baseItem->ACha : clamp8(baseItem->ACha * mult);
 
-		// Resists × mult
-		scaledItem->MR = clamp8(baseItem->MR * mult);
-		scaledItem->FR = clamp8(baseItem->FR * mult);
-		scaledItem->CR = clamp8(baseItem->CR * mult);
-		scaledItem->DR = clamp8(baseItem->DR * mult);
-		scaledItem->PR = clamp8(baseItem->PR * mult);
+		// Resists × mult (negative resists never get worse)
+		scaledItem->MR = (baseItem->MR < 0) ? baseItem->MR : clamp8(baseItem->MR * mult);
+		scaledItem->FR = (baseItem->FR < 0) ? baseItem->FR : clamp8(baseItem->FR * mult);
+		scaledItem->CR = (baseItem->CR < 0) ? baseItem->CR : clamp8(baseItem->CR * mult);
+		scaledItem->DR = (baseItem->DR < 0) ? baseItem->DR : clamp8(baseItem->DR * mult);
+		scaledItem->PR = (baseItem->PR < 0) ? baseItem->PR : clamp8(baseItem->PR * mult);
 
 		// Haste (additive bonus, only if item already has haste)
 		if (baseItem->Haste > 0) {
@@ -182,21 +183,21 @@ void ApplyTierScaling(EQ::ItemData* scaledItem, const EQ::ItemData* baseItem, in
 		scaledItem->Mana   = static_cast<int32>(std::round(baseItem->Mana * combat_mult));
 		scaledItem->Endur  = static_cast<int32>(std::round(baseItem->Endur * combat_mult));
 
-		// Attributes × attr_mult (stays at ×2 — their power bump comes from heroics)
-		scaledItem->AStr = clamp8(baseItem->AStr * attr_mult);
-		scaledItem->ASta = clamp8(baseItem->ASta * attr_mult);
-		scaledItem->AAgi = clamp8(baseItem->AAgi * attr_mult);
-		scaledItem->ADex = clamp8(baseItem->ADex * attr_mult);
-		scaledItem->AInt = clamp8(baseItem->AInt * attr_mult);
-		scaledItem->AWis = clamp8(baseItem->AWis * attr_mult);
-		scaledItem->ACha = clamp8(baseItem->ACha * attr_mult);
+		// Attributes × attr_mult (negative stats never get worse on upgrades)
+		scaledItem->AStr = (baseItem->AStr < 0) ? baseItem->AStr : clamp8(baseItem->AStr * attr_mult);
+		scaledItem->ASta = (baseItem->ASta < 0) ? baseItem->ASta : clamp8(baseItem->ASta * attr_mult);
+		scaledItem->AAgi = (baseItem->AAgi < 0) ? baseItem->AAgi : clamp8(baseItem->AAgi * attr_mult);
+		scaledItem->ADex = (baseItem->ADex < 0) ? baseItem->ADex : clamp8(baseItem->ADex * attr_mult);
+		scaledItem->AInt = (baseItem->AInt < 0) ? baseItem->AInt : clamp8(baseItem->AInt * attr_mult);
+		scaledItem->AWis = (baseItem->AWis < 0) ? baseItem->AWis : clamp8(baseItem->AWis * attr_mult);
+		scaledItem->ACha = (baseItem->ACha < 0) ? baseItem->ACha : clamp8(baseItem->ACha * attr_mult);
 
-		// Resists × attr_mult
-		scaledItem->MR = clamp8(baseItem->MR * attr_mult);
-		scaledItem->FR = clamp8(baseItem->FR * attr_mult);
-		scaledItem->CR = clamp8(baseItem->CR * attr_mult);
-		scaledItem->DR = clamp8(baseItem->DR * attr_mult);
-		scaledItem->PR = clamp8(baseItem->PR * attr_mult);
+		// Resists × attr_mult (negative resists never get worse)
+		scaledItem->MR = (baseItem->MR < 0) ? baseItem->MR : clamp8(baseItem->MR * attr_mult);
+		scaledItem->FR = (baseItem->FR < 0) ? baseItem->FR : clamp8(baseItem->FR * attr_mult);
+		scaledItem->CR = (baseItem->CR < 0) ? baseItem->CR : clamp8(baseItem->CR * attr_mult);
+		scaledItem->DR = (baseItem->DR < 0) ? baseItem->DR : clamp8(baseItem->DR * attr_mult);
+		scaledItem->PR = (baseItem->PR < 0) ? baseItem->PR : clamp8(baseItem->PR * attr_mult);
 
 		// Heroic stats = base attribute (1:1 with base)
 		scaledItem->HeroicStr = static_cast<int32>(baseItem->AStr);
@@ -284,25 +285,30 @@ void ApplyTierAugSlots(EQ::ItemData* scaledItem, const EQ::ItemData* baseItem, i
 	bool is_2h = Is2HOrBow(baseItem->ItemType);
 	int target_slots = GetTierAugSlotCount(tier, is_2h);
 
-	// Count how many slots the base item already has open and find the last used type
-	int base_slots = 0;
+	// Count existing base slots, separating real augs from ornaments (types 20, 21)
+	int real_slots = 0;
+	int ornament_count = 0;
 	uint8 last_base_type = 0;
 	for (int i = 0; i < EQ::invaug::SOCKET_COUNT; ++i) {
-		if (baseItem->AugSlotType[i] != 0) {
-			++base_slots;
-			last_base_type = baseItem->AugSlotType[i];
+		uint8 slot_type = baseItem->AugSlotType[i];
+		if (slot_type != 0) {
+			if (slot_type == 20 || slot_type == 21) {
+				++ornament_count;
+			}
+			else {
+				++real_slots;
+				last_base_type = slot_type;
+			}
 		}
 	}
 
-	// Use max of base count and tier count — never close slots that the base item has
-	int final_slots = std::max(base_slots, target_slots);
+	// Target real slots for this tier, then add ornament slots back for physical index count
+	int target_real = std::max(real_slots, target_slots);
+	int final_slots = std::min(target_real + ornament_count, static_cast<int>(EQ::invaug::SOCKET_COUNT));
 
-	// Cap to SOCKET_COUNT (6 for RoF2)
-	final_slots = std::min(final_slots, static_cast<int>(EQ::invaug::SOCKET_COUNT));
-
-	// Determine how many slots Legendary would have (used to identify Mythic-specific slots)
-	int legendary_slots = std::max(base_slots, GetTierAugSlotCount(TierLegendary, is_2h));
-	legendary_slots = std::min(legendary_slots, static_cast<int>(EQ::invaug::SOCKET_COUNT));
+	// Determine Legendary physical slot count (used to identify Mythic-specific slots)
+	int legendary_real = std::max(real_slots, GetTierAugSlotCount(TierLegendary, is_2h));
+	int legendary_slots = std::min(legendary_real + ornament_count, static_cast<int>(EQ::invaug::SOCKET_COUNT));
 
 	// Fallback type if no base slots exist
 	uint8 fill_type = last_base_type > 0 ? last_base_type
@@ -312,9 +318,11 @@ void ApplyTierAugSlots(EQ::ItemData* scaledItem, const EQ::ItemData* baseItem, i
 		if (i < final_slots) {
 			// Preserve existing base slot types
 			if (scaledItem->AugSlotType[i] == 0) {
-				// Mythic-specific extra slots (beyond Legendary count) get type 4
+				// Mythic-specific extra slots (beyond Legendary count):
+				//   Weapons get type 4 (Weapon: General)
+				//   Armor/other get type 8 (General: Raid)
 				if (tier == TierMythic && i >= legendary_slots) {
-					scaledItem->AugSlotType[i] = 4;
+					scaledItem->AugSlotType[i] = IsWeaponType(baseItem->ItemType) ? 4 : 8;
 				}
 				else {
 					scaledItem->AugSlotType[i] = fill_type;

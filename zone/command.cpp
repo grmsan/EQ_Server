@@ -176,6 +176,7 @@ int command_init(void)
 		command_add("multiclassdiag", "[refresh] - Multiclass diagnostics (bucket/raw bits + optional EdgeStat refresh)", AccountStatus::Guide, command_multiclassdiag) ||
 		command_add("ilevel", "[item_id|all] - Show or batch-calculate item iLevel", AccountStatus::Guide, command_ilevel) ||
 		command_add("itemtier", "[slot_id tier] - Show or set item tier (0=Base 1=Ench 2=Leg 3=Myth)", AccountStatus::Guide, command_itemtier) ||
+		command_add("powerslot", "[info|reset|setxp N] - Power Source item XP and tier progress", AccountStatus::Guide, command_powerslot) ||
 		command_add("itemdiag", "Show equipped item scaling/custom data", AccountStatus::Guide, command_itemdiag) ||
 		command_add("hptest", "Send raw HP packets to self", AccountStatus::Guide, command_hptest) ||
 		command_add("npccast", "[targetname/entityid] [spellid] - Causes NPC target to cast spellid on targetname/entityid", AccountStatus::QuestTroupe, command_npccast) ||

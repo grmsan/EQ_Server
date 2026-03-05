@@ -56,7 +56,9 @@ Use it in two modes:
 - `#ilevel [item_id]`: Show iLevel for an item (or equipped Power Slot item)
 - `#ilevel all`: Batch-calculate and cache iLevel for all items in DB
 - `#itemtier [slot_id tier]`: Show equipped item tiers, or set tier on a slot (0-3)
-- `#powerslot info`: Show Power Slot item, tier, XP, progress
+- `#powerslot`: Show Power Slot item, tier, XP, progress bar
+- `#powerslot reset`: Zero out XP on current Power Slot item
+- `#powerslot setxp <N>`: Set exact XP value on Power Slot item (for testing)
 - `#salvage`: Process all items in the Salvage Satchel
 - `#essence`: Show Common and Rare Essence balance
 - `#tierup`: Promote Power Slot item via Essence
@@ -73,7 +75,7 @@ Use it in two modes:
 
 ### Smoke Run (Step 1-3 Core)
 
-Run these first: `IL-01, IL-02, IL-03, TS-01, TS-02`
+Run these first: `IL-01, IL-02, IL-03, TS-01, TS-02, PX-01, PX-03, PX-04`
 
 ### Economy Smoke (Steps 4-5)
 
@@ -298,26 +300,113 @@ Run all tests in this document.
 
 ### [PX-04] Power Slot Info Command
 
-**Goal**: Verify `#powerslot info` shows correct data.
+**Goal**: Verify `#powerslot` shows correct item info, XP, and progress bar.
 **Steps**:
 
-1. Place item in Power Slot, earn some XP
-2. `#powerslot info`
+1. Place a Base weapon in Power Slot
+2. `#powerslot setxp 500` — set XP to 500
+3. `#powerslot` — view info display
 
-**Expected**: Shows item name, current tier, XP/threshold, percentage.
+**Expected**: Shows item name, tier (Base/0), XP 500/1000, 50% progress, bar `[||||||||||----------]`.
+Also shows base XP/kill rate, named mult, raid mult.
 **Status**: [ ] Pass  [ ] Fail
 **Notes**: ______________________________
 
 ### [PX-05] XP Persistence Across Swap
 
-**Goal**: Verify swapping items preserves each item's XP.
+**Goal**: Verify swapping items preserves each item's XP independently.
 **Steps**:
 
-1. Earn 500 XP on Item A
-2. Swap to Item B — earn 200 XP
+1. Place Item A in Power Slot, `#powerslot setxp 500`
+2. Swap to Item B in Power Slot, `#powerslot setxp 200`
 3. Swap back to Item A
+4. `#powerslot` — check XP
 
-**Expected**: Item A still has 500 XP.
+**Expected**: Item A still has 500 XP. Item B had 200 XP.
+`Observed:` Data bucket key is `power_xp_{base_item_id}` — per-item, not per-slot.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [PX-06] Named NPC Multiplier
+
+**Goal**: Verify rare_spawn NPCs give ×3 XP (default NamedXPMult).
+**Steps**:
+
+1. Find or spawn a rare_spawn NPC at white-con level
+2. Kill it with a Base item in Power Slot
+3. Check message for XP gain
+
+**Expected**: `+120 item XP` (40 × 3.0). If also raid-tier (level 55+), `+600` (40 × 3.0 × 5.0).
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [PX-07] Raid-Tier NPC Multiplier
+
+**Goal**: Verify high-level NPCs (≥55) give ×5 XP (default RaidTierXPMult).
+**Steps**:
+
+1. Spawn or find a level 55+ non-named NPC
+2. Kill it with a Base item in Power Slot
+3. Check message for XP gain
+
+**Expected**: `+200 item XP` (40 × 5.0).
+`Commands:` `#npcedit level 55` on a target NPC, then kill it.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [PX-08] Milestone Messages
+
+**Goal**: Verify milestone messages fire at 25%, 50%, 75%, and 90%.
+**Steps**:
+
+1. Place Base item in Power Slot, `#powerslot reset`
+2. `#powerslot setxp 240` (24% of 1,000)
+3. Kill a white-con mob (+40 = 280 = 28%) — should trigger 25% milestone
+4. `#powerslot setxp 490`
+5. Kill white-con (+40 = 530 = 53%) — should trigger 50% milestone
+
+**Expected**: Yellow messages: "** Your Power Source item is 25% of the way to Enchanted! **" and similar for 50%.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [PX-09] Admin Reset and SetXP Commands
+
+**Goal**: Verify `#powerslot reset` and `#powerslot setxp N` work correctly.
+**Steps**:
+
+1. Earn some XP on a Power Slot item
+2. `#powerslot reset` — verify XP reset to 0
+3. `#powerslot setxp 999` — verify XP set to 999
+4. `#powerslot` — confirm display shows 999
+
+**Expected**: Reset zeroes XP, setxp sets exact value, both persist.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [PX-10] Max Tier (Mythic) No XP
+
+**Goal**: Verify items at Mythic tier earn no further XP.
+**Steps**:
+
+1. Place a Mythic-tier item in Power Slot
+2. Kill a white-con mob
+3. Check for XP message
+
+**Expected**: No item XP message displayed. `#powerslot` shows "Maximum tier reached!".
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [PX-11] Group/Raid XP Distribution
+
+**Goal**: Verify all group/raid members with Power Slot items get item XP.
+**Steps**:
+
+1. Form a group (or use a bot with Power Slot item)
+2. Each member has a Base item in Power Slot
+3. Kill a white-con mob
+
+**Expected**: All group members receive `+40 item XP` message independently.
+Each member's XP tracked per their own data bucket.
 **Status**: [ ] Pass  [ ] Fail
 **Notes**: ______________________________
 

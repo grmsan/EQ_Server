@@ -41,6 +41,7 @@ SET(zone_sources
     fastmath.cpp
     fearpath.cpp
     forage.cpp
+    power_slot_xp.cpp
     groups.cpp
     guild.cpp
     guild_mgr.cpp
@@ -387,6 +388,7 @@ set(gm_command_sources
     gm_commands/ilevel.cpp
     gm_commands/itemtier.cpp
     gm_commands/itemdiag.cpp
+    gm_commands/powerslot.cpp
     gm_commands/illusion_block.cpp
     gm_commands/instance.cpp
     gm_commands/interrogateinv.cpp

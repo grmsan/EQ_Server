@@ -203,13 +203,21 @@ def scale_item(base_row, tier, cfg=None):
         for col in COMBAT_COLS:
             r[col] = int(round(base_row[col] * mult))
 
-        # Attributes × mult
+        # Attributes × mult (negative stats never get worse)
         for col in ATTR_COLS:
-            r[col] = clamp8(base_row[col] * mult)
+            base_val = base_row[col]
+            if base_val < 0:
+                r[col] = base_val  # keep base — don't make penalties worse
+            else:
+                r[col] = clamp8(base_val * mult)
 
-        # Resists × mult
+        # Resists × mult (negative resists never get worse)
         for col in RESIST_COLS:
-            r[col] = clamp8(base_row[col] * mult)
+            base_val = base_row[col]
+            if base_val < 0:
+                r[col] = base_val
+            else:
+                r[col] = clamp8(base_val * mult)
 
         # Haste: additive (only if base has haste)
         if base_row['haste'] > 0:
@@ -246,13 +254,21 @@ def scale_item(base_row, tier, cfg=None):
         for col in COMBAT_COLS:
             r[col] = int(round(base_row[col] * combat_mult))
 
-        # Attributes × attr_mult
+        # Attributes × attr_mult (negative stats never get worse)
         for col in ATTR_COLS:
-            r[col] = clamp8(base_row[col] * attr_mult)
+            base_val = base_row[col]
+            if base_val < 0:
+                r[col] = base_val  # keep base — don't make penalties worse
+            else:
+                r[col] = clamp8(base_val * attr_mult)
 
-        # Resists × attr_mult
+        # Resists × attr_mult (negative resists never get worse)
         for col in RESIST_COLS:
-            r[col] = clamp8(base_row[col] * attr_mult)
+            base_val = base_row[col]
+            if base_val < 0:
+                r[col] = base_val
+            else:
+                r[col] = clamp8(base_val * attr_mult)
 
         # Heroic stats = base attribute (1:1)
         r['heroic_str'] = int(base_row['astr'])
@@ -299,21 +315,27 @@ def scale_item(base_row, tier, cfg=None):
     _2h = is_2h_or_bow(item_type)
     target_slots = get_tier_aug_slots(tier, _2h)
 
-    # Count existing base slots and find the last used aug type
-    base_slot_count = 0
-    last_base_type = 0
+    # Count existing base slots, separating real augs from ornaments (types 20, 21)
+    ORNAMENT_TYPES = (20, 21)  # AugTypeOrnamentation, AugTypeSpecialOrnamentation
+    real_slot_count = 0
+    ornament_count  = 0
+    last_base_type  = 0
     for i in range(6):
         t = base_row[AUG_SLOT_TYPES[i]]
         if t != 0:
-            base_slot_count += 1
-            last_base_type = t
+            if t in ORNAMENT_TYPES:
+                ornament_count += 1
+            else:
+                real_slot_count += 1
+                last_base_type = t
 
-    final_slots = max(base_slot_count, target_slots)
-    final_slots = min(final_slots, 6)  # Cap at 6
+    # Target real slots for this tier, then add ornament slots back for physical index count
+    target_real = max(real_slot_count, target_slots)
+    final_slots = min(target_real + ornament_count, 6)
 
-    # Determine Legendary slot count (used to identify Mythic-specific extra slots)
-    legendary_slots = max(base_slot_count, get_tier_aug_slots(2, _2h))
-    legendary_slots = min(legendary_slots, 6)
+    # Determine Legendary physical slot count (used to identify Mythic-specific extra slots)
+    legendary_real = max(real_slot_count, get_tier_aug_slots(2, _2h))
+    legendary_slots = min(legendary_real + ornament_count, 6)
 
     # Default fill type: match last base slot type, or fall back to config default
     fill_type = last_base_type if last_base_type > 0 else cfg["TierAugSlotType"]
@@ -324,9 +346,11 @@ def scale_item(base_row, tier, cfg=None):
         if i < final_slots:
             # Keep existing type or fill new slots
             if r[col_type] == 0:
-                # Mythic-specific extra slots (beyond Legendary count) get type 4
+                # Mythic-specific extra slots (beyond Legendary count):
+                #   Weapons get type 4 (Weapon: General)
+                #   Armor/other get type 8 (General: Raid)
                 if tier == 3 and i >= legendary_slots:
-                    r[col_type] = 4
+                    r[col_type] = 4 if item_type in WEAPON_TYPES else 8
                 else:
                     r[col_type] = fill_type
             r[col_vis] = 1

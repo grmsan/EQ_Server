@@ -22,7 +22,7 @@
 | --- | --- | --- | --- | --- |
 | 1 | iLevel Calculation Engine | ✅ Complete | 2025-07-15 | 2026-03-03 |
 | 2 | Item Tier Storage + Stat Scaling | ✅ Complete | 2026-03-04 | 2026-03-04 |
-| 3 | Power Slot XP + Kill-Based Tier-Up | ⬜ Not Started | | |
+| 3 | Power Slot XP + Kill-Based Tier-Up | ✅ Complete | 2026-03-04 | 2026-03-04 |
 | 4 | Essence Currency + Salvage System | ⬜ Not Started | | |
 | 5 | Essence Tier-Up (Pay Path) | ⬜ Not Started | | |
 | 6 | Duplicate Feeding + Stat Projection | ⬜ Not Started | | |
@@ -280,24 +280,60 @@ Before Step 1, ensure the following exist (most already do):
 
 ### Progress Checklist
 
-- [ ] Data bucket `power_slot_xp` per character
-- [ ] XP-on-kill hook (mob death event)
-- [ ] Con color multiplier lookup
-- [ ] Named/raid source multiplier logic
-- [ ] Tier-up threshold check + auto tier-up
-- [ ] Level-up sound + distinctive message
-- [ ] Kill message XP display (`+40 item XP, 65%`)
-- [ ] Milestone messages (25/50/75/90%)
-- [ ] `#powerslot info` command
-- [ ] Anti-exploit: slot validation, grey-con = 0
-- [ ] Per-item XP persistence on swap
-- [ ] Build passes, test all cases
+- [x] Data bucket `power_slot_xp` per character
+- [x] XP-on-kill hook (mob death event)
+- [x] Con color multiplier lookup
+- [x] Named/raid source multiplier logic
+- [x] Tier-up threshold check + auto tier-up
+- [x] Level-up sound + distinctive message
+- [x] Kill message XP display (`+40 item XP, 65%`)
+- [x] Milestone messages (25/50/75/90%)
+- [x] `#powerslot info` command
+- [x] Anti-exploit: slot validation, grey-con = 0
+- [x] Per-item XP persistence on swap
+- [x] Build passes, test all cases
 
 ### Post-Implementation Notes
 
-> *Fill in after completing this step. Key things to capture:
-> Which mob death hook did we use? How are data buckets keyed per-item?
-> How did the Power Slot equip/unequip events work?*
+> **Completed 2026-03-04.**
+>
+> **Mob death hook:** Injected into `NPC::Death()` in `zone/attack.cpp`, right after the
+> regular XP distribution block (solo/group/raid). For groups/raids, iterates all members
+> so everyone with a Power Source item gets item XP.
+>
+> **Data bucket key:** `power_xp_{base_item_id}` — scoped to the character via
+> `Mob::GetScopedBucketKeys()`. XP persists across sessions and item swap/re-equip.
+> When an item tiers up, XP resets to 0 for the new tier.
+>
+> **Con color multipliers:** Grey=0, Green=0.125, LightBlue=0.375, Blue=0.75,
+> White=1.0, Yellow=1.125, Red=1.25 — all from rules, live-tunable.
+>
+> **Source multipliers:** Named (rare_spawn) = ×3, Raid-tier (level 55+) = ×5.
+> Stack multiplicatively. A level 55+ named gives ×15.
+>
+> **Tier-up:** Uses same `DeleteItemInInventory` + `SummonItem` pattern as `#itemtier`.
+> Preserves augments and attuned state. Plays level-up sound via `SendSound()`.
+>
+> **Rules added (17 new):** BaseItemXP, TierThresholdEnchanted/Legendary/Mythic,
+> ConMultGrey/Green/LightBlue/Blue/White/Yellow/Red, NamedXPMult, RaidTierXPMult,
+> RaidTierMinLevel, PowerSlotXPEnabled, PowerSlotXPMessages, PowerSlotMilestoneMessages.
+>
+> **Files created:**
+> - `zone/power_slot_xp.h` — Header with `PowerSlotXP` namespace API
+> - `zone/power_slot_xp.cpp` — Core implementation (XP calc, tier-up, milestones)
+> - `zone/gm_commands/powerslot.cpp` — `#powerslot` command (info/reset/setxp)
+>
+> **Files modified:**
+> - `common/ruletypes.h` — 17 new rules in `RULE_CATEGORY(ItemProgression)`
+> - `zone/attack.cpp` — Hook in `NPC::Death()` after XP distribution
+> - `zone/command.h` / `zone/command.cpp` — Register `#powerslot` command
+> - `zone/CMakeLists.txt` — Added new source files
+>
+> **`#powerslot` command:** Shows item name, tier, XP/threshold, progress bar, XP rates.
+> Sub-commands: `reset` (zero XP), `setxp N` (set exact XP). Guide+ access level.
+>
+> **Anti-exploit:** Grey-con = 0 XP (from ConMultGrey rule). Slot validated on every kill.
+> Items already at Mythic get no XP. MerchantType and LDoN treasure excluded.
 
 ---
 

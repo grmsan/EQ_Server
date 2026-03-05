@@ -56,6 +56,7 @@ SET(common_sources
     item_ilevel.cpp
     item_instance.cpp
     item_scaling_config.cpp
+    item_tier.cpp
     json_config.cpp
     light_source.cpp
     md5.cpp
@@ -607,6 +608,7 @@ SET(common_headers
     item_data.h
     item_ilevel.h
     item_instance.h
+    item_tier.h
     json_config.h
     light_source.h
     linked_list.h

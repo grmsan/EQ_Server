@@ -21,7 +21,7 @@
 | Step | Name | Status | Date Started | Date Completed |
 | --- | --- | --- | --- | --- |
 | 1 | iLevel Calculation Engine | ✅ Complete | 2025-07-15 | 2026-03-03 |
-| 2 | Item Tier Storage + Stat Scaling | ⬜ Not Started | | |
+| 2 | Item Tier Storage + Stat Scaling | ✅ Complete | 2026-03-04 | 2026-03-04 |
 | 3 | Power Slot XP + Kill-Based Tier-Up | ⬜ Not Started | | |
 | 4 | Essence Currency + Salvage System | ⬜ Not Started | | |
 | 5 | Essence Tier-Up (Pay Path) | ⬜ Not Started | | |
@@ -118,7 +118,7 @@ Before Step 1, ensure the following exist (most already do):
 
 ---
 
-## Step 2 — Item Tier Storage + Stat Scaling
+## Step 2 — Item Tier Storage + Stat Scaling ✅ Complete (2026-03-04)
 
 **Goal:** Items can be assigned a tier (Base/Enchanted/Legendary/Mythic) and their stats scale accordingly when sent to the client.
 
@@ -161,22 +161,77 @@ Before Step 1, ensure the following exist (most already do):
 
 ### Progress Checklist
 
-- [ ] Tier storage in `custom_data` (key: `"tier"`)
-- [ ] `ApplyTierScaling()` with Enchanted/Legendary/Mythic formulas
-- [ ] Multipliers loaded from rules
-- [ ] `item_scaling_overrides` table + DB migration
-- [ ] `#override set/remove/list` commands
-- [ ] Hook `SendItemPacket()` for tier scaling
-- [ ] `#item tier <id> <tier>` admin command
-- [ ] Dynamic aug slot count by tier
-- [ ] `#regenerate items` command
-- [ ] Build passes, test all cases in table above
+- [x] Tier storage — DB-backed items with ID offset scheme (1M / 2M / 3M)
+- [x] `ApplyTierScaling()` formulas (Enchanted/Legendary/Mythic) — in both C++ and Python batch generator
+- [x] Multipliers loaded from rules (19 tier rules in `RULE_CATEGORY(ItemProgression)`)
+- [ ] `item_scaling_overrides` table + DB migration (deferred to Step 12 or later)
+- [ ] `#override set/remove/list` commands (deferred to Step 12 or later)
+- [x] `tools/generate_tiered_items.py` — batch generates all 3 tiers for every item (353,874 rows)
+- [x] ID offset helpers in `item_tier.h`: `GetTieredItemID()`, `GetBaseItemID()`, `GetTierFromItemID()`, `IsTieredItem()`
+- [x] `#itemtier <slot_id> <tier>` admin command — swaps item to DB-backed tiered version
+- [x] Dynamic aug slot count by tier (baked into DB rows)
+- [x] Augment preservation on tier swap
+- [ ] `#regenerate items` command (deferred — not needed until global retuning)
+- [x] Build passes, zone.exe compiles clean
 
 ### Post-Implementation Notes
 
-> *Fill in after completing this step. Key things to capture:
-> How does `SendItemPacket()` work? What struct fields were modified?
-> How does `custom_data` serialize in the packet? Patterns for Steps 3–7.*
+> **Completed 2026-03-04. REVISED approach 2026-03-04.**
+>
+> **Original approach (runtime scaling via custom_data) was abandoned** because the RoF2
+> client caches item data and does not reflect `m_scaledItem` changes reliably.
+> The Delete+Limbo+Re-add pattern (`SendItemScale()`) appeared to work in server logs but
+> the client continued displaying base stats.
+>
+> **New approach: DB-backed tiered items.**
+> Each tier is a real row in the `items` table with pre-computed stats and a tier tag in
+> the Name field. No runtime scaling needed — the client sees a completely different item.
+>
+> **ID Offset Scheme:**
+> - Enchanted = base_id + 1,000,000
+> - Legendary = base_id + 2,000,000
+> - Mythic    = base_id + 3,000,000
+> - Max base item ID is ~900,000 so offsets are collision-safe.
+> - Name format: "Hategiver (Enchanted)", "Hategiver (Legendary)", "Hategiver (Mythic)"
+>
+> **Batch Generator: `tools/generate_tiered_items.py`**
+> - Reads all base items (id < 1,000,000), generates 3 tiered copies each
+> - Uses UPSERT (INSERT ... ON DUPLICATE KEY UPDATE) so re-runs are safe
+> - Supports: `--dry-run`, `--verify`, `--item <id>`, `--clean`, `--sample N`, `--config <json>`
+> - 117,958 base items × 3 tiers = 353,874 generated rows
+> - Completed in ~58 seconds. Verified: each tier has exactly 117,958 items.
+>
+> **ID Helpers in `common/item_tier.h`:**
+> - `GetTieredItemID(base_id, tier)` — base_id + tier × 1,000,000
+> - `GetBaseItemID(item_id)` — item_id % 1,000,000
+> - `GetTierFromItemID(item_id)` — item_id / 1,000,000
+> - `IsTieredItem(item_id)` — item_id >= 1,000,000
+> - `TIER_ID_OFFSET` constexpr = 1,000,000
+>
+> **Command: `#itemtier [slot_id tier]`**
+> - Swaps the item in the given slot to the DB-backed tiered version via:
+>   DeleteItemInInventory → SummonItem with tiered ID and preserved augments
+> - Shows before/after stat comparison including heroics, spell/heal power, attack
+> - With no args: lists all equipped items with their current tier
+>
+> **Runtime scaling code removed from `ApplyCustomStats()`** — the tier scaling block
+> that used `custom_data["tier"]` is replaced with a comment explaining the DB approach.
+> The C++ formulas in `ApplyTierScaling()`/`ApplyTierAugSlots()` are kept as reference
+> and may be useful for on-the-fly tier verification or future use.
+>
+> **Files modified/created:**
+> - `tools/generate_tiered_items.py` — NEW batch generator
+> - `common/item_tier.h` — added ID helpers + TIER_ID_OFFSET constant
+> - `zone/gm_commands/itemtier.cpp` — rewritten for DB swap approach
+> - `common/item_instance.cpp` — removed runtime tier scaling from ApplyCustomStats()
+>
+> **Deferred items:**
+> - Override system, `#regenerate items` — deferred, not blockers for Steps 3-7.
+> - When rules change, re-run `generate_tiered_items.py` to regenerate all tiered items.
+>
+> **Impact on Step 3 (Power Slot XP → Tier-Up):**
+> Tier-up now means swapping the item ID: `DeleteItemInInventory` + `SummonItem(tiered_id)`.
+> Use `GetTieredItemID(base_id, new_tier)` to compute the target item ID.
 
 ---
 

@@ -55,7 +55,7 @@ Use it in two modes:
 
 - `#ilevel [item_id]`: Show iLevel for an item (or equipped Power Slot item)
 - `#ilevel all`: Batch-calculate and cache iLevel for all items in DB
-- `#item tier <id> <tier>`: Set an item to a specific tier (admin, for testing)
+- `#itemtier [slot_id tier]`: Show equipped item tiers, or set tier on a slot (0-3)
 - `#powerslot info`: Show Power Slot item, tier, XP, progress
 - `#salvage`: Process all items in the Salvage Satchel
 - `#essence`: Show Common and Rare Essence balance
@@ -73,7 +73,7 @@ Use it in two modes:
 
 ### Smoke Run (Step 1-3 Core)
 
-Run these first: `IL-01, IL-02, IL-03`
+Run these first: `IL-01, IL-02, IL-03, TS-01, TS-02`
 
 ### Economy Smoke (Steps 4-5)
 
@@ -113,7 +113,7 @@ Run all tests in this document.
 - Lamentation: iLevel ≈ 77 (±5)
 - Hategiver: iLevel ≈ 269 (±10)
 
-**Status**: [ ] Pass  [ ] Fail
+**Status**: [X] Pass  [ ] Fail
 **Notes**: ______________________________
 
 ### [IL-02] Basic iLevel Calculation — Armor
@@ -128,7 +128,7 @@ Run all tests in this document.
 - Cloth Cap: iLevel ≈ 30
 - Cobalt Breastplate: iLevel ≈ 800+ (AC 45, HP 50, stats)
 
-**Status**: [ ] Pass  [ ] Fail
+**Status**: [X] Pass  [ ] Fail
 **Notes**: ______________________________
 
 ### [IL-03] Batch iLevel Calculation
@@ -173,19 +173,20 @@ Run all tests in this document.
 
 ---
 
-## Step 2: Item Tier Storage + Stat Scaling
+## Step 2: Item Tier Storage + Stat Scaling (DB-Backed Approach)
 
 ### [TS-01] Set Tier via Admin Command
 
-**Goal**: Verify `#item tier` command sets tier and scales stats.
+**Goal**: Verify `#itemtier` command swaps item to DB-backed tiered version.
 **Steps**:
 
-1. Summon a Hategiver: `#si <hategiver_id>`
-2. Equip it, inspect stats — note base values
-3. `#item tier <inst_id> 1` (Enchanted)
-4. Re-inspect stats
+1. Summon a Hategiver: `#si 28854`
+2. Equip it, note which slot it went to (e.g. slot 13 = primary)
+3. `#itemtier` — verify it shows in the summary as Base tier
+4. `#itemtier 13 1` (Enchanted)
+5. Inspect item stats in inventory window — verify new name and stats
 
-**Expected**: Stats double (DMG 15→30, AC 25→50, HP 85→170).
+**Expected**: Item swapped to "Hategiver (Enchanted)" (ID 1028854). Stats: DMG 30, AC 50, HP 170.
 **Status**: [ ] Pass  [ ] Fail
 **Notes**: ______________________________
 
@@ -194,50 +195,61 @@ Run all tests in this document.
 **Goal**: Verify Legendary applies ×2.6 combat, ×2 attrs, heroics appear.
 **Steps**:
 
-1. `#item tier <inst_id> 2` (Legendary)
-2. Inspect stats
+1. `#itemtier 13 2` (Legendary)
+2. Inspect item stats in inventory window
 
-**Expected**: DMG ≈39, AC ≈65, HP ≈221, heroics visible.
+**Expected**: "Hategiver (Legendary)" (ID 2028854). DMG ≈39, AC ≈65, HP ≈221, heroics visible.
 **Status**: [ ] Pass  [ ] Fail
 **Notes**: ______________________________
 
-### [TS-03] Mythic Tier (No Stat Increase)
+### [TS-03] Mythic Tier (No Stat Increase, +1 Aug Slot)
 
 **Goal**: Verify Mythic adds aug slot but no stat increase over Legendary.
 **Steps**:
 
-1. `#item tier <inst_id> 3` (Mythic)
-2. Inspect stats
-3. Check aug slot count
+1. `#itemtier 13 3` (Mythic)
+2. Inspect stats and aug slots in item window
 
-**Expected**: Same stats as Legendary. +1 aug slot.
+**Expected**: "Hategiver (Mythic)" (ID 3028854). Same stats as Legendary. +1 aug slot.
 **Status**: [ ] Pass  [ ] Fail
 **Notes**: ______________________________
 
-### [TS-04] Override System
+### [TS-04] Tier Down (Revert to Base)
 
-**Goal**: Verify stat overrides replace formula values.
+**Goal**: Verify `#itemtier <slot> 0` reverts item to base version.
 **Steps**:
 
-1. `#override set <item_id> 1 attack 20`
-2. `#item tier <inst_id> 1`
-3. Inspect Attack stat
-4. `#override remove <item_id> 1 attack`
-5. Re-inspect
+1. `#itemtier 13 0` (Base)
+2. Inspect item
 
-**Expected**: Attack shows 20 with override, reverts to formula without.
+**Expected**: Item reverted to "Hategiver" (ID 28854) with original stats.
 **Status**: [ ] Pass  [ ] Fail
 **Notes**: ______________________________
 
-### [TS-05] Aug Slot Tier Gating
+### [TS-05] Augment Preservation on Tier Swap
 
-**Goal**: Verify Base items only have 1 aug slot, higher tiers unlock more.
+**Goal**: Verify augments are preserved when changing tiers.
 **Steps**:
 
-1. Set item to tier 0 (Base), try socketing aug in slot 2
-2. Set item to tier 1 (Enchanted), try socketing aug in slot 2
+1. Summon Hategiver and an augment, socket the augment
+2. `#itemtier 13 1` (Enchanted)
+3. Inspect - verify augment is still socketed
+4. `#itemtier 13 2` (Legendary)
+5. Inspect - verify augment is still socketed
 
-**Expected**: Slot 2 rejected at Base, accepted at Enchanted.
+**Expected**: Augment preserved across all tier changes.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [TS-06] DB Verification
+
+**Goal**: Verify tiered items exist in the database with correct stats.
+**Steps**:
+
+1. `python tools/generate_tiered_items.py --verify`
+2. `python tools/generate_tiered_items.py --item 28854 --dry-run`
+
+**Expected**: 117,958 items per tier. Hategiver Enchanted: DMG 30, AC 50, HP 170.
 **Status**: [ ] Pass  [ ] Fail
 **Notes**: ______________________________
 

@@ -1184,6 +1184,26 @@ RULE_INT(ItemProgression, TierFloorEnchantedToLegendary, 25, "Fixed Essence floo
 RULE_REAL(ItemProgression, TierScaleEnchantedToLegendary, 0.033f, "iLevel² scale factor for Enchanted to Legendary tier-up.")
 RULE_INT(ItemProgression, TierFloorLegendaryToMythic, 1500, "Fixed Essence floor for Legendary to Mythic tier-up.")
 RULE_REAL(ItemProgression, TierScaleLegendaryToMythic, 0.121f, "iLevel² scale factor for Legendary to Mythic tier-up.")
+// Tier stat scaling — Enchanted (×2 all stats)
+RULE_REAL(ItemProgression, EnchantedMultiplier, 2.0f, "Universal stat multiplier for Enchanted tier (base × this).")
+RULE_INT(ItemProgression, EnchantedHasteBonus, 3, "Additive haste bonus for Enchanted tier.")
+// Tier stat scaling — Legendary (combat ×2.6, attrs ×2, heroics appear)
+RULE_REAL(ItemProgression, LegendaryCombatMultiplier, 2.6f, "Combat stat multiplier (DMG/AC/HP/Mana/Endur) for Legendary tier.")
+RULE_REAL(ItemProgression, LegendaryAttributeMultiplier, 2.0f, "Attribute multiplier (STR/STA/etc.) for Legendary tier.")
+RULE_INT(ItemProgression, LegendaryHasteBonus, 5, "Additive haste bonus for Legendary tier.")
+RULE_INT(ItemProgression, LegendaryCombatEffectBonus, 1, "Additive combat-effect bonus (shielding/strikethrough/etc.) for Legendary tier.")
+// Augment slot counts by tier — 1H / Armor
+RULE_INT(ItemProgression, AugSlots1HBase, 1, "Aug slot count for 1H/Armor at Base tier.")
+RULE_INT(ItemProgression, AugSlots1HEnchanted, 2, "Aug slot count for 1H/Armor at Enchanted tier.")
+RULE_INT(ItemProgression, AugSlots1HLegendary, 3, "Aug slot count for 1H/Armor at Legendary tier.")
+RULE_INT(ItemProgression, AugSlots1HMythic, 4, "Aug slot count for 1H/Armor at Mythic tier.")
+// Augment slot counts by tier — 2H / Bow
+RULE_INT(ItemProgression, AugSlots2HBase, 2, "Aug slot count for 2H/Bow at Base tier.")
+RULE_INT(ItemProgression, AugSlots2HEnchanted, 4, "Aug slot count for 2H/Bow at Enchanted tier.")
+RULE_INT(ItemProgression, AugSlots2HLegendary, 5, "Aug slot count for 2H/Bow at Legendary tier.")
+RULE_INT(ItemProgression, AugSlots2HMythic, 6, "Aug slot count for 2H/Bow at Mythic tier.")
+// Default aug slot type for slots opened by tier progression
+RULE_INT(ItemProgression, TierAugSlotType, 1, "Default AugSlotType value for tier-opened aug slots (1 = general).")
 RULE_CATEGORY_END()
 
 RULE_CATEGORY(Custom)

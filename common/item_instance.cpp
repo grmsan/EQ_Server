@@ -18,6 +18,7 @@
 
 // Includes and globals
 #include "item_instance.h"
+#include "item_tier.h"
 #include "data_verification.h"
 #include "say_link.h"
 #include "inventory_profile.h"
@@ -282,8 +283,14 @@ bool EQ::ItemInstance::IsAugmentable() const
 		return false;
 	}
 
+	// Use GetItem() to check scaled item (tier-opened aug slots)
+	const auto* item = GetItem();
+	if (!item) {
+		return false;
+	}
+
 	for (int index = invaug::SOCKET_BEGIN; index <= invaug::SOCKET_END; ++index) {
-		if (m_item->AugSlotType[index] != 0) {
+		if (item->AugSlotType[index] != 0) {
 			return true;
 		}
 	}
@@ -329,17 +336,23 @@ bool EQ::ItemInstance::IsAugmentSlotAvailable(int32 augment_type, uint8 slot) co
 		return false;
 	}
 
+	// Use GetItem() to check scaled item (tier-opened aug slots)
+	const auto* item = GetItem();
+	if (!item) {
+		return false;
+	}
+
 	return (
 		(
 			augment_type == -1 ||
 			(
-				m_item->AugSlotType[slot] &&
-				((1 << (m_item->AugSlotType[slot] - 1)) & augment_type)
+				item->AugSlotType[slot] &&
+				((1 << (item->AugSlotType[slot] - 1)) & augment_type)
 			)
 		) &&
 		(
 			RuleB(Items, AugmentItemAllowInvisibleAugments) ||
-			m_item->AugSlotVisible[slot]
+			item->AugSlotVisible[slot]
 		)
 	);
 }
@@ -1753,6 +1766,10 @@ void EQ::ItemInstance::ApplyCustomStats() {
 		// Reset to base if not scaling (so we don't accumulate custom stats)
 		memcpy(m_scaledItem, m_item, sizeof(ItemData));
 	}
+
+	// Apply tier-based scaling is no longer done at runtime.
+	// Tiers are now DB-backed: each tier has its own item row with pre-computed stats.
+	// See tools/generate_tiered_items.py and common/item_tier.h for ID offset scheme.
 
 	// Now apply custom stat modifiers (but skip dynamic_level as it's already processed)
 	for (auto const& [key, val] : m_custom_data) {

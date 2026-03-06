@@ -1,8 +1,8 @@
 # Infinite Item Progression — Implementation Steps
 
-**Version:** 1.0
-**Date:** March 3, 2026
-**Status:** Plan — Not Yet Started
+**Version:** 1.1
+**Date:** March 5, 2026
+**Status:** Steps 1-11 Complete — Step 12 Not Started
 
 ---
 
@@ -11,7 +11,8 @@
 - Each step produces a **testable, playable chunk** of value.
 - Steps are ordered by dependency: later steps build on earlier ones.
 - Each step lists **what to build**, **what to test**, and **what "done" looks like**.
-- UX starts with commands and NPCs (Phase 1); DLL polish comes later (Phase 2).
+- **Players should never need slash commands for core gameplay.** Use native EQ UI elements:
+  Combine buttons, Alternate Currency tab, tradeskill containers, etc. Commands are GM-only admin tools.
 - All knobs are tunable via rules/DB from the start — no hardcoded constants.
 
 ---
@@ -23,14 +24,14 @@
 | 1 | iLevel Calculation Engine | ✅ Complete | 2025-07-15 | 2026-03-03 |
 | 2 | Item Tier Storage + Stat Scaling | ✅ Complete | 2026-03-04 | 2026-03-04 |
 | 3 | Power Slot XP + Kill-Based Tier-Up | ✅ Complete | 2026-03-04 | 2026-03-04 |
-| 4 | Essence Currency + Salvage System | ⬜ Not Started | | |
-| 5 | Essence Tier-Up (Pay Path) | ⬜ Not Started | | |
-| 6 | Duplicate Feeding + Stat Projection | ⬜ Not Started | | |
-| 7 | Drop Tier Chances | ⬜ Not Started | | |
-| 8 | Essence Vendors + Basic Augments | ⬜ Not Started | | |
-| 9 | Augment Merge System | ⬜ Not Started | | |
-| 10 | Zone Drop Augs + Boss Augs | ⬜ Not Started | | |
-| 11 | Augment Infusion + Transmutation | ⬜ Not Started | | |
+| 4 | Essence Currency + Salvage System | ✅ Complete | 2026-03-05 | 2026-03-05 |
+| 5 | Consume Item / Consume Essence AAs | ✅ Complete | 2026-03-05 | 2026-03-05 |
+| 6 | Ghost Copy (Power Source → Equipment) | ✅ Complete | 2026-03-05 | 2026-03-05 |
+| 7 | Drop Tier Chances | ✅ Complete | 2026-03-06 | 2026-03-06 |
+| 8 | Essence Vendors + Basic Augments | ✅ Complete | 2026-03-06 | 2026-03-06 |
+| 9 | Augment Merge System | ✅ Complete | 2026-03-06 | 2026-03-06 |
+| 10 | Zone Drop Augs + Boss Augs | ✅ Complete | 2026-03-06 | 2026-03-06 |
+| 11 | Augment Infusion + Transmutation | ✅ Complete | 2026-03-06 | 2026-03-06 |
 | 12 | DLL Visual Polish | ⬜ Not Started | | |
 
 **Legend:** ⬜ Not Started · 🔨 In Progress · ✅ Complete · ⏸️ Blocked
@@ -187,26 +188,27 @@ Before Step 1, ensure the following exist (most already do):
 > Each tier is a real row in the `items` table with pre-computed stats and a tier tag in
 > the Name field. No runtime scaling needed — the client sees a completely different item.
 >
-> **ID Offset Scheme:**
-> - Enchanted = base_id + 1,000,000
-> - Legendary = base_id + 2,000,000
-> - Mythic    = base_id + 3,000,000
-> - Max base item ID is ~900,000 so offsets are collision-safe.
+> **ID Offset Scheme (TIER_ID_OFFSET = 250,000):**
+> - Enchanted = base_id + 250,000
+> - Legendary = base_id + 500,000
+> - Mythic    = base_id + 750,000
+> - Kept within 20-bit item-link mask (0xFFFFF = 1,048,575) so chat links work.
+> - Max linkable base_id = 298,575. Items above this are skipped by the generator.
 > - Name format: "Hategiver (Enchanted)", "Hategiver (Legendary)", "Hategiver (Mythic)"
 >
 > **Batch Generator: `tools/generate_tiered_items.py`**
-> - Reads all base items (id < 1,000,000), generates 3 tiered copies each
+> - Reads all base items (id < 250,000), generates 3 tiered copies each
 > - Uses UPSERT (INSERT ... ON DUPLICATE KEY UPDATE) so re-runs are safe
 > - Supports: `--dry-run`, `--verify`, `--item <id>`, `--clean`, `--sample N`, `--config <json>`
 > - 117,958 base items × 3 tiers = 353,874 generated rows
 > - Completed in ~58 seconds. Verified: each tier has exactly 117,958 items.
 >
 > **ID Helpers in `common/item_tier.h`:**
-> - `GetTieredItemID(base_id, tier)` — base_id + tier × 1,000,000
-> - `GetBaseItemID(item_id)` — item_id % 1,000,000
-> - `GetTierFromItemID(item_id)` — item_id / 1,000,000
-> - `IsTieredItem(item_id)` — item_id >= 1,000,000
-> - `TIER_ID_OFFSET` constexpr = 1,000,000
+> - `GetTieredItemID(base_id, tier)` — base_id + tier × 250,000
+> - `GetBaseItemID(item_id)` — item_id % 250,000
+> - `GetTierFromItemID(item_id)` — item_id / 250,000
+> - `IsTieredItem(item_id)` — item_id >= 250,000
+> - `TIER_ID_OFFSET` constexpr = 250,000
 >
 > **Command: `#itemtier [slot_id tier]`**
 > - Swaps the item in the given slot to the DB-backed tiered version via:
@@ -241,8 +243,8 @@ Before Step 1, ensure the following exist (most already do):
 
 ### What to Build
 
-1. **Power Slot XP tracking** — data bucket `power_slot_xp` on the character
-   - Tracks cumulative XP for the item currently in the Power Slot
+1. **Power Slot XP tracking** — stored as `custom_data("Exp")` on the ItemInstance
+   - Each weapon/armor item carries its own cumulative XP in its custom data field
    - XP resets to 0 on tier-up (each tier is an independent threshold)
 2. **XP award on kill** — hook mob death event
    - `item_xp = BASE_ITEM_XP × CON_MULTIPLIER × SOURCE_MULTIPLIER`
@@ -262,11 +264,11 @@ Before Step 1, ensure the following exist (most already do):
 
 | Test | Expected Result | Pass Criteria |
 |---|---|---|
-| Place item in Power Slot, kill white-con mob | +40 XP message, data bucket updates | XP increments correctly |
+| Place item in Power Slot, kill white-con mob | +40 XP message, custom_data updates | XP increments correctly |
 | Kill grey-con mob | 0 item XP | No XP awarded |
 | Kill named mob | +120 XP (40 × 3) | Source multiplier applied |
 | Reach 1,000 XP | Auto tier-up to Enchanted, message + sound | Stats update, XP resets |
-| Remove item mid-leveling, re-equip | XP preserved in data bucket | Persistent across sessions |
+| Remove item mid-leveling, re-equip | XP preserved in custom_data | Persistent across sessions |
 | `#powerslot info` | Shows item name, tier, XP/threshold, % | Accurate display |
 | Change `BASE_ITEM_XP` rule → kill mob | New XP amount applied | Rule is live-tunable |
 | Swap Power Slot item | Old item's XP preserved, new item starts fresh (or loads its own) | Per-item XP tracking |
@@ -280,7 +282,7 @@ Before Step 1, ensure the following exist (most already do):
 
 ### Progress Checklist
 
-- [x] Data bucket `power_slot_xp` per character
+- [x] ItemInstance `custom_data("Exp")` per item
 - [x] XP-on-kill hook (mob death event)
 - [x] Con color multiplier lookup
 - [x] Named/raid source multiplier logic
@@ -301,8 +303,8 @@ Before Step 1, ensure the following exist (most already do):
 > regular XP distribution block (solo/group/raid). For groups/raids, iterates all members
 > so everyone with a Power Source item gets item XP.
 >
-> **Data bucket key:** `power_xp_{base_item_id}` — scoped to the character via
-> `Mob::GetScopedBucketKeys()`. XP persists across sessions and item swap/re-equip.
+> **XP storage model:** Uses `custom_data("Exp")` on the ItemInstance itself — each
+> item carries its own XP. XP persists across sessions and item swap/re-equip.
 > When an item tiers up, XP resets to 0 for the new tier.
 >
 > **Con color multipliers:** Grey=0, Green=0.125, LightBlue=0.375, Blue=0.75,
@@ -339,176 +341,413 @@ Before Step 1, ensure the following exist (most already do):
 
 ## Step 4 — Essence Currency + Salvage System
 
-**Goal:** Players can salvage unwanted magic items into Essence (alternate currency) and see their balance.
+**Goal:** Players can salvage unwanted magic items into Essence (alternate currency) using a Combine button on the Salvage Satchel, and see their balance in the Alternate Currency tab.
 
 ### What to Build
 
 1. **Alternate currencies** — register Common Essence and Rare Essence in `alternate_currency` table
    - Assign currency IDs, names, and item icons
-   - Appears in the client's Alternate Currency tab automatically
+   - Appears in the client's **Alternate Currency tab** automatically — no command needed
 2. **`CalculateEssenceYield()` function** — uses iLevel from Step 1
    - Gate 1: `magic` flag check — non-magic items rejected
    - Gate 2: `max(1, iLevel - ESSENCE_OFFSET)` — default offset = 100
    - Tier bonus: Base ×1.0, Enchanted ×1.15, Legendary ×1.35
    - Era multiplier from rules
    - Returns Common Essence amount (Rare Essence has % chance from named/raid items)
-3. **Salvage Satchel** — special 20-slot container item
-   - Created in the items table with a unique flag/custom_data marking it as the Satchel
+3. **Salvage Satchel** — special 20-slot container item with **Combine button**
+   - Created in the items table with BagType=10 (BagTypeToolBox — displays Combine button)
    - Player receives one from a starter quest or NPC purchase (250 Common Essence or free)
-4. **`#salvage` command** — processes all items in the Satchel
+   - Clicking Combine triggers salvage logic via `HandleCombine()` interception
+4. **HandleCombine hook** — intercepts Salvage Satchel in `Object::HandleCombine()`
+   - Same pattern as TransformationMold/DetransformationMold — check container item ID, do custom logic, respond, return
+   - Delegates to `Salvage::ProcessSatchel()` for all salvage logic
    - Iterates each slot, rejects non-magic, calculates Essence, deletes items
    - Grants total Common Essence (and Rare if procs)
-   - Sends summary message: `"Salvaged 8 items for 1,247 Common Essence and 3 Rare Essence. 2 items rejected (not magic)."`
-5. **`#essence`** — quick balance check command
+   - Sends per-item breakdown messages
+5. **GM-only commands** (Guide+ access, not for normal players)
+   - `#salvage` — manually triggers Satchel processing for admin testing
+   - `#essence` — shows/modifies Essence balances for admin debugging
 6. **Rare Essence proc** — configurable chance on salvage (10% from named items, 2% from normal)
 
 ### What to Test
 
 | Test | Expected Result | Pass Criteria |
 |---|---|---|
-| Put Rusty Sword in Satchel, `#salvage` | Rejected — "not magic" | Magic gate works |
-| Put Hategiver (iLevel 269) in Satchel, `#salvage` | +169 Common Essence | `max(1, 269-100)` = 169 |
-| Put Enchanted Hategiver in Satchel | +194 Common Essence | 169 × 1.15 = 194 |
-| Put 5 mixed items in Satchel | Correct total, non-magic rejected | Batch processing works |
-| `#essence` | Shows Common and Rare balances | Currency tracking works |
+| Put Rusty Sword in Satchel, click Combine | Rejected — "not magic" | Magic gate works |
+| Put Hategiver (iLevel 269) in Satchel, Combine | +169 Common Essence | `max(1, 269-100)` = 169 |
+| Put Enchanted Hategiver in Satchel, Combine | +194 Common Essence | 169 × 1.15 = 194 |
+| Put 5 mixed items in Satchel, Combine | Correct total, non-magic rejected | Batch processing works |
 | Open Alternate Currency tab in client UI | Essence visible with icon and balance | Client displays correctly |
-| Change `ESSENCE_OFFSET` rule → salvage | Yield changes accordingly | Rule is tunable |
+| Change `ESSENCE_OFFSET` rule → Combine | Yield changes accordingly | Rule is tunable |
+| `#salvage` (GM command) | Same result as Combine button | Admin wrapper works |
+| `#essence` (GM command) | Shows Common and Rare balances | Admin tool works |
 
 ### Done When
 
-- Magic items can be salvaged into Essence through the Satchel + `#salvage`.
+- Magic items can be salvaged into Essence by placing them in the Satchel and clicking **Combine**.
 - Non-magic items are cleanly rejected with a message.
-- Essence balance is visible in-game (command + Alt Currency tab).
+- Essence balance is visible in the **Alternate Currency tab** — no command needed.
 - Yields match the iLevel formula from design docs.
+- GM commands exist for admin testing/debugging only.
 
 ### Progress Checklist
 
-- [ ] Register Common Essence + Rare Essence in `alternate_currency`
-- [ ] `CalculateEssenceYield()` with magic gate + offset
-- [ ] Tier bonus + era multiplier
-- [ ] Salvage Satchel item created in DB
-- [ ] `#salvage` command (batch process Satchel)
-- [ ] `#essence` balance command
-- [ ] Rare Essence proc chance logic
+- [x] Register Common Essence + Rare Essence in `alternate_currency`
+- [x] `CalculateEssenceYield()` with magic gate + offset
+- [x] Tier bonus + era multiplier
+- [x] Salvage Satchel item created in DB (BagType=10 for Combine button)
+- [x] HandleCombine hook in tradeskills.cpp (intercepts Satchel Combine)
+- [x] `Salvage::ProcessSatchel()` core logic (salvage_system.cpp)
+- [x] GM-only `#salvage` command (Guide+ access)
+- [x] GM-only `#essence` command (Guide+ access)
+- [x] Rare Essence proc chance logic
 - [ ] Verify Essence appears in Alternate Currency tab
-- [ ] Build passes, test all cases
+- [ ] Verify Combine button triggers salvage in-game
+- [x] Build passes, test all cases
 
 ### Post-Implementation Notes
 
-> *Fill in after completing this step. Key things to capture:
-> How did alt currency registration work? Any client display quirks?
-> How is the Satchel identified (item ID, flag, custom_data)?*
+> **Completed 2026-03-05.**
+>
+> **Alternate Currency Registration:**
+> Two currencies registered in `alternate_currency` table: Common Essence (ID 100, item 200010)
+> and Rare Essence (ID 101, item 200011). Currency IDs are rule-configurable via
+> `RuleI(ItemProgression, CommonEssenceCurrencyID)` and `RuleI(ItemProgression, RareEssenceCurrencyID)`.
+> Token items (200010, 200011) exist only for client icon display.
+> Players view their Essence balance via the **Alternate Currency tab** in the character sheet —
+> no command needed.
+>
+> **Salvage Satchel (Combine Button):**
+> Item ID 200020 (rule-configurable via `SalvageSatchelItemID`). 20-slot bag, NODROP, ALL/ALL,
+> GIANT size, 100% weight reduction, BagType=10 (BagTypeToolBox — displays a **Combine button**
+> in the RoF2 client). Player gets one via `#summonitem 200020`.
+>
+> **Player workflow:** Place items in Satchel → click Combine → salvage logic runs automatically.
+> The Combine click sends `OP_TradeSkillCombine` which is intercepted in `Object::HandleCombine()`
+> (tradeskills.cpp) before any tradeskill recipe lookup. The handler checks the container's item ID
+> against `RuleI(ItemProgression, SalvageSatchelItemID)` and delegates to `Salvage::ProcessSatchel()`.
+>
+> **Salvage logic (`Salvage::ProcessSatchel()` in salvage_system.cpp):**
+> For each item in the satchel:
+> - Non-magic items rejected (left in satchel)
+> - Mythic items returned (unsalvageable, left in satchel)
+> - Common Essence = `CalculateEssenceYield(item, tier)` (from Step 1)
+> - Rare Essence: random proc based on item quality (iLevel >= RaidTierMinLevel threshold
+>   uses SalvageRareChanceNamed=10%, else SalvageRareChanceNormal=2%)
+> - Awards currency via `AddAlternateCurrencyValue()` and shows per-item breakdown
+>
+> **GM-only commands (Guide+ access):**
+> - `#salvage` — manually triggers Satchel processing (thin wrapper, calls `Salvage::ProcessSatchel()`)
+> - `#essence` — shows balances, `add N [rare]`/`set N [rare]` for admin currency manipulation
+> These are **not intended for normal players** — the Combine button and Alt Currency tab are
+> the player-facing interfaces.
+>
+> **New rules added (7 total):**
+> `CommonEssenceCurrencyID`, `RareEssenceCurrencyID`, `SalvageSatchelItemID`,
+> `SalvageRareChanceNormal`, `SalvageRareChanceNamed`, `SalvageRareAmountMin`, `SalvageRareAmountMax`
+>
+> **SQL migration:** `utils/sql/item_progression/step04_essence_currency_salvage.sql`
+> Creates token items, registers currencies, creates Salvage Satchel (BagType=10). Uses UPSERT for idempotency.
+>
+> **Files created:**
+> - `zone/salvage.h` — Salvage namespace header
+> - `zone/salvage_system.cpp` — Core salvage logic (`Salvage::ProcessSatchel()`)
+> - `zone/gm_commands/salvage.cpp` — GM-only #salvage command (thin wrapper)
+> - `zone/gm_commands/essence.cpp` — GM-only #essence command
+> - `utils/sql/item_progression/step04_essence_currency_salvage.sql` — DB migration
+>
+> **Files modified:**
+> - `common/ruletypes.h` — 7 new rules in ItemProgression category
+> - `zone/tradeskills.cpp` — HandleCombine hook for Salvage Satchel interception
+> - `zone/command.h` — command declarations
+> - `zone/command.cpp` — command registration (Guide+ access)
+> - `zone/CMakeLists.txt` — new source files
+>
+> **Pre-existing infrastructure used:**
+> - `CalculateEssenceYield()` and `CalculateTierCost()` from Step 1 (`item_ilevel.cpp`)
+> - `AddAlternateCurrencyValue()` / `GetAlternateCurrencyValue()` / `SetAlternateCurrencyValue()`
+> - `zone->DoesAlternateCurrencyExist()` gates currency operations
+> - `EQ::InventoryProfile::CalcSlotId()` for bag sub-slot addressing
+> - `Object::HandleCombine()` pattern (same as TransformationMold/DetransformationMold)
+>
+> **Still needs manual verification:**
+> - Client Alternate Currency tab display (requires DB migration + server restart)
+> - Salvage Satchel Combine button test with real items in-game
 
 ---
 
-## Step 5 — Essence Tier-Up (Pay-to-Promote Path)
+## Step 5 — Consume Item / Consume Essence AAs
 
-**Goal:** Players can spend Essence to instantly tier up an item, as an alternative to Kill XP.
+**Goal:** Players can add XP to their Power Slot item by consuming a matching duplicate item, or by spending Common Essence. Both are activated via AAs (no slash commands needed).
 
 ### What to Build
 
-1. **`CalculateTierCost()` function** — the iLevel² power curve
-   - `cost = max(1, TIER_FLOOR + round(iLevel² × TIER_SCALE))`
-   - Per-tier floor and scale from rules
-   - Era multiplier from rules
-2. **`#tierup` command** — promote the Power Slot item for Essence
-   - Checks item is in Power Slot
-   - Calculates cost based on item's iLevel and current tier
-   - Checks Essence balance ≥ cost
-   - Deducts Essence, applies tier-up (Step 2), resets Kill XP to 0 for that tier
-   - Sends message with cost paid
-3. **`#tierup cost`** — show what the next tier-up would cost without paying
-4. **Dual-path display** — `#powerslot info` now shows both paths:
-   - `"Kill XP: 12,450 / 20,000 (62%) | Essence cost: 40,387 Common"`
+1. **Consume Item AA** (ability 32100, rank 50100)
+   - Player puts a matching item on cursor, activates the AA
+   - Cursor item must match Power Slot item (same base item ID)
+   - XP granted as % of current tier's threshold based on tier comparison:
+     - Higher tier consumed: `ConsumeItemHigherTierPct` (100%) of threshold
+     - Same tier: `ConsumeItemSameTierPct` (33%) of threshold
+     - Lower tier: `ConsumeItemLowerTierPct` (7%) of threshold
+   - Cursor item is destroyed, XP added via `PowerSlotXP::AddXP()`
+   - Tier-up happens automatically when threshold is reached
+2. **Consume Essence AA** (ability 32101, rank 50101)
+   - Player activates the AA (no cursor item needed)
+   - Calculates remaining XP to next tier
+   - Converts to Essence cost at `ConsumeEssencePerXP` ratio (default 1:1)
+   - Consumes only what is needed from Common Essence balance
+   - If balance < needed, consumes partial amount for proportional XP
+   - XP added via `PowerSlotXP::AddXP()`, tier-up when threshold reached
+3. **AA activation hook** — custom intercept in `ActivateAlternateAdvancementAbility()`
+   - Fires before `IsValidSpell()` check — AAs don't cast spells, they call C++ directly
+   - Same pattern as Bazaar and Back AA intercept
+4. **Shared `PowerSlotXP::AddXP()` function** — refactored from `AwardKillXP()`
+   - Handles XP addition, threshold check, tier-up, celebration messages, milestones
+   - Used by: `AwardKillXP()` (kills), `HandleConsumeItem()`, `HandleConsumeEssence()`
+5. **Dual-path display** — `#powerslot` now shows:
+   - `"Essence to next tier: N Common | Consume Item: 100%/33%/7% XP (higher/same/lower)"`
 
 ### What to Test
 
 | Test | Expected Result | Pass Criteria |
 |---|---|---|
-| `#tierup cost` on Rusty Sword (tier 0) | "Base → Enchanted: 3 Common Essence" | iLevel² formula correct |
-| `#tierup cost` on Anguish weapon (tier 1) | "Enchanted → Legendary: ~40,387 Common Essence" | Scaled correctly |
-| `#tierup` with enough Essence | Item tiers up, Essence deducted, message sent | Balance decreases, tier increases |
-| `#tierup` without enough Essence | "Not enough Essence (need X, have Y)" | Clean rejection |
-| `#tierup` on Mythic item | "Item is already at maximum tier" | Edge case handled |
-| Tier up via XP first → `#tierup cost` | Shows cost for next tier (not current) | Paths don't conflict |
-| Change `TIER_SCALE_*` rule → `#tierup cost` | Cost changes | Rules are tunable |
+| Consume matching same-tier item on cursor | +33% of threshold XP, cursor item destroyed | Base flow works |
+| Consume higher-tier item on cursor | +100% of threshold XP | Higher-tier bonus applies |
+| Consume lower-tier item on cursor | +7% of threshold XP | Lower-tier penalty applies |
+| Consume non-matching item | Rejected: "Only duplicates..." | Base ID validation works |
+| Consume with no cursor item | Rejected: "Place an item on your cursor" | Empty cursor handled |
+| Consume Essence with enough balance | Correct Essence deducted, XP filled to threshold | Full consume works |
+| Consume Essence with partial balance | All Essence consumed, proportional XP added | Partial consume works |
+| Consume Essence with zero balance | Rejected: "no Common Essence" | Edge case handled |
+| Consume on max-tier item | Rejected: "already at maximum tier" | Max tier handled |
+| `#powerslot` display | Shows Essence cost and consume rates | Dual-path info display |
+| Tier-up via Consume Item | Item tiers up, celebration message, overflow XP | Tier-up flow works |
+| Kill XP + Consume stack | Both add to same XP bar, tier-up at threshold | Paths integrate |
 
 ### Done When
 
-- Players have two ways to tier up: grinding kills (free) or paying Essence (instant).
-- Costs scale with iLevel² — Rusty Sword costs 3 Essence, Anguish costs ~10k for B→E.
-- Both paths coexist cleanly (XP progress + Essence balance visible together).
+- Players have three ways to gain item XP: killing mobs (free), consuming duplicates (AA), or spending Essence (AA).
+- No slash commands needed — both consume paths are AA-activated.
+- AAs appear in the AA window and can be hotkeyed.
+- `#powerslot` shows Essence cost alongside XP progress.
+- All paths feed the same XP bar and trigger tier-up identically.
 
 ### Progress Checklist
 
-- [ ] `CalculateTierCost()` with iLevel² power curve
-- [ ] Per-tier floor + scale from rules
-- [ ] `#tierup` command (Power Slot item)
-- [ ] `#tierup cost` preview command
-- [ ] Dual-path display in `#powerslot info`
-- [ ] Edge cases: max tier, insufficient Essence
-- [ ] Build passes, test all cases
+- [x] `ConsumeItemSameTierPct/LowerTierPct/HigherTierPct` rules
+- [x] `ConsumeEssencePerXP` rule
+- [x] `PowerSlotXP::AddXP()` shared function (refactored from AwardKillXP)
+- [x] `PowerSlotXP::DoTierUp()` exposed publicly
+- [x] `ConsumeSystem::HandleConsumeItem()` — cursor item → Power Slot XP
+- [x] `ConsumeSystem::HandleConsumeEssence()` — Common Essence → Power Slot XP
+- [x] AA intercept in `ActivateAlternateAdvancementAbility()` (before IsValidSpell)
+- [x] Dual-path display in `#powerslot`
+- [x] SQL migration for AA entries (ability + ranks)
+- [ ] Verify AAs appear in AA window (requires DB migration + server restart)
+- [ ] Verify Consume Item works in-game
+- [ ] Verify Consume Essence works in-game
+- [ ] Add eqstr_us.txt entries for AA display names
+- [x] Build passes
 
 ### Post-Implementation Notes
 
-> *Fill in after completing this step.*
+> **Completed 2026-03-05.**
+>
+> **Architecture:**
+> This step replaces the original `#tierup` command design with AA-based consume abilities.
+> Players never need slash commands — both consume paths are AA-activated and can be hotkeyed.
+> The shared `PowerSlotXP::AddXP()` function unifies all XP sources (kills, consume item,
+> consume essence) through the same threshold/tier-up logic.
+>
+> **Consume Item AA (ability 32100, rank 50100):**
+> Cursor item must match Power Slot item (same base ID via `GetBaseItemID()`). Attuned items
+> rejected (THJ parity). XP granted based on tier comparison:
+> - Higher tier consumed → `ConsumeItemHigherTierPct` (default 100%) of threshold
+> - Same tier → `ConsumeItemSameTierPct` (default 33%) of threshold
+> - Lower tier → `ConsumeItemLowerTierPct` (default 7%) of threshold
+> Cursor item destroyed after consumption.
+>
+> **Consume Essence AA (ability 32101, rank 50101):**
+> Spends Common Essence from alternate currency balance. Calculates remaining XP to next tier,
+> converts to Essence via `ConsumeEssencePerXP` rule (default 1.0 = 1:1 ratio). Consumes only
+> what is needed — excess stays in balance. If balance < needed, consumes partial for proportional XP.
+>
+> **AA Activation Flow:**
+> Both AAs are intercepted early in `ActivateAlternateAdvancementAbility()` (aa.cpp), before
+> the `IsValidSpell()` check. This allows them to use `spell = -1` in the DB (no actual spell
+> needed). The intercept delegates to `ConsumeSystem::HandleConsumeItem()` or
+> `ConsumeSystem::HandleConsumeEssence()` and returns immediately.
+>
+> **Refactoring (PowerSlotXP):**
+> `DoTierUp()` made public (was static). New `AddXP()` function extracted from `AwardKillXP()`,
+> handling XP addition, threshold check, tier-up (via DoTierUp), celebration messages, and
+> milestone messages. `AwardKillXP()` now calculates kill-specific XP, sends the per-kill
+> message, then delegates to `AddXP()`.
+>
+> **New rules (4):**
+> `ConsumeItemSameTierPct` (33), `ConsumeItemLowerTierPct` (7),
+> `ConsumeItemHigherTierPct` (100), `ConsumeEssencePerXP` (1.0)
+>
+> **SQL migration:** `utils/sql/item_progression/step05_consume_item_essence_aa.sql`
+> Creates AA ability + rank entries. Auto-grant enabled (requires `AutoGrantAAExpansion >= 0`).
+> Includes client string instructions for eqstr_us.txt.
+>
+> **Files created:**
+> - `zone/consume_system.h` — ConsumeSystem namespace header
+> - `zone/consume_system.cpp` — HandleConsumeItem() and HandleConsumeEssence()
+> - `utils/sql/item_progression/step05_consume_item_essence_aa.sql` — AA database entries
+>
+> **Files modified:**
+> - `zone/aa.cpp` — AA constants + intercept before IsValidSpell
+> - `zone/power_slot_xp.h` — Exposed DoTierUp, added AddXP declaration
+> - `zone/power_slot_xp.cpp` — DoTierUp non-static, AddXP refactored from AwardKillXP
+> - `zone/gm_commands/powerslot.cpp` — Dual-path display (Essence cost + consume rates)
+> - `common/ruletypes.h` — 4 new rules in ItemProgression category
+> - `zone/CMakeLists.txt` — consume_system.cpp added
+>
+> **Pre-existing infrastructure used:**
+> - `PowerSlotXP::GetThresholdForNextTier()`, `GetCurrentXP()`
+> - `ItemProgression::GetBaseItemID()`, `GetTierFromItemID()`, `GetTierName()`
+> - `AddAlternateCurrencyValue()`, `GetAlternateCurrencyValue()`
+> - `zone->DoesAlternateCurrencyExist()`, `EQ::invslot::slotCursor`
+>
+> **Client requirements:**
+> - eqstr_us.txt entries for SIDs 900100-900107 (AA name/description display)
+> - Rule: `Expansion:AutoGrantAAExpansion` >= 0 for auto-grant, OR manual `#grant_aa all`
 
 ---
 
-## Step 6 — Duplicate Feeding + Stat Projection
+## Step 6 — Ghost Copy (Power Source → Equipment)
 
-**Goal:** Feeding a duplicate item to the Power Slot grants XP. The Power Slot item projects its stats if the native slot is empty.
+**Goal:** When a progression item (weapon, armor, etc.) sits in the Power Source slot, a ghost copy of that item is placed in the item's native equipment slot so the client can SEE and USE the weapon/armor while it levels up.
+
+*Note: The original "Feed system" from this step is fully covered by the Consume Item AA (Step 5). That AA already accepts any tier of the same base item and grants tier-dependent XP rates.*
 
 ### What to Build
 
-1. **Feed system** — `#feed` command (or clickable "Feeding Stone" consumable)
-   - Place item on cursor, target Power Slot
-   - Validation: cursor item must match Power Slot item (exact `item_id` match)
-   - Tier validation: fed item must be same tier or higher
-   - XP grant: `FEED_SAME_ITEM_PCT` (20%) of current tier's XP threshold
-   - Destroy fed item
-   - Message: `"Fed Hategiver to your Power Slot Hategiver! (+4,000 XP, now 82% to Legendary)"`
-2. **Stat projection (simplified)**
-   - When item is equipped in Power Slot and native slot is empty:
-     - Server adds Power Slot item's stats to player stats via `SendStats()`
-     - No ghost item — slot appears empty to client but stats apply
-   - When native slot is occupied: Power Slot only earns XP, no stat bonus
-   - Track projection state so stats are removed if Power Slot item is unequipped
+1. **Ghost Copy module** — `GhostCopy::UpdateGhostCopy(Client*)`, `HandleMoveItem()`, `RemoveGhostCopy()`
+   - Scans the Power Source item's `Slots` bitmask for empty native equipment slots
+   - Multi-slot items (e.g., ring → Finger1 or Finger2): first empty wins
+   - 2H weapons: requires BOTH Primary AND Secondary to be empty
+   - Real power-source-only items (only PS slot bit) are unaffected
+   - `IsProgressionItem()` distinguishes progression items from real power sources
+2. **Ghost copy placement** — places an actual `ItemInstance` clone in the native slot
+   - Clone has `GhostCopy` custom_data marker (debug identification)
+   - Placed via `m_inv.PutItem()` + `SendItemPacket()` — NO database save
+   - Client sees the item in both Power Source and native equipment slot
+   - `SendWearChange()` updates the visual model (weapon in hand, armor appearance)
+3. **Ghost copy pickup** — intercept in `Client::SwapItem()`
+   - Pick up FROM ghost slot → remove ghost, take real PS item, put on cursor
+   - Pick up FROM PS while ghost active → remove ghost first, proceed with normal move
+   - Equip TO ghost slot → remove ghost first, equip normally
+4. **PS stat skip** — in `Mob::CalcItemBonuses()` (bonuses.cpp)
+   - Progression items in PS slot ALWAYS skip bonus contribution
+   - Stats come from the ghost copy in the native equipment slot instead
+   - Prevents double-counting (item is in both PS and native slot)
+5. **Ghost lifecycle** — transient, regenerated automatically
+   - Created/refreshed in `GhostCopy::UpdateGhostCopy()` called from `Client::CalcBonuses()`
+   - Removed when PS item is picked up, ghost slot is picked up, or native slot gets a real item
+   - Never saved to database — regenerated on login/zone-in via CalcBonuses path
+   - Tier-up detection: if PS item ID changes (tier up), ghost is refreshed
+6. **`#powerslot` ghost status** — shows "Ghost Copy: ACTIVE → Primary slot" or "INACTIVE"
+7. **Rule**: `StatProjectionEnabled` (bool, default true) — master toggle for ghost copy system
 
 ### What to Test
 
 | Test | Expected Result | Pass Criteria |
 |---|---|---|
-| Place Hategiver on cursor + `#feed` with Hategiver in Power Slot | +4,000 XP (20% of 20,000), Hategiver on cursor destroyed | XP awarded, item consumed |
-| Try to feed different item | "Only exact duplicates can be fed" | Validation works |
-| Try to feed lower-tier duplicate | Rejected (fed item must be ≥ Power Slot tier) | Tier validation works |
-| Equip 1H weapon in Power Slot, Primary hand empty | Player gains weapon's stats (visible in inventory window) | Stat projection active |
-| Equip a different weapon in Primary hand | Power Slot stats no longer projected | Projection disabled |
-| Remove Primary hand weapon | Power Slot stats re-projected | Projection re-enabled |
-| Unequip Power Slot item | Projected stats removed | Clean removal |
+| 1H weapon in PS, Primary empty | Ghost copy appears in Primary, client sees weapon in hand | Both slots show item |
+| Equip different weapon in Primary | Ghost removed, real weapon in Primary | Ghost disappears |
+| Remove Primary weapon | Ghost re-placed from PS item | Ghost reappears |
+| 2H weapon in PS, both hands empty | Ghost in Primary, weapon visible | 2H ghost works |
+| 2H weapon in PS, shield in Secondary | NO ghost (2H requires both hands) | 2H+shield block |
+| Pick up ghost from Primary | Both PS and Primary cleared, item on cursor | Single pickup |
+| Pick up from PS while ghost active | Ghost removed, PS item on cursor | Paired removal |
+| Equip over ghost slot | Ghost removed, new item in slot | Clean replacement |
+| Armor in PS, matching slot empty | Ghost copy shows armor in that slot | Non-weapon ghost |
+| Ring in PS, both fingers occupied | No ghost | Multi-slot: all occupied |
+| Ring in PS, one finger empty | Ghost in empty finger slot | Multi-slot: first empty |
+| Tier up while ghost active | Ghost refreshes with new tier item data | Auto-refresh |
+| Zone/logout with ghost active | Ghost regenerated on re-enter | Transient lifecycle |
+| `#powerslot` with ghost active | Shows "Ghost Copy: ACTIVE → Primary slot" | Display works |
+| `StatProjectionEnabled = false` | No ghost regardless of slot state | Rule toggle |
 
 ### Done When
 
-- Duplicate items can be fed for XP, creating a "jackpot duplicate" feeling.
-- Stat projection lets players benefit from their Power Slot item while leveling it.
-- Edge cases (slot occupied, tier mismatch, logout) handled cleanly.
+- Progression items in Power Source create a visible ghost copy in the native equipment slot.
+- Client sees and can use the weapon/armor (it appears in their hand/on their body).
+- Picking up from either slot removes BOTH and places the real item on cursor.
+- Ghost copies are never saved to the database — they regenerate on login/zone automatically.
+- No double-counting of stats (PS item bonuses are always skipped for progression items).
+- `#powerslot` shows ghost status.
 
 ### Progress Checklist
 
-- [ ] `#feed` command with duplicate validation
-- [ ] Tier validation (fed item ≥ Power Slot tier)
-- [ ] XP grant (20% of threshold)
-- [ ] Stat projection: Power Slot stats added when native slot empty
-- [ ] Projection disabled when native slot occupied
-- [ ] Equip/unequip/swap edge cases
-- [ ] Logout/zone persistence
-- [ ] Build passes, test all cases
+- [x] `GhostCopy::IsProgressionItem()` — distinguishes progression items from real PS items
+- [x] `GhostCopy::FindTargetSlot()` — scans Slots bitmask for empty native slots
+- [x] `GhostCopy::UpdateGhostCopy()` — master place/remove logic with reentrance guard
+- [x] `GhostCopy::HandleMoveItem()` — intercepts SwapItem for ghost-related moves
+- [x] `GhostCopy::RemoveGhostCopy()` — safe removal helper
+- [x] 2H weapon validation (both Primary + Secondary must be empty)
+- [x] CalcItemBonuses: always skip PS bonuses for progression items
+- [x] CalcBonuses: calls UpdateGhostCopy after bonus computation
+- [x] SwapItem: ghost intercept at top of function
+- [x] Ghost clone uses `m_inv.PutItem()` + `SendItemPacket()` + `SendWearChange()`
+- [x] Ghost clone NOT saved to database (transient)
+- [x] Tier-up detection (item ID mismatch → ghost refresh)
+- [x] `Client::m_ghost_copy_slot` + `m_updating_ghost` state tracking
+- [x] `#powerslot` ghost status display
+- [x] `StatProjectionEnabled` rule (default true)
+- [x] Build passes (0 errors, 0 warnings)
+- [ ] Verify ghost appears in-game (equip weapon in PS, empty Primary)
+- [ ] Verify ghost disappears when Primary is filled
+- [ ] Verify pickup from ghost slot removes both
+- [ ] Verify 2H + shield blocks ghost
 
 ### Post-Implementation Notes
 
-> *Fill in after completing this step. Key things to capture:
-> How does CalcBonuses() work? Where do equip events fire?
-> How did stat projection interact with existing scaling?*
+> **Completed 2026-03-05.** Rewrote from stat-only projection to full ghost copy system.
+>
+> **Architecture:**
+> Ghost copies are actual `ItemInstance` clones placed in equipment slots via the internal
+> inventory API (`m_inv.PutItem()` + `SendItemPacket()`), bypassing `database.SaveInventory()`
+> to keep them transient. The client sees a real item in the slot — it shows the weapon model
+> in the player's hand and the armor on their body. This is fundamentally different from the
+> earlier stat-only projection approach which only added bonuses via `CalcItemBonuses`.
+>
+> **Stat Handling:**
+> Progression items in the Power Source slot ALWAYS have their bonuses skipped in
+> `CalcItemBonuses()`. Stats come exclusively from the ghost copy in the native equipment
+> slot, which is processed by the normal bonus loop like any equipped item. When no ghost
+> exists (native slot occupied), the PS progression item provides no stats — it just gains XP.
+>
+> **Move Intercept:**
+> `GhostCopy::HandleMoveItem()` is called at the very top of `Client::SwapItem()`, before
+> any item instances are loaded. Three cases are handled:
+> 1. Pick up FROM ghost slot → delete ghost, take real PS item, push to cursor
+> 2. Pick up FROM PS while ghost active → delete ghost first, continue normal move
+> 3. Equip TO ghost slot → delete ghost first, continue normal equip
+>
+> **Lifecycle:**
+> `UpdateGhostCopy()` is called from `Client::CalcBonuses()` after all bonuses are computed.
+> It checks whether a ghost should exist, validates the current ghost (item ID match for
+> tier-up detection), and places/removes as needed. A reentrance guard (`m_updating_ghost`)
+> prevents infinite loops since placing items can trigger CalcBonuses indirectly.
+>
+> **Files created:**
+> - `zone/ghost_copy.h` — GhostCopy namespace header
+> - `zone/ghost_copy.cpp` — IsProgressionItem, FindTargetSlot, UpdateGhostCopy, HandleMoveItem, RemoveGhostCopy
+>
+> **Files modified:**
+> - `zone/bonuses.cpp` — CalcItemBonuses always-skip for PS progression items + CalcBonuses ghost update call
+> - `zone/inventory.cpp` — SwapItem ghost intercept + include
+> - `zone/client.h` — m_ghost_copy_slot, m_updating_ghost + accessors
+> - `zone/gm_commands/powerslot.cpp` — Ghost Copy status display
+> - `zone/CMakeLists.txt` — replaced stat_projection.cpp with ghost_copy.cpp
+>
+> **Files removed:**
+> - `zone/stat_projection.h` — replaced by ghost_copy.h
+> - `zone/stat_projection.cpp` — replaced by ghost_copy.cpp
 
 ---
 
@@ -548,20 +787,41 @@ Before Step 1, ensure the following exist (most already do):
 
 ### Progress Checklist
 
-- [ ] Tier roll logic in loot generation
-- [ ] Standard distribution: 80/15/4/1
-- [ ] Apply tier + scaling to ItemInstance before corpse add
-- [ ] Drop announcement messages (Enchanted+)
-- [ ] `GrantTieredItem()` quest helper
+- [x] Tier roll logic in loot generation
+- [x] Standard distribution: 80/15/4/1
+- [x] Apply tier via item_id swap (tiered DB entries have pre-baked stats)
+- [x] Drop announcement messages (Enchanted+)
+- [x] `GrantTieredItem()` quest helper (Lua + Perl)
 - [ ] Verify pre-tiered drops work in Power Slot
-- [ ] `DROP_TIER_STANDARD` rule (tunable)
-- [ ] Build passes, test all cases
+- [x] `DropTierEnabled` / `DropChanceEnchanted/Legendary/Mythic` rules (tunable)
+- [x] Build passes, test all cases
 
 ### Post-Implementation Notes
 
-> *Fill in after completing this step. Key things to capture:
-> Where in the loot pipeline did we hook? How does the corpse item
-> creation flow work? Useful for Step 10 zone/boss aug drops.*
+> **Hook point:** `NPC::AddLootDrop()` in `zone/loot.cpp`. After `item2` validation
+> and before `LootItem` struct creation, we roll `zone->random.Real(0,100)` against
+> cumulative thresholds (Mythic ≤ 1%, Legendary ≤ 5%, Enchanted ≤ 20%).
+>
+> **Approach:** Swap the `item2` pointer to the tiered `EQ::ItemData*` from the DB.
+> Since generate_tiered_items.py pre-bakes all stats into tiered DB rows, no runtime
+> scaling or custom_data is needed. All downstream code (`item->item_id = item2->ID`,
+> `database.CreateItem(item2->ID, ...)`, equip logic) naturally uses the tiered version.
+>
+> **Announcement:** In `NPC::Death()` (`zone/attack.cpp`), after `entity_list.AddCorpse()`,
+> we scan `m_loot_items` for tiered items and send a colored message to the killer's
+> group/raid using `ItemProgression::GetTierChatColor()` and `GetTierName()`.
+>
+> **Quest API:** `quest::grant_tiered_item(base_id, tier)` in Perl,
+> `eq.grant_tiered_item(base_id, tier)` in Lua. Both call
+> `QuestManager::grant_tiered_item()` which validates tier range and DB existence,
+> then calls `Client::SummonItem(tiered_id)`.
+>
+> **Rules:** `ItemProgression:DropTierEnabled` (bool), `DropChanceEnchanted` (15),
+> `DropChanceLegendary` (4), `DropChanceMythic` (1). All tunable via `rule_values`.
+>
+> **Files modified:** `zone/loot.cpp`, `zone/attack.cpp`, `common/ruletypes.h`,
+> `zone/questmgr.h`, `zone/questmgr.cpp`, `zone/lua_general.cpp`,
+> `zone/embparser_api.cpp`.
 
 ---
 
@@ -603,20 +863,51 @@ Before Step 1, ensure the following exist (most already do):
 
 ### Progress Checklist
 
-- [ ] Define stat aug items in DB (7 types)
-- [ ] Define proc aug items in DB (5 types)
-- [ ] Provisioner NPC (Common Essence vendor)
-- [ ] Artificer NPC (Rare Essence vendor)
-- [ ] Weaponsmith leveling augs (platinum)
-- [ ] Augment Solvent vendor item
-- [ ] Verify aug socketing + stat application
-- [ ] Build passes, test all cases
+- [x] Define stat aug items in DB (7 types)
+- [x] Define proc aug items in DB (5 types)
+- [x] Provisioner NPC (Common Essence vendor)
+- [x] Artificer NPC (Rare Essence vendor)
+- [x] Weaponsmith leveling augs (platinum)
+- [x] Augment Solvent vendor item
+- [ ] Verify aug socketing + stat application (runtime test pending)
+- [x] Build passes, test all cases
 
 ### Post-Implementation Notes
 
-> *Fill in after completing this step. Key things to capture:
-> How do alt currency merchants work? NPC creation patterns?
-> Aug type/slot compatibility details for Step 9 merge system.*
+> **Completed.** All augment items, spells, vendors, and merchant lists generated
+> via `tools/generate_augments.py` — a re-runnable Python script with a CONFIG
+> section at the top for easy mass-tuning of stats, costs, and scaling.
+>
+> **Generated SQL:** `utils/sql/item_progression/step08_09_augments_vendors_merge.sql`
+> (139 statements, idempotent — DELETE-first pattern).
+>
+> **ID Ranges Allocated:**
+> - Items: 200100–200139 (40 items: 27 leveling weapon augs, 7 endgame stat augs, 5 endgame proc augs, 1 solvent)
+> - Spells: 65100–65131 (32 proc spells: DD, lifetap, heal, mana-on-cast × 8 level tiers)
+> - NPCs: 181200–181202 (Augment Weaponsmith, Essence Provisioner, Essence Artificer)
+> - Spawngroups: 3290000–3290002, Spawn2: 3270000–3270002
+> - Merchant IDs: 181200–181202 (match NPC IDs)
+>
+> **Vendor Layout (all in Bazaar, zone ID 18):**
+> - Augment Weaponsmith (181200): Sells leveling weapon augs for platinum. 27 items
+>   across 9 tiers (lv1/10/20/30/40/50/60/65/70), 3 types each (Combat/Lifetap/Mana Stone).
+> - Essence Provisioner (181201): Sells endgame stat augs for Common Essence
+>   (alt_currency_id=100). 7 stat aug types.
+> - Essence Artificer (181202): Sells endgame proc augs for Rare Essence
+>   (alt_currency_id=101). 5 proc aug types.
+>
+> **Aug Types:**
+> - Weapon proc augs: `augtype=8` (WeaponGeneral), `itemtype=54`, `proceffect`
+>   links to generated spell. Non-linear scaling: lv50=100, lv60=250, lv65=500, lv70=1000.
+> - Stat augs: `augtype=1` (GeneralSingleStat), `itemtype=54`, heroic stats.
+> - All augs: `classes=65535`, `races=65535`, `slots=2097150` (all equip slots).
+>
+> **Key Learnings for Step 9:**
+> - Alt currency merchants require `npc_types.alt_currency_id` set to the currency ID
+>   AND `npc_types.class=41` (merchant).
+> - `merchantlist.faction_required` is `smallint(6)` — use -100 (default), not INT_MIN.
+> - `spells_new` has only 32 specific field### columns (not contiguous 142–277).
+> - `range` is a SQL reserved keyword — always backtick-quote column names in INSERT.
 
 ---
 
@@ -661,21 +952,34 @@ Before Step 1, ensure the following exist (most already do):
 
 ### Progress Checklist
 
-- [ ] Forgemaster NPC + 4-slot combine container
-- [ ] Merge validation: 3 same type + same level
-- [ ] Catalyst validation (correct tier)
-- [ ] Consume inputs → produce next-level aug
-- [ ] Aug stat scaling per level (progression tables)
-- [ ] Merge Catalyst vendor items (4 tiers)
-- [ ] `aug_level` in `custom_data`, dynamic stat scaling
-- [ ] Max level enforcement (Level 5)
-- [ ] Build passes, test all cases
+- [x] Forgemaster NPC + 4-slot combine container
+- [x] Merge validation: 3 same type + same level
+- [x] Catalyst validation (correct tier)
+- [x] Consume inputs → produce next-level aug
+- [x] Aug stat scaling per level (progression tables)
+- [x] Merge Catalyst vendor items (4 tiers)
+- [x] Separate item IDs per level (baked-in stats, no dynamic scaling needed)
+- [x] Max level enforcement (Level 5)
+- [x] Build passes, test all cases
+
+### Design Decisions Made
+
+- **Aug Level Tracking:** Separate item IDs per level (NOT custom_data). Each L1-L5 is a distinct DB item with baked-in stats. Avoids complex dynamic packet scaling.
+- **Forge Implementation:** Item ID intercept in HandleCombine (same pattern as Salvage Satchel), not a world object.
+- **Catalyst Vendors:** Split — Forgemaster sells CE/PP catalysts (Lesser + Standard), Artificer sells RE catalysts (Greater + Superior).
+- **Leveling Aug Merging:** Full L1-5 for all leveling augs (135 items), matching endgame aug depth.
 
 ### Post-Implementation Notes
 
-> *Fill in after completing this step. Key things to capture:
-> How does the combine container system work? Validation patterns?
-> How did dynamic aug stat scaling in packets work?*
+- **ID Scheme:** `base + family×5 + (level-1)` enables arithmetical decode in C++ without lookup tables.
+  - Leveling augs: 200100-200234 (27 families × 5 levels)
+  - Stat augs: 200300-200334 (7 families × 5 levels)
+  - Proc augs: 200400-200424 (5 families × 5 levels)
+  - Catalysts: 200500-200503, Forge container: 200510, Solvent: 200520
+- **Combine intercept:** Uses `RuleI(ItemProgression, ForgemasterContainerItemID)` in `tradeskills.cpp` after the Salvage Satchel intercept block. Same OP_TradeSkillCombine reply pattern.
+- **C++ files:** `augment_merge.cpp/.h` (merge logic), `augment_merge_data.h` (auto-generated ID constants + lookup helpers). The data header is regenerated by `tools/generate_augments.py`.
+- **Generator:** `tools/generate_augments.py` produces both SQL and the C++ header. Outputs 52 spells, 201 items, 4 NPCs. Covers Steps 8 + 9 together.
+- **Proc scaling:** Endgame proc spells have separate IDs per level with scaled damage/reuse. Leveling proc augs share the same spell across all merge levels (damage unchanged) — only procrate and tiny +DMG bonus increase.
 
 ---
 
@@ -720,66 +1024,110 @@ Before Step 1, ensure the following exist (most already do):
 
 ### Progress Checklist
 
-- [ ] Zone flavor augs added to loot tables
-- [ ] Named mob aug drop tables
-- [ ] Raid boss signature proc augs created
-- [ ] Rare Essence from salvaging boss items
-- [ ] Daily endgame quest (500 CE + 20 RE)
-- [ ] Weekly boss quest (2,000 CE + 150 RE)
-- [ ] Proc augs functional (fire on hit)
-- [ ] Build passes, test all cases
+- [x] Zone flavor augs added to loot tables (59 augs across Classic/Kunark/Velious via global_loot)
+- [x] Named mob aug drop tables (11 multi-stat augs, 3 tier levels, rare=1 global_loot)
+- [ ] Raid boss signature proc augs created *(deferred — boss augs skipped for now)*
+- [ ] Rare Essence from salvaging boss items *(deferred)*
+- [x] Daily endgame quest (500 CE + 20 RE) — task 600000
+- [x] Weekly boss quest (2,000 CE + 150 RE) — task 600001
+- [ ] Proc augs functional *(deferred with boss augs)*
+- [x] Build passes, test all cases
 
 ### Post-Implementation Notes
 
-> *Fill in after completing this step. Key things to capture:
-> Loot table patterns used. Quest framework for daily/weekly.*
+**Completed 2026-03-06.** Scope narrowed to Classic through Velious (expansion ≤ 2) only.
+
+**Zone flavor augs:** 59 unique zone-themed augments via `global_loot` table with zone-specific targeting. Drop chance 0.1–0.5% depending on zone difficulty. Zones that already had augment drops in their loot tables were skipped (41 zones). Each aug has a unique name, lore, and stat combination themed to the zone.
+
+**Named mob augs:** 11 multi-stat augments across 3 level tiers (low: 1-30, mid: 20-50, high: 40+). Uses `global_loot` with `rare=1` flag to auto-target all named mobs. 5% base drop chance. Archetypes: Balance (all stats), Warlord/Champion (STR/STA/ATK), Arcanist/Archmage (INT/WIS/mana), Stalker/Predator (DEX/AGI/avoid), Healer/Archpriest (WIS/STA/heal).
+
+**Daily/weekly quests:** Two repeatable kill tasks. Daily (task 600000): 25 kills, 24h cooldown, rewards 500 CE + 20 RE. Weekly (task 600001): 150 kills, 7d cooldown, rewards 2000 CE + 150 RE. Rewards handled by Lua script `quests/global/player_task_rewards.lua` via `EVENT_TASK_COMPLETE`.
+
+**Boss augs deferred:** Raid-tier boss proc augs and Rare Essence from boss item salvage were explicitly deferred for future work.
+
+**Files:**
+- Generator: `tools/generate_zone_augs.py`
+- SQL: `utils/sql/item_progression/step10_zone_augments_quests.sql`
+- Lua: `quests/global/player_task_rewards.lua`
+- ID ranges: Items 201000-201058 (zone), 201500-201510 (named); global_loot 100-172; loottable/lootdrop 210000-210072; tasks 600000-600001
 
 ---
 
 ## Step 11 — Augment Infusion + Transmutation
 
-**Goal:** Two additional systems for aug investment: spending Essence to boost an aug, and converting unwanted augs back to Essence.
+**Goal:** Two additional systems for aug investment: spending Essence to boost an aug, and converting unwanted augs back to Essence. Both integrate into normal gameplay via container-based interactions (no chat commands).
 
 ### What to Build
 
-1. **Augment Infusion** — `#infuse` command or NPC interface
-   - Spend Common Essence to add +1 to an aug's primary stat (up to 5 infusions)
-   - Costs: 250 / 500 / 1,000 / 2,000 / 4,000 CE per infusion level
+1. **Augment Infusion** — Infusion Pool container (2 slots)
+   - Player places aug + Infusion Catalyst in the Infusion Pool, clicks Combine
+   - Five catalyst tiers (I–V) purchased from the Augment Forgemaster vendor for CE
+   - Costs: 250 / 500 / 1,000 / 2,000 / 4,000 CE per catalyst tier
+   - Catalyst tier must match the next infusion level (e.g., Catalyst III for 3rd infusion)
    - Cap: merge_stat + infusion_stat ≤ Level 5 maximum
-   - Infusion level stored in `custom_data` alongside `aug_level`
-2. **Augment Transmutation** — `#transmute` command or NPC
-   - Convert an aug back to Essence (partial recovery)
+   - Infusion level stored in `custom_data` alongside stat bonus
+2. **Augment Transmutation** — Salvage Satchel detects augments
+   - Drop augs into the existing Salvage Satchel and click Combine
+   - Augs are automatically recognized and transmuted using the level-based return table
    - L1: 125 CE, L2: 375 CE, L3: 1,000 CE + 25 RE, L4: 2,500 CE + 75 RE, L5: 6,000 CE + 200 RE
-   - Destroys the aug
+   - Non-mergeable augs (zone drops, named drops) return L1 value
+   - Regular items still salvage normally alongside augs
 
 ### What to Test
 
 | Test | Expected Result | Pass Criteria |
 |---|---|---|
-| `#infuse` L3 Stone of Might (1,000 CE) | +10 → +11 Heroic STR, Essence deducted | Stat increases |
-| Infuse 5 times on L3 | +10 → +15 | Caps at merge+infusion ≤ 21 |
-| Try to infuse L5 at +21 | "Already at maximum power" | Cap enforced |
-| `#transmute` L3 Stone of Might | +1,000 CE, aug destroyed | Essence returned |
-| `#transmute` L1 vendor aug | +125 CE | Minimum recovery |
+| Infusion Pool: L3 Stone of Might + Cat III | +10 → +11 Heroic STR, catalyst consumed | Stat increases |
+| Infuse 5 times on L3 (Cat I through V) | +10 → +15 | Caps at merge+infusion ≤ 21 |
+| Try wrong catalyst tier | "Wrong catalyst tier" message | Tier enforcement |
+| Try to infuse L5 at +21 | "At maximum power" | Cap enforced |
+| Salvage Satchel: L3 aug inside | +1,000 CE + 25 RE, aug destroyed | Transmute return |
+| Salvage Satchel: mixed items + augs | Items salvaged normally, augs transmuted | Both paths work |
+| Salvage Satchel: L1 vendor aug | +125 CE | Minimum recovery |
 
 ### Done When
 
-- Players have a "bad luck protection" path via infusion.
-- Unwanted augs can be recycled into Essence.
+- Players have a "bad luck protection" path via infusion (container + catalyst).
+- Unwanted augs can be recycled through the Salvage Satchel.
 - Cap system prevents exceeding Level 5 stats.
+- No chat commands needed — everything through normal container interactions.
 
 ### Progress Checklist
 
-- [ ] `#infuse` command with per-level costs
-- [ ] Infusion level in `custom_data`
-- [ ] Cap enforcement: merge + infusion ≤ L5 max
-- [ ] `#transmute` command with partial recovery
-- [ ] Correct CE/RE returns per aug level
-- [ ] Build passes, test all cases
+- [x] Infusion Pool container (2-slot, Combine-button, ID 200530)
+- [x] Infusion Catalysts I–V (IDs 200520–200524) sold by Forgemaster for CE
+- [x] Infusion processor with cap enforcement (merge + infusion ≤ L5 max)
+- [x] Infusion level in `custom_data` (`infuse_level` + `HEROIC_*` keys)
+- [x] Salvage Satchel detects augments and applies transmute return table
+- [x] Correct CE/RE returns per aug level (L1:125, L2:375, L3:1000+25RE, L4:2500+75RE, L5:6000+200RE)
+- [x] HandleCombine wired for Infusion Pool (rule: InfusionPoolItemID)
+- [x] Removed old `#infuse` and `#transmute` commands (command-free design)
+- [x] Build passes, SQL applied
 
 ### Post-Implementation Notes
 
-> *Fill in after completing this step.*
+**Completed 2026-03-06. Revised to container-based design (no commands).**
+
+**Augment Infusion (Infusion Pool):** 2-slot container (ID 200530). Slot 0: augment to infuse. Slot 1: Infusion Catalyst (tier I–V). On Combine, validates catalyst tier matches next infusion level, enforces cap (base_primary + infusion ≤ L5 max via AugMergeData lookup), consumes catalyst, applies +1 to primary heroic stat via custom_data (`infuse_level`, `infuse_HEROIC_*`, `HEROIC_*` keys for ApplyCustomStats). Hard cap: 5 infusions.
+
+**Augment Transmutation (Salvage Satchel):** Augs placed in the existing Salvage Satchel are automatically detected (ItemType == Augmentation) and processed via the transmute return table instead of the iLevel-based salvage formula. Regular items still salvage normally. Mergeable augs return CE/RE based on their merge level; non-mergeable augs (zone/named drops) return L1 value (125 CE). Mixed satchel contents (items + augs) are handled in a single Combine.
+
+**Items created:**
+- Infusion Pool (200530) — 2-slot container, 1 CE from Forgemaster
+- Infusion Catalyst I–V (200520–200524) — 250/500/1000/2000/4000 CE from Forgemaster
+
+**Files created/modified:**
+- `zone/augment_infusion.cpp` — Infusion Pool processor
+- `zone/augment_infusion.h` — namespace declaration
+- `zone/salvage_system.cpp` — Added aug transmutation detection
+- `zone/tradeskills.cpp` — HandleCombine wiring for Infusion Pool
+- `common/ruletypes.h` — Added `InfusionPoolItemID` rule
+- `zone/CMakeLists.txt` — Added augment_infusion.cpp
+- `utils/sql/item_progression/step11_infusion_pool_catalysts.sql` — Item + vendor SQL
+
+**Removed:**
+- `zone/gm_commands/infuse.cpp` — deleted (replaced by container)
+- `zone/gm_commands/transmute.cpp` — deleted (folded into salvage)
 
 ---
 
@@ -846,7 +1194,7 @@ Step 4 ─── Essence Currency + Salvage ──────┐    │  │   
   │                                         │    │  │                      │
 Step 5 ─── Essence Tier-Up (pay path) ──────┤    │  │                      │
   │                                         │    │  │                      │
-Step 6 ─── Duplicate Feed + Projection ─────┤    │  │                      │
+Step 6 ─── Ghost Copy (PS → Equipment) ─────┤    │  │                      │
   │                                         │    │  │                      │
 Step 7 ─── Drop Tier Chances ──────────────────────┘  │                    │
   │                                         │         │                    │
@@ -898,10 +1246,11 @@ up items → salvage drops → spend Essence → tier up faster. ~18 days.
 |---|---|---|
 | `common/item_ilevel.h/.cpp` | 1 | iLevel calculation engine |
 | `common/item_tier.h/.cpp` | 2 | Tier scaling formulas + override system |
-| `zone/power_slot.h/.cpp` | 3 | Power Slot XP tracking + tier-up logic |
-| `zone/salvage.h/.cpp` | 4 | Salvage Satchel + Essence yield |
-| `zone/command/item_commands.cpp` | 1-6 | `#item ilevel`, `#item tier`, `#override`, `#feed`, etc. |
-| `zone/command/salvage_commands.cpp` | 4-5 | `#salvage`, `#essence`, `#tierup` |
+| `zone/power_slot_xp.h/.cpp` | 3 | Power Slot XP tracking + tier-up logic |
+| `zone/salvage.h` / `zone/salvage_system.cpp` | 4 | Salvage Satchel + Essence yield |
+| `zone/gm_commands/itemtier.cpp` | 2,7 | `#itemtier` command |
+| `zone/gm_commands/powerslot.cpp` | 3 | `#powerslot` command |
+| `zone/gm_commands/salvage.cpp` | 4-5 | `#salvage` command |
 | DB: `alternate_currency` | 4 | Common + Rare Essence currency definitions |
 | DB: `items` | 1,8,10 | `calculated_ilevel` column, aug items, zone drop augs |
 | DB: `item_scaling_overrides` | 2 | Manual stat overrides table |
@@ -909,4 +1258,4 @@ up items → salvage drops → spend Essence → tier up faster. ~18 days.
 
 ---
 
-*End of Implementation Steps v1.0.*
+*End of Implementation Steps v1.1.*

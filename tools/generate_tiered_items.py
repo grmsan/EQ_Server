@@ -47,6 +47,8 @@ TIER_OFFSET = 250_000     # Enchanted = base + 250K, …  (fits 20-bit item link
 MAX_BASE_ID = 999_999    # Only process items below this
 # Items whose Mythic ID would exceed the 20-bit link limit (1,048,575) are skipped.
 # base_id + 3 * TIER_OFFSET must be ≤ 1,048,575  →  base_id ≤ 298,575
+# CONSTRAINT: If base item IDs ever exceed 250K, TIER_OFFSET and TIER_ID_OFFSET
+# in common/item_tier.h must be revisited together.
 MAX_LINKABLE_BASE = 1_048_575 - 3 * TIER_OFFSET  # 298,575
 
 TIER_NAMES     = {1: "Enchanted", 2: "Legendary", 3: "Mythic"}

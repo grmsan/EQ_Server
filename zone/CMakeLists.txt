@@ -389,6 +389,13 @@ set(gm_command_sources
     gm_commands/itemtier.cpp
     gm_commands/itemdiag.cpp
     gm_commands/powerslot.cpp
+    gm_commands/salvage.cpp
+    gm_commands/essence.cpp
+    augment_infusion.cpp
+    salvage_system.cpp
+    augment_merge.cpp
+    consume_system.cpp
+    ghost_copy.cpp
     gm_commands/illusion_block.cpp
     gm_commands/instance.cpp
     gm_commands/interrogateinv.cpp

@@ -134,6 +134,8 @@ void command_ilevel(Client *c, const Seperator *sep);
 void command_itemtier(Client *c, const Seperator *sep);
 void command_itemdiag(Client *c, const Seperator *sep);
 void command_powerslot(Client *c, const Seperator *sep);
+void command_salvage(Client *c, const Seperator *sep);
+void command_essence(Client *c, const Seperator *sep);
 void command_hptest(Client *c, const Seperator *sep);
 void command_npccast(Client *c, const Seperator *sep);
 void command_npcedit(Client *c, const Seperator *sep);

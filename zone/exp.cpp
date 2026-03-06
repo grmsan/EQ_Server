@@ -36,6 +36,7 @@
 #include "bot.h"
 #include "../common/events/player_event_logs.h"
 #include "worldserver.h"
+#include "../common/item_tier.h"
 
 extern WorldServer worldserver;
 
@@ -1406,9 +1407,12 @@ bool Client::ConsumeItemOnCursor()
 		return false;
 	}
 
-	const bool matches_source_family = (cur_item->GetID() % 1000000) == (pow_item->GetID() % 1000000);
-	if (!matches_source_family || cur_item->GetID() >= 2000000) {
-		Message(Chat::SpellFailure, "You may only consume an item matching your equipped Power Source family.");
+	const bool matches_source_family =
+		ItemProgression::GetBaseItemID(cur_item->GetID()) == ItemProgression::GetBaseItemID(pow_item->GetID());
+	int cur_tier = ItemProgression::GetTierFromItemID(cur_item->GetID());
+	int pow_tier = ItemProgression::GetTierFromItemID(pow_item->GetID());
+	if (!matches_source_family || cur_tier >= pow_tier) {
+		Message(Chat::SpellFailure, "You may only consume a lower-tier item matching your equipped Power Source family.");
 		return false;
 	}
 

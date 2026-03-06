@@ -6,7 +6,7 @@ USE peq;
 -- Main dynamic items table
 CREATE TABLE IF NOT EXISTS dynamic_items (
     item_id BIGINT UNSIGNED PRIMARY KEY COMMENT 'Dynamic ID (5LLLLLIIIIII format)',
-    base_item_id INT UNSIGNED NOT NULL COMMENT 'Original item ID from items table',
+    base_item_id INT NOT NULL COMMENT 'Original item ID from items table',
     item_level INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Item level (+0 to +99999)',
     random_stats JSON DEFAULT NULL COMMENT 'Future: JSON object with random stat modifiers',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT 'When item was first generated',
@@ -79,37 +79,4 @@ INSERT INTO progression_config (config_key, config_value, description) VALUES
     ('drop_dynamic_items', 'true', 'NPCs drop dynamic items instead of base items')
 ON DUPLICATE KEY UPDATE config_value=VALUES(config_value);
 
--- Sample query to view progression stats
-DELIMITER $$
-CREATE PROCEDURE IF NOT EXISTS GetProgressionStats()
-BEGIN
-    SELECT
-        'Total Dynamic Items' AS metric,
-        COUNT(*) AS value
-    FROM dynamic_items
-    UNION ALL
-    SELECT
-        'Average Item Level',
-        ROUND(AVG(item_level), 2)
-    FROM dynamic_items
-    UNION ALL
-    SELECT
-        'Max Item Level',
-        MAX(item_level)
-    FROM dynamic_items
-    UNION ALL
-    SELECT
-        'Total Events',
-        COUNT(*)
-    FROM progression_event_log
-    UNION ALL
-    SELECT
-        'Events Last Hour',
-        COUNT(*)
-    FROM progression_event_log
-    WHERE event_timestamp >= DATE_SUB(NOW(), INTERVAL 1 HOUR);
-END$$
-DELIMITER ;
-
-SELECT 'Infinite Progression schema created successfully' AS status;
-CALL GetProgressionStats();
+-- Schema creation complete.

@@ -18,7 +18,10 @@
 
 #include "../common/global_define.h"
 #include "../common/eqemu_logsys.h"
+#include "../common/item_tier.h"
+#include "../common/rulesys.h"
 #include "dynamic_item_integration.h"
+#include "ghost_copy.h"
 #include <fstream>
 
 #include "../common/strings.h"
@@ -190,6 +193,27 @@ bool Client::CheckLoreConflict(const EQ::ItemData* item)
 
 bool Client::SummonItem(uint32 item_id, int16 charges, uint32 aug1, uint32 aug2, uint32 aug3, uint32 aug4, uint32 aug5, uint32 aug6, bool attuned, uint16 to_slot, uint32 ornament_icon, uint32 ornament_idfile, uint32 ornament_hero_model) {
 	Log(Logs::General, Logs::Quests, "Client::SummonItem called for item_id=%u", item_id);
+
+	// --- Quest Auto-Tier (Infinite Item Progression Step 7) ---
+	// When QuestItemDefaultTier > 0, automatically upgrade base-tier items to the
+	// configured tier. This makes all quest rewards drop at the target tier without
+	// modifying individual quest scripts.
+	// Scoped to quest/task contexts only — GM commands, spells, and tradeskills
+	// bypass auto-tier so they summon the exact item requested.
+	int quest_default_tier = RuleI(ItemProgression, QuestItemDefaultTier);
+	bool in_quest_context = quest_manager.QuestsRunning();
+	if (quest_default_tier > 0 && in_quest_context && !ItemProgression::IsTieredItem(item_id)) {
+		int tier = std::clamp(quest_default_tier, 0, static_cast<int>(ItemProgression::TierMax));
+		uint32 tiered_id = ItemProgression::GetTieredItemID(item_id, tier);
+		const EQ::ItemData *tiered_item = database.GetItem(tiered_id);
+		if (tiered_item) {
+			LogLoot(
+				"Quest auto-tier: item [{}] -> {} ID [{}] ({})",
+				item_id, ItemProgression::GetTierName(tier), tiered_id, tiered_item->Name
+			);
+			item_id = tiered_id;
+		}
+	}
 
 	// Use dynamic item integration for both static and dynamic items
 	const EQ::ItemData* item = EQ::GetItemWithDynamic(item_id);
@@ -1658,6 +1682,12 @@ bool Client::SwapItem(MoveItem_Struct* move_in) {
 			Message(Chat::Red, "Warning: Invalid slot move from slot %u to slot %u with %u charges!", src_slot_check, dst_slot_check, stack_count_check);
 		LogInventory("Invalid slot move from slot [{}] to slot [{}] with [{}] charges!", src_slot_check, dst_slot_check, stack_count_check);
 		return false;
+	}
+
+	// Step 6: Ghost Copy — intercept moves involving ghost-copy slots.
+	// If HandleMoveItem returns true the move is fully handled and we return.
+	if (GhostCopy::HandleMoveItem(this, static_cast<int16>(src_slot_check), static_cast<int16>(dst_slot_check))) {
+		return true;
 	}
 
 	if (move_in->from_slot == move_in->to_slot) { // Item summon, no further processing needed

@@ -28,6 +28,11 @@ namespace ItemProgression {
 
 	// ID offset between tiers.  Enchanted = base + 250K, Legendary = base + 500K, Mythic = base + 750K.
 	// Kept within 20-bit item-link mask (0xFFFFF = 1,048,575) so chat links work.
+	//
+	// CONSTRAINT: Base item IDs must be < 298,575 (hard limit enforced by generator).
+	// Mythic ceiling: base_id + 3 * 250,000 must be <= 1,048,575  →  max base_id = 298,575.
+	// The generator (tools/generate_tiered_items.py) enforces this and skips out-of-range items.
+	// If the base item pool ever grows past 250K IDs, TIER_ID_OFFSET must be revisited.
 	constexpr uint32 TIER_ID_OFFSET = 250'000;
 
 	// ----- ID mapping helpers (DB-backed tier items) -----

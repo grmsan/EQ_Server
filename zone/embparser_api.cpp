@@ -161,6 +161,11 @@ void Perl__summonitem(int item_id, int charges)
 	quest_manager.summonitem(item_id, charges);
 }
 
+void Perl__grant_tiered_item(int base_item_id, int tier)
+{
+	quest_manager.grant_tiered_item(static_cast<uint32>(base_item_id), tier);
+}
+
 void Perl__write(const char* file, const char* message)
 {
 	quest_manager.write(file, message);
@@ -6945,6 +6950,7 @@ void perl_register_quest()
 	package.add("summonburiedplayercorpse", &Perl__summonburiedplayercorpse);
 	package.add("summonitem", (void(*)(int))&Perl__summonitem);
 	package.add("summonitem", (void(*)(int, int))&Perl__summonitem);
+	package.add("grant_tiered_item", &Perl__grant_tiered_item);
 	package.add("surname", &Perl__surname);
 	package.add("targlobal", &Perl__targlobal);
 	package.add("taskselector", &Perl__taskselector);

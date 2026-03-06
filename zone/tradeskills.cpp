@@ -30,6 +30,9 @@
 
 #include "queryserv.h"
 #include "quest_parser_collection.h"
+#include "augment_merge.h"
+#include "salvage.h"
+#include "augment_infusion.h"
 #include "string_ids.h"
 #include "titles.h"
 #include "zonedb.h"
@@ -384,6 +387,33 @@ void Object::HandleCombine(Client* user, const NewCombine_Struct* in_combine, Ob
 		else if (inst) {
 			user->MessageString(Chat::LightBlue, DETRANSFORM_FAILED, inst->GetItem()->Name);
 		}
+		auto outapp = new EQApplicationPacket(OP_TradeSkillCombine, 0);
+		user->QueuePacket(outapp);
+		safe_delete(outapp);
+		return;
+	}
+
+	// Salvage Satchel — intercept Combine button to run salvage logic
+	if (some_id == static_cast<uint32>(RuleI(ItemProgression, SalvageSatchelItemID))) {
+		Salvage::ProcessSatchel(user, in_combine->container_slot);
+		auto outapp = new EQApplicationPacket(OP_TradeSkillCombine, 0);
+		user->QueuePacket(outapp);
+		safe_delete(outapp);
+		return;
+	}
+
+	// Augment Forge — intercept Combine to run merge logic (Step 9)
+	if (some_id == static_cast<uint32>(RuleI(ItemProgression, ForgemasterContainerItemID))) {
+		AugmentMerge::ProcessForgemaster(user, in_combine->container_slot);
+		auto outapp = new EQApplicationPacket(OP_TradeSkillCombine, 0);
+		user->QueuePacket(outapp);
+		safe_delete(outapp);
+		return;
+	}
+
+	// Infusion Pool — intercept Combine to run infusion logic (Step 11)
+	if (some_id == static_cast<uint32>(RuleI(ItemProgression, InfusionPoolItemID))) {
+		AugmentInfusion::ProcessInfusionPool(user, in_combine->container_slot);
 		auto outapp = new EQApplicationPacket(OP_TradeSkillCombine, 0);
 		user->QueuePacket(outapp);
 		safe_delete(outapp);

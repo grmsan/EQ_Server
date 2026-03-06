@@ -21,6 +21,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 #include "../common/eq_packet_structs.h"
 #include "../common/rulesys.h"
 #include "../common/spdat.h"
+#include "../common/item_tier.h"
 #include "../common/strings.h"
 #include "../common/data_verification.h"
 #include "../common/misc_functions.h"
@@ -944,7 +945,7 @@ int Mob::GetACSoftcap()
 		return rogshmbstber_softcaps[level];
 	if (HasClass(Class::Druid))
 		return dru_softcaps[level];
-	
+
 	return necwizmagenc_softcaps[level];
 }
 
@@ -3017,19 +3018,20 @@ bool NPC::Death(Mob* killer_mob, int64 damage, uint16 spell, EQ::skills::SkillTy
 	// ── Power Slot Item XP (Step 3 — Infinite Item Progression) ──────
 	// Award item XP to all clients who earned kill credit.
 	// For solo: give_exp_client. For groups/raids: iterate members.
+	// Only awards to members who are alive and in the same zone.
 	if (give_exp_client && !IsCorpse() && !is_ldon_treasure && MerchantType == 0) {
 		Group* kg = entity_list.GetGroupByClient(give_exp_client);
 		Raid*  kr = entity_list.GetRaidByClient(give_exp_client);
 
 		if (kr) {
 			for (const auto& m : kr->members) {
-				if (m.member && !m.is_bot && m.member->IsClient()) {
+				if (m.member && !m.is_bot && m.member->IsClient() && !m.member->IsDead()) {
 					PowerSlotXP::AwardKillXP(m.member->CastToClient(), this);
 				}
 			}
 		} else if (kg) {
 			for (const auto& m : kg->members) {
-				if (m && m->IsClient()) {
+				if (m && m->IsClient() && !m->CastToClient()->IsDead()) {
 					PowerSlotXP::AwardKillXP(m->CastToClient(), this);
 				}
 			}
@@ -3107,6 +3109,54 @@ bool NPC::Death(Mob* killer_mob, int64 damage, uint16 spell, EQ::skills::SkillTy
 		entity_list.LimitRemoveNPC(this);
 
 		entity_list.AddCorpse(corpse, GetID());
+
+		// --- Drop Tier Announcements (Infinite Item Progression Step 7) ---
+		// Scan the NPC's loot for tiered items and announce to the killer's group/raid.
+		if (killer && killer->IsClient() && RuleB(ItemProgression, DropTierEnabled)) {
+			for (const auto* loot_item : m_loot_items) {
+				if (!loot_item) {
+					continue;
+				}
+				int tier = ItemProgression::GetTierFromItemID(loot_item->item_id);
+				if (tier <= ItemProgression::TierBase) {
+					continue;
+				}
+				const EQ::ItemData *item_data = database.GetItem(loot_item->item_id);
+				if (!item_data) {
+					continue;
+				}
+
+				uint32 color = ItemProgression::GetTierChatColor(tier);
+				std::string msg = fmt::format(
+					"A {} {} has dropped!",
+					ItemProgression::GetTierName(tier),
+					item_data->Name
+				);
+
+				Client* killer_client = killer->CastToClient();
+				killer_client->Message(color, "%s", msg.c_str());
+
+				if (killer->IsGrouped()) {
+					Group* g = entity_list.GetGroupByClient(killer_client);
+					if (g) {
+						for (const auto &m : g->members) {
+							if (m && m->IsClient() && m != killer) {
+								m->CastToClient()->Message(color, "%s", msg.c_str());
+							}
+						}
+					}
+				} else if (killer->IsRaidGrouped()) {
+					Raid* r = entity_list.GetRaidByClient(killer_client);
+					if (r) {
+						for (const auto &rm : r->members) {
+							if (rm.member && rm.member->IsClient() && rm.member != killer) {
+								rm.member->CastToClient()->Message(color, "%s", msg.c_str());
+							}
+						}
+					}
+				}
+			}
+		}
 
 		// The client sees NPC corpses as name's_corpse.  The server uses
 		// name`s_corpse so that %T works on corpses (client workaround)

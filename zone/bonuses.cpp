@@ -26,6 +26,7 @@
 #include "entity.h"
 #include "mob.h"
 #include "stat_debug.h"
+#include "ghost_copy.h"
 #include <sstream>
 
 #include "bot.h"
@@ -130,6 +131,9 @@ void Client::CalcBonuses()
 	SendServerStatsUpdate();
 	SendEdgeStats();
 
+	// Step 6: Ghost Copy — place/remove ghost copy of PS progression item
+	GhostCopy::UpdateGhostCopy(this);
+
 	// hmm maybe a better way to do this
 	int metabolism = spellbonuses.Metabolism + itembonuses.Metabolism + aabonuses.Metabolism;
 	bool is_monk = (GetClass() == Class::Monk);
@@ -170,6 +174,17 @@ void Mob::CalcItemBonuses(StatBonuses* b) {
 
 		if (!inst) {
 			continue;
+		}
+
+		// Step 6: Ghost Copy — Progression items in the Power Source slot never
+		// contribute stats directly.  Their stats come from the ghost copy in the
+		// native equipment slot (placed by GhostCopy::UpdateGhostCopy).
+		// Real power-source-only items are unaffected and always contribute.
+		if (i == EQ::invslot::slotPowerSource && IsClient()) {
+			const auto* item_data = inst->GetItem();
+			if (item_data && GhostCopy::IsProgressionItem(item_data)) {
+				continue; // Skip — stats come from ghost copy
+			}
 		}
 
 		AddItemBonuses(inst, b, false, false, 0, (i == EQ::invslot::slotAmmo));

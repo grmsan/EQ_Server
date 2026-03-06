@@ -5,6 +5,7 @@
 #include "../common/repositories/character_tasks_repository.h"
 #include "../common/repositories/completed_tasks_repository.h"
 #include "../common/rulesys.h"
+#include "../common/item_tier.h"
 #include "client.h"
 #include "queryserv.h"
 #include "quest_parser_collection.h"
@@ -1016,6 +1017,17 @@ void ClientTaskState::RewardTask(Client *c, const TaskInformation *ti, ClientTas
 			}
 
 			if (item_id > 0) {
+				// Auto-tier task rewards when QuestItemDefaultTier is set
+				int task_tier = RuleI(ItemProgression, QuestItemDefaultTier);
+				if (task_tier > 0 && !ItemProgression::IsTieredItem(item_id)) {
+					int tier = std::clamp(task_tier, 0, static_cast<int>(ItemProgression::TierMax));
+					uint32 tiered_id = ItemProgression::GetTieredItemID(item_id, tier);
+					const EQ::ItemData *tiered_item = database.GetItem(tiered_id);
+					if (tiered_item) {
+						item_id = tiered_id;
+					}
+				}
+
 				std::unique_ptr<EQ::ItemInstance> inst(database.CreateItem(item_id, charges));
 				if (inst && inst->GetItem()) {
 					c->CheckItemDiscoverability(item_id);

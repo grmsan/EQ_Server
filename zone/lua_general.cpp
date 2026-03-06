@@ -11,6 +11,7 @@
 #include "../common/timer.h"
 #include "../common/classes.h"
 #include "../common/rulesys.h"
+#include "../common/item_tier.h"
 #include "lua_item.h"
 #include "lua_iteminst.h"
 #include "lua_client.h"
@@ -5909,6 +5910,10 @@ std::string get_rules(int rule) {
 	return RuleManager::Instance()->GetStringRule((RuleManager::StringType)rule);
 }
 
+void lua_grant_tiered_item(uint32 base_item_id, int tier) {
+	quest_manager.grant_tiered_item(base_item_id, tier);
+}
+
 luabind::scope lua_register_general() {
 	return luabind::namespace_("eq")
 	[(
@@ -6859,7 +6864,8 @@ luabind::scope lua_register_general() {
 		luabind::def("add_expedition_lockout_by_char_id", (void(*)(uint32, std::string, std::string, uint32, std::string))&lua_add_expedition_lockout_by_char_id),
 		luabind::def("remove_expedition_lockout_by_char_id", &lua_remove_expedition_lockout_by_char_id),
 		luabind::def("remove_all_expedition_lockouts_by_char_id", (void(*)(uint32))&lua_remove_all_expedition_lockouts_by_char_id),
-		luabind::def("remove_all_expedition_lockouts_by_char_id", (void(*)(uint32, std::string))&lua_remove_all_expedition_lockouts_by_char_id)
+		luabind::def("remove_all_expedition_lockouts_by_char_id", (void(*)(uint32, std::string))&lua_remove_all_expedition_lockouts_by_char_id),
+		luabind::def("grant_tiered_item", &lua_grant_tiered_item)
 	)];
 }
 

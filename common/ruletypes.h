@@ -1222,6 +1222,29 @@ RULE_INT(ItemProgression, RaidTierMinLevel, 55, "Minimum NPC level to qualify fo
 RULE_BOOL(ItemProgression, PowerSlotXPEnabled, true, "Enable Power Slot XP gain from kills.")
 RULE_BOOL(ItemProgression, PowerSlotXPMessages, true, "Show item XP gain messages on each kill.")
 RULE_BOOL(ItemProgression, PowerSlotMilestoneMessages, true, "Show milestone messages at 25/50/75/90% thresholds.")
+// Salvage system — Step 4
+RULE_INT(ItemProgression, CommonEssenceCurrencyID, 100, "Alternate currency ID for Common Essence.")
+RULE_INT(ItemProgression, RareEssenceCurrencyID, 101, "Alternate currency ID for Rare Essence.")
+RULE_INT(ItemProgression, SalvageSatchelItemID, 200020, "Item ID of the Salvage Satchel container.")
+RULE_INT(ItemProgression, ForgemasterContainerItemID, 200510, "Item ID of the Augment Forge container used for augment merging.")
+RULE_INT(ItemProgression, InfusionPoolItemID, 200530, "Item ID of the Infusion Pool container used for augment infusion.")
+RULE_REAL(ItemProgression, SalvageRareChanceNormal, 0.02f, "Chance (0-1) of a Rare Essence proc when salvaging a normal item.")
+RULE_REAL(ItemProgression, SalvageRareChanceNamed, 0.10f, "Chance (0-1) of a Rare Essence proc when salvaging a named/raid-tier item.")
+RULE_INT(ItemProgression, SalvageRareAmountMin, 1, "Minimum Rare Essence awarded on a proc.")
+RULE_INT(ItemProgression, SalvageRareAmountMax, 3, "Maximum Rare Essence awarded on a proc.")
+// Consume system — Step 5
+RULE_INT(ItemProgression, ConsumeItemSameTierPct, 33, "XP granted as % of threshold when consuming a same-tier duplicate item.")
+RULE_INT(ItemProgression, ConsumeItemLowerTierPct, 7, "XP granted as % of threshold when consuming a lower-tier duplicate item.")
+RULE_INT(ItemProgression, ConsumeItemHigherTierPct, 100, "XP granted as % of threshold when consuming a higher-tier duplicate item.")
+RULE_REAL(ItemProgression, ConsumeEssencePerXP, 1.0f, "Common Essence cost per 1 XP when using Consume Essence AA. 1.0 = 1:1 ratio.")
+// Stat Projection / Ghost Copy — Step 6
+RULE_BOOL(ItemProgression, StatProjectionEnabled, true, "When true, Power Source progression items place a ghost copy in native equipment slots.")
+// Drop Tier Chances — Step 7
+RULE_BOOL(ItemProgression, DropTierEnabled, true, "When true, loot drops can roll higher tiers (Enchanted/Legendary/Mythic).")
+RULE_REAL(ItemProgression, DropChanceEnchanted, 15.0, "Percent chance (0-100, fractional OK e.g. 0.5) a loot drop rolls Enchanted tier.")
+RULE_REAL(ItemProgression, DropChanceLegendary, 4.0, "Percent chance (0-100, fractional OK e.g. 0.1) a loot drop rolls Legendary tier.")
+RULE_REAL(ItemProgression, DropChanceMythic, 1.0, "Percent chance (0-100, fractional OK e.g. 0.01) a loot drop rolls Mythic tier.")
+RULE_INT(ItemProgression, QuestItemDefaultTier, 2, "Default tier applied to quest-granted items via SummonItem (0=Base, 1=Enchanted, 2=Legendary, 3=Mythic). 0 disables auto-tier.")
 RULE_CATEGORY_END()
 
 RULE_CATEGORY(Custom)

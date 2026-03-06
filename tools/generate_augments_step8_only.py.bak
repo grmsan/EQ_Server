@@ -1,0 +1,1112 @@
+#!/usr/bin/env python3
+"""
+Step 8 — Essence Vendors + Basic Augments
+==========================================
+Generates SQL for:
+  - Proc spells (DD, lifetap, heal, mana restore)
+  - Leveling weapon augments (Combat/Lifetap/Mana Stones)
+  - Endgame stat augments (Stone of Might, etc.)
+  - Endgame proc augments (Shard of Flame, etc.)
+  - Vendor NPCs in Bazaar (Intro Weaponsmith, Endgame Provisioner)
+  - Merchant lists with alt-currency and platinum pricing
+
+Re-run this script at any time to regenerate the SQL.
+All values are tunable from the CONFIG section below.
+
+Usage:
+    python tools/generate_augments.py
+    => writes utils/sql/git/optional/step8_essence_vendors_basic_augments.sql
+"""
+
+import os, math, datetime
+
+# ============================================================
+# CONFIG — Tune all values here, re-run to regenerate SQL
+# ============================================================
+
+# --- ID Ranges (must not conflict with existing data) ---
+ITEM_ID_START    = 200100   # First augment item ID
+SPELL_ID_START   = 65100    # First proc spell ID
+NPC_ID_BASE      = 181200   # Bazaar NPC ID range (18xxxx pattern)
+SPAWNGROUP_START = 3290000  # Spawngroup IDs
+SPAWN2_START     = 3270000  # Spawn2 IDs
+MERCHANT_ID_BASE = 181200   # Merchant IDs (match NPC IDs)
+
+# --- Currency IDs ---
+COMMON_ESSENCE_CURRENCY = 100
+RARE_ESSENCE_CURRENCY   = 101
+
+# --- Leveling Weapon Augment Tiers ---
+# (required_level, name_prefix, dd_damage, lifetap_heal, mana_restore, plat_cost)
+# Non-linear scaling: ramps at higher levels per design
+LEVELING_TIERS = [
+    (1,  "Chipped",     5,    3,    2,    5),
+    (10, "Rough",       15,   8,    5,    25),
+    (20, "Honed",       30,   15,   10,   75),
+    (30, "Tempered",    50,   25,   18,   150),
+    (40, "Polished",    80,   40,   28,   300),
+    (50, "Reinforced",  120,  60,   40,   500),
+    (60, "Masterwork",  250,  130,  85,   1200),
+    (65, "Pristine",    500,  260,  170,  2500),
+    (70, "Flawless",    1000, 520,  340,  5000),
+]
+
+# Leveling aug bonus damage (flat +DMG stat on the aug)
+LEVELING_BONUS_DMG = [1, 2, 3, 4, 5, 6, 8, 10, 13]
+
+# --- Endgame Stat Augments ---
+# (key, name, heroic_field, heroic_val, secondary_field, secondary_val, essence_cost, plat_cost)
+ENDGAME_STAT_AUGS = [
+    ("might",     "Stone of Might",     "heroic_str", 3, "attack",   5,  500,  500),
+    ("fortitude", "Stone of Fortitude", "heroic_sta", 3, "ac",       8,  500,  500),
+    ("precision", "Stone of Precision", "heroic_dex", 3, "attack",   5,  500,  500),
+    ("evasion",   "Stone of Evasion",   "heroic_agi", 3, "avoidance",5,  500,  500),
+    ("insight",   "Stone of Insight",   "heroic_int", 3, "spelldmg", 8,  500,  500),
+    ("devotion",  "Stone of Devotion",  "heroic_wis", 3, "healamt",  8,  500,  500),
+    ("presence",  "Stone of Presence",  "heroic_cha", 3, "hp",       15, 500,  500),
+]
+
+# --- Endgame Proc Augments ---
+# (key, name, proc_type, base_value, essence_cost, plat_cost)
+# proc_type: "fire_dd", "cold_dd", "poison_dot", "heal", "lifetap"
+ENDGAME_PROC_AUGS = [
+    ("flame",    "Shard of Flame",    "fire_dd",    100, 750, 1000),
+    ("frost",    "Shard of Frost",    "cold_dd",    100, 750, 1000),
+    ("venom",    "Shard of Venom",    "poison_dot", 40,  750, 1000),
+    ("mending",  "Shard of Mending",  "heal",       150, 750, 1000),
+    ("siphon",   "Shard of Siphoning","lifetap",    80,  750, 1000),
+]
+
+# --- Proc Reuse Timers (in seconds) ---
+PROC_REUSE = {
+    "fire_dd":    8,
+    "cold_dd":    8,
+    "poison_dot": 10,
+    "heal":       12,
+    "lifetap":    10,
+}
+
+# Resist types: 0=none, 1=magic, 2=fire, 3=cold, 4=poison, 5=disease
+PROC_RESIST = {
+    "fire_dd":    2,
+    "cold_dd":    3,
+    "poison_dot": 4,
+    "heal":       0,
+    "lifetap":    1,
+}
+
+# Target types: 5=single, 6=self, 13=lifetap (target + self heal)
+PROC_TARGET = {
+    "fire_dd":    5,
+    "cold_dd":    5,
+    "poison_dot": 5,
+    "heal":       6,   # self-heal
+    "lifetap":    13,  # damage target + heal self
+}
+
+# --- Augment Item Defaults ---
+AUG_ITEM_DEFAULTS = {
+    "itemtype":   54,       # augmentation
+    "magic":      1,
+    "nodrop":     0,        # tradeable
+    "norent":     1,
+    "weight":     0,
+    "size":       0,        # tiny
+    "icon":       1057,     # generic gem icon
+    "idfile":     "IT63",   # generic augment model
+    "classes":    65535,     # all classes
+    "races":      65535,    # all races
+    "slots":      0,        # aug doesn't equip in armor slots
+}
+
+# Weapon aug type: AugType bitmask (8 = WeaponGeneral)
+WEAPON_AUG_TYPE = 8
+# General stat aug type: AugType bitmask (1 = GeneralSingleStat)
+STAT_AUG_TYPE   = 1
+
+# --- Merchant List Defaults ---
+# faction_required: -100 = no faction needed (default)
+FACTION_REQUIRED = -100
+
+# --- Vendor NPCs ---
+# Positioned in a cluster in the Bazaar
+VENDOR_NPCS = [
+    {
+        "id":           NPC_ID_BASE,
+        "name":         "Augment_Weaponsmith",
+        "merchant_id":  NPC_ID_BASE,
+        "last_name":    "Leveling Augments",
+        "x":            -100.0,
+        "y":            -840.0,
+        "z":            3.44,
+        "heading":      0.0,
+        "race":         1,      # human
+        "gender":       0,      # male
+        "texture":      3,      # plate armor look
+        "level":        65,
+        "description":  "Sells leveling weapon augments for platinum",
+    },
+    {
+        "id":           NPC_ID_BASE + 1,
+        "name":         "Essence_Provisioner",
+        "merchant_id":  NPC_ID_BASE + 1,
+        "last_name":    "Essence Augments",
+        "x":            -110.0,
+        "y":            -840.0,
+        "z":            3.44,
+        "heading":      0.0,
+        "race":         1,      # human
+        "gender":       1,      # female
+        "texture":      3,
+        "level":        65,
+        "description":  "Sells endgame augments for Common Essence",
+    },
+    {
+        "id":           NPC_ID_BASE + 2,
+        "name":         "Essence_Artificer",
+        "merchant_id":  NPC_ID_BASE + 2,
+        "last_name":    "Rare Augments",
+        "x":            -120.0,
+        "y":            -840.0,
+        "z":            3.44,
+        "heading":      0.0,
+        "race":         1,      # human
+        "gender":       0,      # male
+        "texture":      7,      # robes
+        "level":        65,
+        "description":  "Sells premium augments for Rare Essence",
+    },
+]
+
+# ============================================================
+# ICON MAP — assign distinct icons per augment family
+# ============================================================
+# RoF2 client gem/stone icons:
+#   1057 = white gem (default)
+#   1058 = red gem (fire)
+#   1059 = blue gem (cold)
+#   1060 = green gem (poison)
+#   1061 = yellow/gold gem (heal)
+#   1062 = purple gem (lifetap/siphon)
+#   1063 = grey gem (mana)
+ICON_MAP = {
+    "combat":    1058,  # red = fire/damage
+    "lifetap":   1062,  # purple = lifetap
+    "mana":      1063,  # grey = mana
+    "flame":     1058,  # red
+    "frost":     1059,  # blue
+    "venom":     1060,  # green
+    "mending":   1061,  # yellow
+    "siphon":    1062,  # purple
+    "might":     1057,  # white (STR)
+    "fortitude": 1057,  # white (STA)
+    "precision": 1057,  # white (DEX)
+    "evasion":   1057,  # white (AGI)
+    "insight":   1059,  # blue (INT)
+    "devotion":  1061,  # yellow (WIS)
+    "presence":  1057,  # white (CHA)
+}
+
+# ============================================================
+# SQL GENERATION
+# ============================================================
+
+OUTPUT_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "utils", "sql", "git", "optional",
+    "step8_essence_vendors_basic_augments.sql",
+)
+
+
+def sql_str(s):
+    """Escape a string for SQL single-quoted value."""
+    return s.replace("'", "''")
+
+
+def build_spell_insert(spell_id, name, damage, resist, target, reuse_sec,
+                       is_dot=False, dot_ticks=3, is_heal=False, is_mana=False):
+    """
+    Build an INSERT for a single spell in spells_new.
+    
+    Key fields:
+      effectid1 = 0 (HP change) for DD/lifetap/heal; 15 (mana) for mana restore
+      effect_base_value1 = negative for damage, positive for heal/mana
+      targettype = 5 (single), 6 (self only), 13 (lifetap)
+      resisttype = element
+      cast_time = 0 (instant — it's a proc)
+      recast_time = reuse_sec * 1000
+      mana = 0 (no mana cost — it's a proc)
+      goodEffect = 1 for heals/mana, 0 for damage
+      buffduration/formula = 0 for instant, set for DoTs
+    """
+    # All unused effect slots set to 254 (no effect)
+    effectid_slots = ["254"] * 12
+    base_slots     = ["0"] * 12
+    limit_slots    = ["0"] * 12
+    max_slots      = ["0"] * 12
+    formula_slots  = ["100"] * 12  # 100 = no scaling
+
+    if is_mana:
+        effectid_slots[0] = "15"          # SPA 15 = Mana
+        base_slots[0] = str(abs(damage))  # positive = restore mana
+        good_effect = 1
+        buff_dur = 0
+        buff_formula = 0
+    elif is_heal:
+        effectid_slots[0] = "0"           # SPA 0 = HP
+        base_slots[0] = str(abs(damage))  # positive = heal
+        good_effect = 1
+        buff_dur = 0
+        buff_formula = 0
+    elif is_dot:
+        effectid_slots[0] = "0"
+        base_slots[0] = str(-abs(damage))  # negative per tick
+        max_slots[0] = str(abs(damage) * dot_ticks * 2)  # damage cap
+        good_effect = 0
+        buff_dur = dot_ticks  # ticks (6s each)
+        buff_formula = 7     # formula 7 = fixed duration
+    else:
+        # DD or lifetap
+        effectid_slots[0] = "0"
+        base_slots[0] = str(-abs(damage))
+        max_slots[0] = str(abs(damage) * 2)  # damage cap
+        good_effect = 0 if target != 6 else 1
+        buff_dur = 0
+        buff_formula = 0
+
+    # For lifetap (target 13), the engine handles the heal automatically
+
+    cols = [
+        "id", "name", "player_1", "teleport_zone",
+        "range", "aoerange", "pushback", "pushup",
+        "cast_time", "recovery_time", "recast_time",
+        "buffdurationformula", "buffduration",
+        "AEDuration", "mana", "effect_base_value1",
+        "effect_base_value2", "effect_base_value3",
+        "effect_base_value4", "effect_base_value5",
+        "effect_base_value6", "effect_base_value7",
+        "effect_base_value8", "effect_base_value9",
+        "effect_base_value10", "effect_base_value11",
+        "effect_base_value12",
+        "effect_limit_value1", "effect_limit_value2",
+        "effect_limit_value3", "effect_limit_value4",
+        "effect_limit_value5", "effect_limit_value6",
+        "effect_limit_value7", "effect_limit_value8",
+        "effect_limit_value9", "effect_limit_value10",
+        "effect_limit_value11", "effect_limit_value12",
+        "max1", "max2", "max3", "max4",
+        "max5", "max6", "max7", "max8",
+        "max9", "max10", "max11", "max12",
+        "icon", "memicon",
+        "components1", "components2", "components3", "components4",
+        "component_counts1", "component_counts2",
+        "component_counts3", "component_counts4",
+        "NoexpendReagent1", "NoexpendReagent2",
+        "NoexpendReagent3", "NoexpendReagent4",
+        "formula1", "formula2", "formula3", "formula4",
+        "formula5", "formula6", "formula7", "formula8",
+        "formula9", "formula10", "formula11", "formula12",
+        "goodEffect", "activated", "resisttype",
+        "effectid1", "effectid2", "effectid3", "effectid4",
+        "effectid5", "effectid6", "effectid7", "effectid8",
+        "effectid9", "effectid10", "effectid11", "effectid12",
+        "targettype", "basediff", "skill",
+        "zonetype", "EnvironmentType",
+        "TimeOfDay", "classes1", "classes2", "classes3",
+        "classes4", "classes5", "classes6", "classes7",
+        "classes8", "classes9", "classes10", "classes11",
+        "classes12", "classes13", "classes14", "classes15",
+        "classes16",
+        "CastingAnim", "TargetAnim",
+        "TravelType", "SpellAffectIndex",
+        "disallow_sit", "deities0", "deities1", "deities2",
+        "deities3", "deities4", "deities5", "deities6",
+        "deities7", "deities8", "deities9", "deities10",
+        "deities11", "deities12", "deities13", "deities14",
+        "deities15", "deities16",
+        "npc_no_los", "field142", "field143",
+        "new_icon", "spellanim", "uninterruptable",
+        "ResistDiff", "dot_stacking_exempt",
+        "deleteable", "RecourseLink",
+        "no_partial_resist",
+        "field181", "field182", "field183",
+        "short_buff_box", "descnum", "typedescnum",
+        "effectdescnum", "effectdescnum2",
+        "npc_no_cast", "reflectable",
+        "bonushate",
+        "field198",
+        "field199",
+        "EndurCost", "EndurTimerIndex",
+        "IsDiscipline",
+        "field209", "field210", "field211", "field212",
+        "pvpresistbase", "pvpresistcalc", "pvpresistcap",
+        "spell_category",
+        "field220",
+        "field221", "field222", "field223",
+        "field224",
+        "field225", "field226",
+        "field227", "field228", "field229",
+        "field230",
+        "field231",
+        "field232",
+        "field233",
+        "field234",
+        "field235",
+        "MinResist", "MaxResist",
+        "viral_targets", "viral_timer",
+        "field242",
+        "field243",
+        "field244",
+        "HateAdded",
+        "EndurUpkeep",
+        "numhitstype", "numhits",
+        "pvpresistStorageCalc", "pvpresistStorageBase",
+        "pvpresistStorageCap",
+        "spell_recourse_type",
+        "field257",
+        "field258",
+        "field259",
+        "aemaxtargets",
+        "maxtargets",
+        "field263", "field264", "field265",
+        "field266",
+        "field267",
+        "persist_death",
+        "field269",
+        "min_dist", "min_dist_mod",
+        "max_dist", "max_dist_mod",
+        "min_range",
+        "field275", "field276",
+        "field277",
+    ]
+
+    # We use build_simple_spell() below instead as a cleaner approach.
+    pass  # Kept as dead code reference — not called
+
+
+def build_simple_spell(spell_id, name, damage, resist, target, reuse_ms,
+                       is_dot=False, dot_ticks=3, is_heal=False, is_mana=False):
+    """Build a minimal spell INSERT with only columns that exist in spells_new."""
+    vals = {}
+    vals["id"] = spell_id
+    vals["name"] = f"'{sql_str(name)}'"
+    vals["player_1"] = "'BLUE_TRAIL'"
+    vals["teleport_zone"] = "''"
+    vals["you_cast"] = "''"
+    vals["other_casts"] = "''"
+    vals["cast_on_you"] = "''"
+    vals["cast_on_other"] = "''"
+    vals["spell_fades"] = "''"
+    vals["range"] = 200 if target != 6 else 0
+    vals["aoerange"] = 0
+    vals["pushback"] = 0.0
+    vals["pushup"] = 0.0
+    vals["cast_time"] = 0
+    vals["recovery_time"] = 0
+    vals["recast_time"] = reuse_ms
+    vals["mana"] = 0
+    vals["resisttype"] = resist
+    vals["targettype"] = target
+    vals["skill"] = 98
+    vals["LightType"] = 0
+    vals["goodEffect"] = 1 if (is_heal or is_mana) else 0
+    vals["Activated"] = 0
+    vals["zonetype"] = -1
+    vals["EnvironmentType"] = 0
+    vals["TimeOfDay"] = 0
+    vals["basediff"] = 0
+    vals["icon"] = 0
+    vals["memicon"] = 0
+    vals["spellanim"] = 44 if not (is_heal or is_mana) else 13
+    vals["uninterruptable"] = 1
+    vals["ResistDiff"] = -200
+    vals["deleteable"] = 0
+    vals["RecourseLink"] = 0
+    vals["short_buff_box"] = -1 if not is_dot else 0
+    vals["descnum"] = 0
+    vals["typedescnum"] = 0
+    vals["effectdescnum"] = 0
+    vals["effectdescnum2"] = 0
+    vals["npc_no_los"] = 0
+    vals["reflectable"] = 0
+    vals["bonushate"] = 0
+    vals["EndurCost"] = 0
+    vals["EndurTimerIndex"] = 0
+    vals["IsDiscipline"] = 0
+    vals["HateAdded"] = 0
+    vals["EndurUpkeep"] = 0
+    vals["numhitstype"] = 0
+    vals["numhits"] = 0
+    vals["pvpresistbase"] = -1
+    vals["pvpresistcalc"] = 0
+    vals["pvpresistcap"] = 0
+    vals["spell_category"] = -99
+    vals["aemaxtargets"] = 0
+    vals["maxtargets"] = 0
+    vals["viral_targets"] = 0
+    vals["viral_timer"] = 0
+    vals["MinResist"] = 0
+    vals["MaxResist"] = 0
+    vals["min_dist"] = 0.0
+    vals["min_dist_mod"] = 0.0
+    vals["max_dist"] = 0.0
+    vals["max_dist_mod"] = 0.0
+    vals["min_range"] = 0
+    vals["persistdeath"] = 0
+    vals["no_partial_resist"] = 0
+    vals["dot_stacking_exempt"] = 0
+    vals["disallow_sit"] = 0
+    vals["TravelType"] = 0
+    vals["SpellAffectIndex"] = -1
+    vals["CastingAnim"] = 44
+    vals["TargetAnim"] = 0
+    vals["new_icon"] = 0
+    vals["ldon_trap"] = 0
+    vals["pvp_duration"] = 0
+    vals["pvp_duration_cap"] = 0
+    vals["pcnpc_only_flag"] = 0
+    vals["cast_not_standing"] = 0
+    vals["can_mgb"] = 0
+    vals["nodispell"] = 0
+    vals["npc_category"] = 0
+    vals["npc_usefulness"] = 0
+    vals["nimbuseffect"] = 0
+    vals["ConeStartAngle"] = 0
+    vals["ConeStopAngle"] = 0
+    vals["sneaking"] = 0
+    vals["not_extendable"] = 0
+    vals["suspendable"] = 0
+    vals["viral_range"] = 0
+    vals["songcap"] = 0
+    vals["no_block"] = 0
+    vals["spellgroup"] = 0
+    vals["rank"] = 0
+    vals["CastRestriction"] = 0
+    vals["allowrest"] = 0
+    vals["InCombat"] = 0
+    vals["OutofCombat"] = 0
+
+    # Classes — all 16 classes can use (255 = all levels)
+    for i in range(1, 17):
+        vals[f"classes{i}"] = 255
+
+    # Deities — 0 = all
+    vals["deities0"] = 0
+    for i in range(1, 17):
+        vals[f"deities{i}"] = 0
+
+    # Components — -1 = none
+    for i in range(1, 5):
+        vals[f"components{i}"] = -1
+        vals[f"component_counts{i}"] = 1
+        vals[f"NoexpendReagent{i}"] = -1
+
+    # Effect slots — 12 slots
+    for i in range(1, 13):
+        vals[f"effectid{i}"] = 254
+        vals[f"effect_base_value{i}"] = 0
+        vals[f"effect_limit_value{i}"] = 0
+        vals[f"max{i}"] = 0
+        vals[f"formula{i}"] = 100
+
+    # Only the field### columns that actually exist in spells_new
+    VALID_FIELDS = [142,143,152,153,160,163,164,169,170,171,172,198,199,
+                    203,204,206,209,210,215,216,217,220,221,222,223,225,
+                    226,232,233,234,235,236]
+    for f in VALID_FIELDS:
+        vals[f"field{f}"] = 0
+
+    # DoT/buff duration
+    if is_dot:
+        vals["buffdurationformula"] = 7
+        vals["buffduration"] = dot_ticks
+        vals["AEDuration"] = 2500
+        vals["short_buff_box"] = 0
+    else:
+        vals["buffdurationformula"] = 0
+        vals["buffduration"] = 0
+        vals["AEDuration"] = 0
+
+    # Set slot 1 effect
+    if is_mana:
+        vals["effectid1"] = 15
+        vals["effect_base_value1"] = abs(damage)
+        vals["goodEffect"] = 1
+    elif is_heal:
+        vals["effectid1"] = 0
+        vals["effect_base_value1"] = abs(damage)
+        vals["goodEffect"] = 1
+    elif is_dot:
+        vals["effectid1"] = 0
+        vals["effect_base_value1"] = -abs(damage)
+        vals["max1"] = abs(damage) * dot_ticks * 2
+    else:
+        vals["effectid1"] = 0
+        vals["effect_base_value1"] = -abs(damage)
+        vals["max1"] = abs(damage) * 2
+
+    return vals
+
+
+def spell_insert_sql(vals):
+    """Convert a vals dict to an INSERT statement."""
+    cols = sorted(vals.keys())
+    col_str = ", ".join(f"`{c}`" for c in cols)
+    val_str = ", ".join(str(vals[c]) for c in cols)
+    return f"INSERT INTO `spells_new` ({col_str}) VALUES ({val_str});"
+
+
+def item_insert_sql(vals):
+    """Convert a vals dict to an INSERT statement for items."""
+    cols = sorted(vals.keys())
+    col_str = ", ".join(f"`{c}`" for c in cols)
+    val_str = ", ".join(str(vals[c]) for c in cols)
+    return f"INSERT INTO `items` ({col_str}) VALUES ({val_str});"
+
+
+def build_aug_item(item_id, name, reqlevel=0, augtype=STAT_AUG_TYPE,
+                   proceffect=-1, proctype=0, proclevel2=0, procrate=0,
+                   damage=0, icon=1057, price=0,
+                   heroic_str=0, heroic_sta=0, heroic_dex=0, heroic_agi=0,
+                   heroic_int=0, heroic_wis=0, heroic_cha=0,
+                   attack=0, ac=0, hp=0, spelldmg=0, healamt=0, avoidance=0,
+                   lore=""):
+    """Build an item dict for an augment."""
+    v = dict(AUG_ITEM_DEFAULTS)
+    v["id"] = item_id
+    v["Name"] = f"'{sql_str(name)}'"
+    v["reqlevel"] = reqlevel
+    v["augtype"] = augtype
+    v["proceffect"] = proceffect
+    v["proctype"] = proctype
+    v["proclevel2"] = proclevel2
+    v["procrate"] = procrate
+    v["damage"] = damage
+    v["icon"] = icon
+    v["price"] = price  # in copper (multiply pp by 10 for gold... actually EQ price = copper)
+    v["heroic_str"] = heroic_str
+    v["heroic_sta"] = heroic_sta
+    v["heroic_dex"] = heroic_dex
+    v["heroic_agi"] = heroic_agi
+    v["heroic_int"] = heroic_int
+    v["heroic_wis"] = heroic_wis
+    v["heroic_cha"] = heroic_cha
+    v["attack"] = attack
+    v["ac"] = ac
+    v["hp"] = hp
+    v["spelldmg"] = spelldmg
+    v["healamt"] = healamt
+    v["avoidance"] = avoidance
+    v["lore"] = f"'{sql_str(lore)}'" if lore else "''"
+    v["loregroup"] = 0
+    v["minstatus"] = 0
+    v["accuracy"] = 0
+    v["aagi"] = 0
+    v["acha"] = 0
+    v["adex"] = 0
+    v["aint"] = 0
+    v["asta"] = 0
+    v["astr"] = 0
+    v["augrestrict"] = 0
+    v["augslot1type"] = 0
+    v["augslot1visible"] = 0
+    v["augslot2type"] = 0
+    v["augslot2visible"] = 0
+    v["augslot3type"] = 0
+    v["augslot3visible"] = 0
+    v["augslot4type"] = 0
+    v["augslot4visible"] = 0
+    v["augslot5type"] = 0
+    v["augslot5visible"] = 0
+    v["augslot6type"] = 0
+    v["augslot6visible"] = 0
+    v["color"] = 0
+    v["fvnodrop"] = 0
+    v["artifactflag"] = 0
+    v["benefitflag"] = 0
+    v["tradeskills"] = 0
+    v["material"] = 0
+    v["elitematerial"] = 0
+    v["augdistiller"] = 0
+    v["pendingloreflag"] = 0
+    v["stacksize"] = 0  # augs don't stack
+    v["manaregen"] = 0
+
+    # proceffect defaults
+    v["procunk1"] = 0
+    v["procunk2"] = 0
+    v["procunk3"] = 0
+    v["procunk4"] = 0
+    v["procunk6"] = 0
+    v["procunk7"] = 0
+    v["procname"] = "''"
+    v["proclevel"] = 0
+    v["lorefile"] = "''"
+    v["augslot4unk2"] = 0
+    v["augslot5unk2"] = 0
+    v["augslot6unk2"] = 0
+
+    # Ensure string fields are quoted
+    for k in ["idfile"]:
+        if isinstance(v[k], str) and not v[k].startswith("'"):
+            v[k] = f"'{v[k]}'"
+
+    return v
+
+
+def generate():
+    """Generate all SQL and write to output file."""
+    lines = []
+    lines.append("-- ============================================================")
+    lines.append("-- Step 8: Essence Vendors + Basic Augments")
+    lines.append(f"-- Generated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    lines.append("-- Re-run tools/generate_augments.py to regenerate")
+    lines.append("-- ============================================================")
+    lines.append("")
+    lines.append("-- Clean up previous run (idempotent)")
+    lines.append(f"DELETE FROM `items` WHERE id BETWEEN {ITEM_ID_START} AND {ITEM_ID_START + 999};")
+    lines.append(f"DELETE FROM `spells_new` WHERE id BETWEEN {SPELL_ID_START} AND {SPELL_ID_START + 999};")
+    for npc in VENDOR_NPCS:
+        npc_id = npc["id"]
+        lines.append(f"DELETE FROM `merchantlist` WHERE merchantid = {npc['merchant_id']};")
+        lines.append(f"DELETE FROM `spawnentry` WHERE npcID = {npc_id};")
+        lines.append(f"DELETE FROM `npc_types` WHERE id = {npc_id};")
+    lines.append(f"DELETE FROM `spawngroup` WHERE id BETWEEN {SPAWNGROUP_START} AND {SPAWNGROUP_START + 99};")
+    lines.append(f"DELETE FROM `spawn2` WHERE id BETWEEN {SPAWN2_START} AND {SPAWN2_START + 99};")
+    lines.append("")
+
+    # Track IDs
+    next_spell_id = SPELL_ID_START
+    next_item_id  = ITEM_ID_START
+    merchant_slots = {}  # merchant_id -> next slot
+
+    for npc in VENDOR_NPCS:
+        merchant_slots[npc["merchant_id"]] = 0
+
+    # ============================================================
+    # 1. PROC SPELLS — Leveling weapon aug procs
+    # ============================================================
+    lines.append("-- ============================================================")
+    lines.append("-- PROC SPELLS: Leveling Weapon Augments")
+    lines.append("-- ============================================================")
+    lines.append("")
+
+    # Track spell IDs for each tier
+    combat_spell_ids  = {}  # level -> spell_id
+    lifetap_spell_ids = {}
+    mana_spell_ids    = {}
+
+    for tier_idx, (req_lv, prefix, dd_dmg, lt_heal, mn_restore, _) in enumerate(LEVELING_TIERS):
+        # Combat Stone DD proc
+        sid = next_spell_id
+        combat_spell_ids[req_lv] = sid
+        sv = build_simple_spell(
+            sid, f"{prefix} Combat Proc", dd_dmg,
+            resist=2, target=5, reuse_ms=8000
+        )
+        lines.append(spell_insert_sql(sv))
+        next_spell_id += 1
+
+        # Lifetap Stone heal proc (lifetap = dd + self heal)
+        sid = next_spell_id
+        lifetap_spell_ids[req_lv] = sid
+        sv = build_simple_spell(
+            sid, f"{prefix} Lifetap Proc", lt_heal,
+            resist=0, target=6, reuse_ms=10000, is_heal=True
+        )
+        lines.append(spell_insert_sql(sv))
+        next_spell_id += 1
+
+        # Mana Stone mana restore proc
+        sid = next_spell_id
+        mana_spell_ids[req_lv] = sid
+        sv = build_simple_spell(
+            sid, f"{prefix} Mana Proc", mn_restore,
+            resist=0, target=6, reuse_ms=6000, is_mana=True
+        )
+        lines.append(spell_insert_sql(sv))
+        next_spell_id += 1
+
+    lines.append("")
+
+    # ============================================================
+    # 2. PROC SPELLS — Endgame proc augments
+    # ============================================================
+    lines.append("-- ============================================================")
+    lines.append("-- PROC SPELLS: Endgame Proc Augments")
+    lines.append("-- ============================================================")
+    lines.append("")
+
+    endgame_proc_spell_ids = {}  # key -> spell_id
+
+    for key, name, proc_type, base_val, _, _ in ENDGAME_PROC_AUGS:
+        sid = next_spell_id
+        endgame_proc_spell_ids[key] = sid
+
+        is_dot  = proc_type == "poison_dot"
+        is_heal = proc_type == "heal"
+        is_mana = False
+        resist  = PROC_RESIST[proc_type]
+        target  = PROC_TARGET[proc_type]
+        reuse   = PROC_REUSE[proc_type] * 1000
+
+        sv = build_simple_spell(
+            sid, name + " Proc", base_val,
+            resist=resist, target=target, reuse_ms=reuse,
+            is_dot=is_dot, is_heal=is_heal, is_mana=is_mana
+        )
+        lines.append(spell_insert_sql(sv))
+        next_spell_id += 1
+
+    lines.append("")
+
+    # ============================================================
+    # 3. ITEMS — Leveling Weapon Augments
+    # ============================================================
+    lines.append("-- ============================================================")
+    lines.append("-- ITEMS: Leveling Weapon Augments (Combat/Lifetap/Mana Stones)")
+    lines.append("-- ============================================================")
+    lines.append("")
+
+    weaponsmith_id = VENDOR_NPCS[0]["merchant_id"]
+
+    for tier_idx, (req_lv, prefix, dd_dmg, lt_heal, mn_restore, pp_cost) in enumerate(LEVELING_TIERS):
+        bonus_dmg = LEVELING_BONUS_DMG[tier_idx]
+        copper_cost = pp_cost * 1000  # EQ price is in copper (1pp = 1000cp)
+
+        # Combat Stone
+        iid = next_item_id
+        iv = build_aug_item(
+            iid, f"{prefix} Combat Stone",
+            reqlevel=req_lv, augtype=WEAPON_AUG_TYPE,
+            proceffect=combat_spell_ids[req_lv], proctype=0,
+            proclevel2=req_lv, procrate=0,
+            damage=bonus_dmg, icon=ICON_MAP["combat"],
+            price=copper_cost,
+            lore=f"A {prefix.lower()} weapon stone that adds a fire damage proc"
+        )
+        lines.append(item_insert_sql(iv))
+        slot = merchant_slots[weaponsmith_id]
+        lines.append(
+            f"INSERT INTO `merchantlist` (merchantid, slot, item, faction_required, level_required, "
+            f"classes_required, probability) VALUES ({weaponsmith_id}, {slot}, {iid}, {FACTION_REQUIRED}, {req_lv}, 65535, 100);"
+        )
+        merchant_slots[weaponsmith_id] += 1
+        next_item_id += 1
+
+        # Lifetap Stone
+        iid = next_item_id
+        iv = build_aug_item(
+            iid, f"{prefix} Lifetap Stone",
+            reqlevel=req_lv, augtype=WEAPON_AUG_TYPE,
+            proceffect=lifetap_spell_ids[req_lv], proctype=0,
+            proclevel2=req_lv, procrate=0,
+            icon=ICON_MAP["lifetap"],
+            price=copper_cost,
+            lore=f"A {prefix.lower()} weapon stone that heals on hit"
+        )
+        lines.append(item_insert_sql(iv))
+        slot = merchant_slots[weaponsmith_id]
+        lines.append(
+            f"INSERT INTO `merchantlist` (merchantid, slot, item, faction_required, level_required, "
+            f"classes_required, probability) VALUES ({weaponsmith_id}, {slot}, {iid}, {FACTION_REQUIRED}, {req_lv}, 65535, 100);"
+        )
+        merchant_slots[weaponsmith_id] += 1
+        next_item_id += 1
+
+        # Mana Stone
+        iid = next_item_id
+        iv = build_aug_item(
+            iid, f"{prefix} Mana Stone",
+            reqlevel=req_lv, augtype=WEAPON_AUG_TYPE,
+            proceffect=mana_spell_ids[req_lv], proctype=0,
+            proclevel2=req_lv, procrate=0,
+            icon=ICON_MAP["mana"],
+            price=copper_cost,
+            lore=f"A {prefix.lower()} weapon stone that restores mana"
+        )
+        lines.append(item_insert_sql(iv))
+        slot = merchant_slots[weaponsmith_id]
+        lines.append(
+            f"INSERT INTO `merchantlist` (merchantid, slot, item, faction_required, level_required, "
+            f"classes_required, probability) VALUES ({weaponsmith_id}, {slot}, {iid}, {FACTION_REQUIRED}, {req_lv}, 65535, 100);"
+        )
+        merchant_slots[weaponsmith_id] += 1
+        next_item_id += 1
+
+    lines.append("")
+
+    # ============================================================
+    # 4. ITEMS — Endgame Stat Augments
+    # ============================================================
+    lines.append("-- ============================================================")
+    lines.append("-- ITEMS: Endgame Stat Augments (General slot, type 1)")
+    lines.append("-- ============================================================")
+    lines.append("")
+
+    provisioner_id = VENDOR_NPCS[1]["merchant_id"]
+
+    for key, name, hero_field, hero_val, sec_field, sec_val, ess_cost, pp_cost in ENDGAME_STAT_AUGS:
+        iid = next_item_id
+        kwargs = {
+            hero_field: hero_val,
+            sec_field: sec_val,
+        }
+        iv = build_aug_item(
+            iid, name,
+            reqlevel=0,  # no level req for endgame stat augs (gated by Essence cost)
+            augtype=STAT_AUG_TYPE,
+            icon=ICON_MAP[key],
+            price=pp_cost * 1000,
+            lore=f"An augment that enhances {hero_field.replace('heroic_', '').upper()}",
+            **kwargs,
+        )
+        lines.append(item_insert_sql(iv))
+
+        # Merchant entry — Common Essence + Platinum alternate
+        slot = merchant_slots[provisioner_id]
+        lines.append(
+            f"INSERT INTO `merchantlist` (merchantid, slot, item, faction_required, level_required, "
+            f"alt_currency_cost, classes_required, probability) "
+            f"VALUES ({provisioner_id}, {slot}, {iid}, {FACTION_REQUIRED}, 0, {ess_cost}, 65535, 100);"
+        )
+        merchant_slots[provisioner_id] += 1
+        next_item_id += 1
+
+    lines.append("")
+
+    # ============================================================
+    # 5. ITEMS — Endgame Proc Augments
+    # ============================================================
+    lines.append("-- ============================================================")
+    lines.append("-- ITEMS: Endgame Proc Augments (Weapon slot, type 8)")
+    lines.append("-- ============================================================")
+    lines.append("")
+
+    for key, name, proc_type, base_val, ess_cost, pp_cost in ENDGAME_PROC_AUGS:
+        iid = next_item_id
+        iv = build_aug_item(
+            iid, name,
+            reqlevel=0,
+            augtype=WEAPON_AUG_TYPE,
+            proceffect=endgame_proc_spell_ids[key], proctype=0,
+            proclevel2=0, procrate=0,
+            icon=ICON_MAP[key],
+            price=pp_cost * 1000,
+            lore=f"A weapon augment with a {proc_type.replace('_', ' ')} effect",
+        )
+        lines.append(item_insert_sql(iv))
+
+        slot = merchant_slots[provisioner_id]
+        lines.append(
+            f"INSERT INTO `merchantlist` (merchantid, slot, item, faction_required, level_required, "
+            f"alt_currency_cost, classes_required, probability) "
+            f"VALUES ({provisioner_id}, {slot}, {iid}, {FACTION_REQUIRED}, 0, {ess_cost}, 65535, 100);"
+        )
+        merchant_slots[provisioner_id] += 1
+        next_item_id += 1
+
+    lines.append("")
+
+    # ============================================================
+    # 6. AUGMENT SOLVENT
+    # ============================================================
+    lines.append("-- ============================================================")
+    lines.append("-- ITEM: Augment Solvent (safe augment removal)")
+    lines.append("-- ============================================================")
+    lines.append("")
+
+    solvent_id = next_item_id
+    sv = dict(AUG_ITEM_DEFAULTS)
+    sv["id"] = solvent_id
+    sv["Name"] = "'Purified Solvent'"
+    sv["itemtype"] = 55  # augment solvent
+    sv["icon"] = 852     # potion icon
+    sv["idfile"] = "'IT63'"
+    sv["price"] = 100 * 1000  # 100pp
+    sv["lore"] = "'Safely removes an augment from equipment'"
+    sv["augtype"] = 0
+    sv["reqlevel"] = 0
+    sv["stacksize"] = 20
+    sv["loregroup"] = 0
+    sv["minstatus"] = 0
+    sv["accuracy"] = 0
+    sv["aagi"] = 0
+    sv["acha"] = 0
+    sv["adex"] = 0
+    sv["aint"] = 0
+    sv["asta"] = 0
+    sv["astr"] = 0
+    sv["augrestrict"] = 0
+    sv["augslot1type"] = 0
+    sv["augslot1visible"] = 0
+    sv["augslot2type"] = 0
+    sv["augslot2visible"] = 0
+    sv["augslot3type"] = 0
+    sv["augslot3visible"] = 0
+    sv["augslot4type"] = 0
+    sv["augslot4visible"] = 0
+    sv["augslot5type"] = 0
+    sv["augslot5visible"] = 0
+    sv["augslot6type"] = 0
+    sv["augslot6visible"] = 0
+    sv["color"] = 0
+    sv["fvnodrop"] = 0
+    sv["artifactflag"] = 0
+    sv["benefitflag"] = 0
+    sv["tradeskills"] = 0
+    sv["material"] = 0
+    sv["elitematerial"] = 0
+    sv["augdistiller"] = 0
+    sv["pendingloreflag"] = 0
+    sv["manaregen"] = 0
+    sv["proceffect"] = -1
+    sv["proctype"] = 0
+    sv["proclevel2"] = 0
+    sv["procrate"] = 0
+    sv["proclevel"] = 0
+    sv["procunk1"] = 0
+    sv["procunk2"] = 0
+    sv["procunk3"] = 0
+    sv["procunk4"] = 0
+    sv["procunk6"] = 0
+    sv["procunk7"] = 0
+    sv["procname"] = "''"
+    sv["lorefile"] = "''"
+    sv["augslot4unk2"] = 0
+    sv["augslot5unk2"] = 0
+    sv["augslot6unk2"] = 0
+    sv["damage"] = 0
+    sv["heroic_str"] = 0
+    sv["heroic_sta"] = 0
+    sv["heroic_dex"] = 0
+    sv["heroic_agi"] = 0
+    sv["heroic_int"] = 0
+    sv["heroic_wis"] = 0
+    sv["heroic_cha"] = 0
+    sv["attack"] = 0
+    sv["ac"] = 0
+    sv["hp"] = 0
+    sv["spelldmg"] = 0
+    sv["healamt"] = 0
+    sv["avoidance"] = 0
+
+    lines.append(item_insert_sql(sv))
+
+    # Add solvent to all three merchants
+    for npc in VENDOR_NPCS:
+        mid = npc["merchant_id"]
+        slot = merchant_slots[mid]
+        lines.append(
+            f"INSERT INTO `merchantlist` (merchantid, slot, item, faction_required, level_required, "
+            f"classes_required, probability) VALUES ({mid}, {slot}, {solvent_id}, {FACTION_REQUIRED}, 0, 65535, 100);"
+        )
+        merchant_slots[mid] += 1
+
+    next_item_id += 1
+    lines.append("")
+
+    # ============================================================
+    # 7. VENDOR NPCs
+    # ============================================================
+    lines.append("-- ============================================================")
+    lines.append("-- VENDOR NPCs in Bazaar")
+    lines.append("-- ============================================================")
+    lines.append("")
+
+    for idx, npc in enumerate(VENDOR_NPCS):
+        npc_id = npc["id"]
+        # Determine which alt currency this merchant uses
+        # Weaponsmith = platinum only (no alt currency field needed)
+        # Provisioner = Common Essence (alt_currency_id = 100)
+        # Artificer = Rare Essence (alt_currency_id = 101)
+        if idx == 0:
+            alt_currency_id = 0  # platinum only
+        elif idx == 1:
+            alt_currency_id = COMMON_ESSENCE_CURRENCY
+        else:
+            alt_currency_id = RARE_ESSENCE_CURRENCY
+
+        lines.append(
+            f"INSERT INTO `npc_types` (id, name, lastname, level, race, class, bodytype, "
+            f"hp, mana, gender, texture, helmtexture, size, "
+            f"merchant_id, alt_currency_id, "
+            f"loottable_id, npc_faction_id, "
+            f"mindmg, maxdmg, "
+            f"npc_spells_id, npc_spells_effects_id, "
+            f"d_melee_texture1, d_melee_texture2, "
+            f"runspeed, walkspeed, "
+            f"aggroradius, assistradius, findable, trackable) "
+            f"VALUES ("
+            f"{npc_id}, '{sql_str(npc['name'])}', '{sql_str(npc['last_name'])}', "
+            f"{npc['level']}, {npc['race']}, 41, 1, "  # class 41 = merchant, bodytype 1
+            f"100000, 0, {npc['gender']}, {npc['texture']}, {npc['texture']}, 6.0, "
+            f"{npc['merchant_id']}, {alt_currency_id}, "
+            f"0, 0, "  # no loot, no faction
+            f"10, 20, "
+            f"0, 0, "
+            f"0, 0, "
+            f"1.25, 0.6, "
+            f"0, 0, 1, 1);"  # findable=1, trackable=1
+        )
+
+        # Spawngroup
+        sg_id = SPAWNGROUP_START + idx
+        lines.append(
+            f"INSERT INTO `spawngroup` (id, name, spawn_limit, dist) "
+            f"VALUES ({sg_id}, 'bazaar_aug_vendor_{idx}', 0, 0.0);"
+        )
+
+        # Spawnentry
+        lines.append(
+            f"INSERT INTO `spawnentry` (spawngroupID, npcID, chance) "
+            f"VALUES ({sg_id}, {npc_id}, 100);"
+        )
+
+        # Spawn2
+        s2_id = SPAWN2_START + idx
+        lines.append(
+            f"INSERT INTO `spawn2` (id, spawngroupID, zone, version, x, y, z, heading, respawntime) "
+            f"VALUES ({s2_id}, {sg_id}, 'bazaar', 0, {npc['x']}, {npc['y']}, {npc['z']}, {npc['heading']}, 640);"
+        )
+        lines.append("")
+
+    # ============================================================
+    # Summary
+    # ============================================================
+    total_spells = next_spell_id - SPELL_ID_START
+    total_items  = next_item_id  - ITEM_ID_START
+    total_npcs   = len(VENDOR_NPCS)
+
+    lines.append("-- ============================================================")
+    lines.append(f"-- Summary: {total_spells} spells, {total_items} items, {total_npcs} NPCs")
+    lines.append(f"-- Spell IDs: {SPELL_ID_START} - {next_spell_id - 1}")
+    lines.append(f"-- Item IDs:  {ITEM_ID_START} - {next_item_id - 1}")
+    lines.append(f"-- NPC IDs:   {NPC_ID_BASE} - {NPC_ID_BASE + total_npcs - 1}")
+    lines.append("-- ============================================================")
+
+    # Write
+    os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
+    with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+
+    print(f"Generated {OUTPUT_PATH}")
+    print(f"  {total_spells} proc spells (IDs {SPELL_ID_START}-{next_spell_id-1})")
+    print(f"  {total_items} augment items (IDs {ITEM_ID_START}-{next_item_id-1})")
+    print(f"  {total_npcs} vendor NPCs in Bazaar")
+    print()
+    print("Leveling augs:")
+    for req_lv, prefix, dd, lt, mn, pp in LEVELING_TIERS:
+        print(f"  Lv{req_lv:>2}: {prefix:12s}  DD={dd:>4}  Lifetap={lt:>3}  Mana={mn:>3}  Cost={pp}pp")
+    print()
+    print("Endgame stat augs:")
+    for key, name, hf, hv, sf, sv_, ec, pp in ENDGAME_STAT_AUGS:
+        print(f"  {name:24s}  +{hv} {hf.replace('heroic_','').upper():>3}  +{sv_} {sf}  Cost={ec} CE / {pp}pp")
+    print()
+    print("Endgame proc augs:")
+    for key, name, pt, bv, ec, pp in ENDGAME_PROC_AUGS:
+        print(f"  {name:24s}  {pt:12s} {bv:>4}  Cost={ec} CE / {pp}pp")
+
+
+if __name__ == "__main__":
+    generate()

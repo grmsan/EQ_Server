@@ -1,5 +1,6 @@
 #include "../client.h"
 #include "../power_slot_xp.h"
+#include "../ghost_copy.h"
 #include "../../common/item_tier.h"
 #include "../../common/item_ilevel.h"
 #include "../../common/rulesys.h"
@@ -28,18 +29,18 @@ void command_powerslot(Client *c, const Seperator *sep)
 	uint32 base_id    = ItemProgression::GetBaseItemID(current_id);
 	int    cur_tier   = ItemProgression::GetTierFromItemID(current_id);
 
-	// Fetch current XP
-	std::string bucket_key = PowerSlotXP::GetBucketKey(base_id);
-	std::string xp_str     = target->GetBucket(bucket_key);
-	int current_xp         = xp_str.empty() ? 0 : Strings::ToInt(xp_str);
-	int threshold           = PowerSlotXP::GetThresholdForNextTier(cur_tier);
+	// Fetch current XP from item instance custom_data
+	std::string xp_str = pow_item->GetCustomData("Exp");
+	int current_xp     = xp_str.empty() ? 0 : Strings::ToInt(xp_str);
+	int threshold      = PowerSlotXP::GetThresholdForNextTier(cur_tier);
 
 	// ---- Sub-commands ----
 	if (sep->arg[1][0] != '\0') {
 		std::string subcmd = Strings::ToLower(sep->arg[1]);
 
 		if (subcmd == "reset") {
-			target->SetBucket(bucket_key, "0");
+			pow_item->SetCustomData("Exp", std::to_string(0));
+			database.SaveInventory(target->CharacterID(), pow_item, EQ::invslot::slotPowerSource);
 			c->Message(Chat::Yellow, fmt::format(
 				"POWERSLOT | Reset item XP to 0 for '{}' (base_id={}).",
 				item_data->Name, base_id
@@ -50,7 +51,8 @@ void command_powerslot(Client *c, const Seperator *sep)
 		if (subcmd == "setxp" && sep->arg[2][0] != '\0') {
 			int new_xp = Strings::ToInt(sep->arg[2]);
 			if (new_xp < 0) new_xp = 0;
-			target->SetBucket(bucket_key, std::to_string(new_xp));
+			pow_item->SetCustomData("Exp", std::to_string(new_xp));
+			database.SaveInventory(target->CharacterID(), pow_item, EQ::invslot::slotPowerSource);
 			c->Message(Chat::Yellow, fmt::format(
 				"POWERSLOT | Set item XP to {} for '{}' (base_id={}).",
 				new_xp, item_data->Name, base_id
@@ -103,6 +105,23 @@ void command_powerslot(Client *c, const Seperator *sep)
 			"  [{}{}] {}%",
 			bar, empty, percent
 		).c_str());
+
+		// Dual-path display: show Essence cost to fill remaining XP
+		int remaining_xp = threshold - current_xp;
+		if (remaining_xp > 0) {
+			float essence_per_xp = RuleR(ItemProgression, ConsumeEssencePerXP);
+			if (essence_per_xp <= 0.0f) essence_per_xp = 1.0f;
+			int essence_to_fill = static_cast<int>(std::ceil(
+				static_cast<float>(remaining_xp) * essence_per_xp
+			));
+			c->Message(Chat::White, fmt::format(
+				"  Essence to next tier: {} Common  |  Consume Item: {}% / {}% / {}% XP (higher/same/lower)",
+				essence_to_fill,
+				RuleI(ItemProgression, ConsumeItemHigherTierPct),
+				RuleI(ItemProgression, ConsumeItemSameTierPct),
+				RuleI(ItemProgression, ConsumeItemLowerTierPct)
+			).c_str());
+		}
 	}
 
 	// Show XP rates at current rules
@@ -112,6 +131,19 @@ void command_powerslot(Client *c, const Seperator *sep)
 		RuleR(ItemProgression, NamedXPMult),
 		RuleR(ItemProgression, RaidTierXPMult)
 	).c_str());
+
+	// Step 6: Ghost Copy status
+	if (GhostCopy::IsProgressionItem(item_data)) {
+		if (target->HasGhostCopy()) {
+			int16 ghost_slot = target->GetGhostCopySlot();
+			c->Message(Chat::Yellow, fmt::format(
+				"  Ghost Copy: ACTIVE -> {} slot",
+				EQ::invslot::GetInvPossessionsSlotName(ghost_slot)
+			).c_str());
+		} else {
+			c->Message(Chat::White, "  Ghost Copy: INACTIVE (all native slots occupied)");
+		}
+	}
 
 	c->Message(Chat::White, "  Use: #powerslot reset | #powerslot setxp <amount>");
 }

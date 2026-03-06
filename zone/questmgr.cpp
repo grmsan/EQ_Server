@@ -19,6 +19,7 @@
 #include "../common/classes.h"
 #include "../common/data_verification.h"
 #include "../common/global_define.h"
+#include "../common/item_tier.h"
 #include "../common/rulesys.h"
 #include "../common/skills.h"
 #include "../common/spdat.h"
@@ -194,6 +195,32 @@ void QuestManager::summonitem(uint32 itemid, int16 charges) {
 	if(!initiator)
 		return;
 	initiator->SummonItem(itemid, charges);
+}
+
+void QuestManager::grant_tiered_item(uint32 base_item_id, int tier) {
+	QuestManagerCurrentQuestVars();
+	if (!initiator) {
+		return;
+	}
+
+	// Clamp tier to valid range
+	if (tier < ItemProgression::TierBase || tier > ItemProgression::TierMax) {
+		initiator->Message(Chat::Red, "Invalid tier %d for item %u.", tier, base_item_id);
+		return;
+	}
+
+	uint32 tiered_id = ItemProgression::GetTieredItemID(base_item_id, tier);
+	const EQ::ItemData *item_data = database.GetItem(tiered_id);
+	if (!item_data) {
+		initiator->Message(Chat::Red, "Tiered item %u (base %u, tier %d) not found.", tiered_id, base_item_id, tier);
+		return;
+	}
+
+	initiator->SummonItem(tiered_id);
+	LogLoot(
+		"Quest granted tiered item: base [{}] tier [{}] -> ID [{}] ({})",
+		base_item_id, ItemProgression::GetTierName(tier), tiered_id, item_data->Name
+	);
 }
 
 void QuestManager::write(const char *file, const char *str) {

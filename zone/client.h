@@ -2445,6 +2445,10 @@ private:
 	bool m_has_quest_compass = false;
 	std::vector<uint32_t> m_dynamic_zone_ids;
 
+	// Step 6: Ghost Copy — tracks which equipment slot holds the ghost copy (-1 = none)
+	int16 m_ghost_copy_slot   = -1;
+	bool  m_updating_ghost    = false;
+
 	std::vector<uint32_t> m_completed_shared_tasks;
 
 public:
@@ -2525,6 +2529,13 @@ public:
 	bool IsFilteredAFKPacket(const EQApplicationPacket *p);
 	void CheckAutoIdleAFK(PlayerPositionUpdateClient_Struct *p);
 	void SyncWorldPositionsToClient(bool ignore_idle = false);
+
+	// Step 6: Ghost Copy accessors
+	int16 GetGhostCopySlot() const  { return m_ghost_copy_slot; }
+	void  SetGhostCopySlot(int16 v) { m_ghost_copy_slot = v; }
+	bool  HasGhostCopy() const      { return m_ghost_copy_slot >= 0; }
+	bool  IsUpdatingGhost() const   { return m_updating_ghost; }
+	void  SetUpdatingGhost(bool v)  { m_updating_ghost = v; }
 };
 
 #endif

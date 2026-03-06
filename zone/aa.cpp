@@ -45,6 +45,8 @@ Copyright (C) 2001-2016 EQEMu Development Team (http://eqemulator.net)
 #include "../common/repositories/aa_rank_effects_repository.h"
 #include "../common/repositories/aa_rank_prereqs_repository.h"
 
+#include "consume_system.h"
+
 extern WorldServer worldserver;
 extern QueryServ* QServ;
 
@@ -54,6 +56,12 @@ constexpr uint32 kBazaarAndBackAARankID = 50001;
 constexpr uint32 kBazaarAndBackOriginAAAbilityID = 331;  // THJ-style alias
 constexpr uint32 kBazaarAndBackOriginAARankID = 1000;    // THJ-style alias
 constexpr uint32 kBazaarAndBackZoneID = 151; // bazaar
+
+// Consume Item / Consume Essence AA IDs (Item Progression Step 5)
+constexpr uint32 kConsumeItemAAAbilityID    = 32100;
+constexpr uint32 kConsumeItemAARankID       = 50100;
+constexpr uint32 kConsumeEssenceAAAbilityID = 32101;
+constexpr uint32 kConsumeEssenceAARankID    = 50101;
 // Note: in-game /loc prints as "Y, X, Z". MovePC expects "X, Y, Z".
 // Desired /loc landing near Bazaar staging area: -817.14, 1.98, 3.44.
 constexpr float kBazaarAndBackX = 1.98f;
@@ -1051,7 +1059,7 @@ void Client::SendAlternateAdvancementRank(int aa_id, int level) {
 	// 0xFFFFFFF (28 bits) covers all classes.
 	if (RuleB(Custom, MulticlassingEnabled)) {
 		const uint32 aa_classes_normalized = ability->classes >> 1;
-		
+
 		// If check passes, send "All Classes" mask
 		if (aa_classes_normalized & GetClassesBits()) {
 			aai->classes = 0xFFFFFFF;
@@ -1420,6 +1428,17 @@ void Client::ActivateAlternateAdvancementAbility(int rank_id, int target_id) {
 		return;
 	}
 
+	// --- Custom AA intercepts (before spell validity check) ---
+	// Consume Item / Consume Essence — Item Progression Step 5
+	if (ability->id == kConsumeItemAAAbilityID || rank->id == kConsumeItemAARankID) {
+		ConsumeSystem::HandleConsumeItem(this);
+		return;
+	}
+	if (ability->id == kConsumeEssenceAAAbilityID || rank->id == kConsumeEssenceAARankID) {
+		ConsumeSystem::HandleConsumeEssence(this);
+		return;
+	}
+
 	if (!IsValidSpell(rank->spell)) {
 		// Extra diagnostics so we can see what the zone actually has loaded
 		extern int32 SPDAT_RECORDS;
@@ -1572,7 +1591,7 @@ void Client::ActivateAlternateAdvancementAbility(int rank_id, int target_id) {
 		MessageString(Chat::SpellFailure, SNEAK_RESTRICT);
 		return;
 	}
-	
+
 	// Modern clients don't require pet targeted for AA casts that are ST_Pet
 	if (spells[rank->spell].target_type == ST_Pet || spells[rank->spell].target_type == ST_SummonedPet)
 		target_id = GetPetID();

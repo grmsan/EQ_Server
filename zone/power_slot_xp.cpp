@@ -5,6 +5,10 @@
 	Awards item XP to the Power Source slot item on mob kills.
 	When XP thresholds are reached, the item automatically tiers up
 	(Base -> Enchanted -> Legendary -> Mythic).
+
+	XP is stored per-instance via custom_data("Exp") on the ItemInstance,
+	matching THJ-style per-item progression. Two copies of the same base
+	item progress independently.
 */
 
 #include "power_slot_xp.h"
@@ -19,10 +23,8 @@
 
 namespace PowerSlotXP {
 
-std::string GetBucketKey(uint32 base_item_id)
-{
-	return fmt::format("power_xp_{}", base_item_id);
-}
+// custom_data key used on each ItemInstance to track accumulated XP
+static constexpr const char* CUSTOM_DATA_EXP_KEY = "Exp";
 
 float GetConMultiplier(uint32 con_color)
 {
@@ -77,15 +79,14 @@ int GetCurrentXP(Client* c)
 		return 0;
 	}
 
-	uint32 base_id = ItemProgression::GetBaseItemID(pow_item->GetItem()->ID);
-	std::string xp_str = c->GetBucket(GetBucketKey(base_id));
-
+	std::string xp_str = pow_item->GetCustomData(CUSTOM_DATA_EXP_KEY);
 	return xp_str.empty() ? 0 : Strings::ToInt(xp_str);
 }
 
 // Perform the tier-up: swap the item in the Power Slot to the next tier.
+// overflow_xp is the excess XP beyond the threshold, carried into the new tier.
 // Returns true if the tier-up was successful.
-static bool DoTierUp(Client* c, uint32 base_item_id, int old_tier, int new_tier)
+bool DoTierUp(Client* c, uint32 base_item_id, int old_tier, int new_tier, int overflow_xp)
 {
 	auto* pow_item = c->GetInv().GetItem(EQ::invslot::slotPowerSource);
 	if (!pow_item || !pow_item->GetItem()) {
@@ -120,6 +121,15 @@ static bool DoTierUp(Client* c, uint32 base_item_id, int old_tier, int new_tier)
 		is_attuned,
 		static_cast<uint16>(EQ::invslot::slotPowerSource)
 	);
+
+	// Set overflow XP on the newly-summoned instance and persist it.
+	// SummonItem creates a fresh ItemInstance, so we retrieve it and stamp the XP.
+	auto* new_item = c->GetInv().GetItem(EQ::invslot::slotPowerSource);
+	if (new_item) {
+		int carry_xp = (overflow_xp > 0) ? overflow_xp : 0;
+		new_item->SetCustomData(CUSTOM_DATA_EXP_KEY, std::to_string(carry_xp));
+		database.SaveInventory(c->CharacterID(), new_item, EQ::invslot::slotPowerSource);
+	}
 
 	return true;
 }
@@ -167,117 +177,141 @@ void AwardKillXP(Client* killer, NPC* victim)
 		return;
 	}
 
-	// --- Load current XP and add ---
-	std::string bucket_key = GetBucketKey(base_id);
-	std::string xp_str     = killer->GetBucket(bucket_key);
-	int current_xp         = xp_str.empty() ? 0 : Strings::ToInt(xp_str);
-	int threshold           = GetThresholdForNextTier(cur_tier);
-
-	if (threshold <= 0) {
-		return; // Safety: shouldn't happen since we checked TierMax above
+	// --- Display XP gain message (before AddXP, which may trigger tier-up) ---
+	if (RuleB(ItemProgression, PowerSlotXPMessages)) {
+		auto* pow_item_msg = killer->GetInv().GetItem(EQ::invslot::slotPowerSource);
+		if (pow_item_msg) {
+			std::string xp_str_msg = pow_item_msg->GetCustomData(CUSTOM_DATA_EXP_KEY);
+			int current_xp_msg     = xp_str_msg.empty() ? 0 : Strings::ToInt(xp_str_msg);
+			int threshold_msg      = GetThresholdForNextTier(cur_tier);
+			if (threshold_msg > 0) {
+				int preview_xp  = current_xp_msg + awarded_xp;
+				int preview_pct = (preview_xp * 100 / threshold_msg);
+				if (preview_pct > 100) preview_pct = 100;
+				const char* next_tier_name = ItemProgression::GetTierName(cur_tier + 1);
+				killer->Message(
+					Chat::Experience,
+					fmt::format(
+						"(+{} item XP, {}% to {})",
+						awarded_xp, preview_pct, next_tier_name
+					).c_str()
+				);
+			}
+		}
 	}
 
-	// Calculate old percentage for milestone detection
-	int old_percent = (threshold > 0) ? (current_xp * 100 / threshold) : 0;
+	// Delegate to shared AddXP (handles tier-up + milestones)
+	AddXP(killer, awarded_xp);
+}
 
-	int new_xp = current_xp + awarded_xp;
+bool AddXP(Client* c, int xp_amount)
+{
+	if (!c || xp_amount <= 0) {
+		return false;
+	}
+
+	auto* pow_item = c->GetInv().GetItem(EQ::invslot::slotPowerSource);
+	if (!pow_item || !pow_item->GetItem()) {
+		return false;
+	}
+
+	const EQ::ItemData* item_data = pow_item->GetItem();
+	uint32 current_id = item_data->ID;
+	uint32 base_id    = ItemProgression::GetBaseItemID(current_id);
+	int    cur_tier   = ItemProgression::GetTierFromItemID(current_id);
+
+	if (cur_tier >= ItemProgression::TierMax) {
+		return false;
+	}
+
+	std::string xp_str = pow_item->GetCustomData(CUSTOM_DATA_EXP_KEY);
+	int current_xp     = xp_str.empty() ? 0 : Strings::ToInt(xp_str);
+	int threshold       = GetThresholdForNextTier(cur_tier);
+
+	if (threshold <= 0) {
+		return false;
+	}
+
+	int old_percent = (current_xp * 100 / threshold);
+	int new_xp      = current_xp + xp_amount;
 
 	// --- Check for tier-up ---
 	if (new_xp >= threshold) {
-		int new_tier = cur_tier + 1;
+		int new_tier    = cur_tier + 1;
+		int overflow_xp = new_xp - threshold;
 
-		// Reset XP for the new tier
-		killer->SetBucket(bucket_key, "0");
+		if (DoTierUp(c, base_id, cur_tier, new_tier, overflow_xp)) {
+			c->SendSound();
 
-		// Perform the tier swap
-		if (DoTierUp(killer, base_id, cur_tier, new_tier)) {
-			// Level-up sound!
-			killer->SendSound();
-
-			// Get new item data for the message
 			uint32 new_id = ItemProgression::GetTieredItemID(base_id, new_tier);
 			const EQ::ItemData* new_data = database.GetItem(new_id);
-			const char* new_name = new_data ? new_data->Name : "Unknown";
+			const char* new_name  = new_data ? new_data->Name : "Unknown";
 			const char* tier_name = ItemProgression::GetTierName(new_tier);
 
-			// Send tier-up celebration message
-			killer->Message(
+			c->Message(
 				ItemProgression::GetTierChatColor(new_tier),
 				fmt::format(
 					"*** Your {} has achieved {} status! ***",
-					new_name,
-					tier_name
+					new_name, tier_name
 				).c_str()
 			);
 
-			// If not yet Mythic, show next threshold
 			if (new_tier < ItemProgression::TierMax) {
-				int next_threshold = GetThresholdForNextTier(new_tier);
-				const char* next_tier_name = ItemProgression::GetTierName(new_tier + 1);
-				killer->Message(
+				int next_threshold    = GetThresholdForNextTier(new_tier);
+				const char* next_name = ItemProgression::GetTierName(new_tier + 1);
+				int carry_pct = (next_threshold > 0) ? (overflow_xp * 100 / next_threshold) : 0;
+				c->Message(
 					Chat::White,
 					fmt::format(
-						"Next tier: {} — 0 / {} item XP (0%)",
-						next_tier_name, next_threshold
+						"Next tier: {} — {} / {} item XP ({}%)",
+						next_name, overflow_xp, next_threshold, carry_pct
 					).c_str()
 				);
 			} else {
-				killer->Message(Chat::White, "Your Power Source item has reached maximum tier!");
+				c->Message(Chat::White, "Your Power Source item has reached maximum tier!");
 			}
 
 			Log(Logs::General, Logs::Status,
-				"PowerSlotXP: %s tier-up %s -> %s (base_id=%u)",
-				killer->GetCleanName(),
+				"PowerSlotXP: %s tier-up %s -> %s (base_id=%u, overflow=%d)",
+				c->GetCleanName(),
 				ItemProgression::GetTierName(cur_tier),
 				tier_name,
-				base_id);
+				base_id,
+				overflow_xp);
+
+			return true;
 		} else {
-			// Tier-up failed (missing DB row?) — don't lose XP
-			killer->SetBucket(bucket_key, std::to_string(current_xp));
-			killer->Message(Chat::Red,
+			c->Message(Chat::Red,
 				"Item tier-up failed — tiered item not found in database. XP preserved.");
+			return false;
 		}
-
-		return;
 	}
 
-	// --- No tier-up yet; store updated XP ---
-	killer->SetBucket(bucket_key, std::to_string(new_xp));
-
-	// --- Display XP gain message ---
-	if (RuleB(ItemProgression, PowerSlotXPMessages)) {
-		int new_percent = (threshold > 0) ? (new_xp * 100 / threshold) : 0;
-		const char* next_tier_name = ItemProgression::GetTierName(cur_tier + 1);
-
-		killer->Message(
-			Chat::Experience,
-			fmt::format(
-				"(+{} item XP, {}% to {})",
-				awarded_xp, new_percent, next_tier_name
-			).c_str()
-		);
-	}
+	// --- No tier-up; store updated XP ---
+	pow_item->SetCustomData(CUSTOM_DATA_EXP_KEY, std::to_string(new_xp));
+	database.SaveInventory(c->CharacterID(), pow_item, EQ::invslot::slotPowerSource);
 
 	// --- Milestone messages ---
 	if (RuleB(ItemProgression, PowerSlotMilestoneMessages)) {
-		int new_percent = (threshold > 0) ? (new_xp * 100 / threshold) : 0;
+		int new_percent = (new_xp * 100 / threshold);
 		const char* next_tier_name = ItemProgression::GetTierName(cur_tier + 1);
 
-		// Check each milestone: 25, 50, 75, 90
 		static const int milestones[] = { 25, 50, 75, 90 };
 		for (int ms : milestones) {
 			if (old_percent < ms && new_percent >= ms) {
-				killer->Message(
+				c->Message(
 					Chat::Yellow,
 					fmt::format(
 						"** Your Power Source item is {}% of the way to {}! **",
 						ms, next_tier_name
 					).c_str()
 				);
-				break; // Only show one milestone per kill
+				break;
 			}
 		}
 	}
+
+	return false;
 }
 
 } // namespace PowerSlotXP

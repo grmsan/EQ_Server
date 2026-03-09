@@ -1,0 +1,222 @@
+<?xml version = "1.0"?>
+<!-- POC: Power Slot Manager window - demonstrates SIDL custom UI with server data -->
+<XML>
+  <Schema xmlns="EverQuestData" xmlns:dt="EverQuestDataTypes" />
+  <Composite>
+    <ScreenItem>
+      <ScreenID>PowerSlotWnd</ScreenID>
+      <Font>2</Font>
+      <RelativePosition>true</RelativePosition>
+      <Location>
+        <X>400</X>
+        <Y>200</Y>
+      </Location>
+      <Size>
+        <CX>340</CX>
+        <CY>380</CY>
+      </Size>
+      <Style>
+        <vscroll>false</vscroll>
+        <hscroll>false</hscroll>
+        <transparent>false</transparent>
+        <sizable>true</sizable>
+        <closebox>true</closebox>
+        <minimizebox>true</minimizebox>
+        <border>true</border>
+        <titlebar>true</titlebar>
+      </Style>
+      <TooltipReference>Power Slot Manager</TooltipReference>
+      <DrawTemplate>WDT_Inner</DrawTemplate>
+      <Text>Power Slot Manager</Text>
+      <Pieces>
+
+        <!-- Title label -->
+        <Label item = "PS_TitleLabel">
+          <ScreenID>PS_TitleLabel</ScreenID>
+          <Font>3</Font>
+          <RelativePosition>true</RelativePosition>
+          <Location>
+            <X>10</X>
+            <Y>2</Y>
+          </Location>
+          <Size>
+            <CX>320</CX>
+            <CY>20</CY>
+          </Size>
+          <Text>Item Progression</Text>
+          <NoWrap>true</NoWrap>
+          <AlignCenter>true</AlignCenter>
+          <TextColor>
+            <R>255</R>
+            <G>255</G>
+            <B>128</B>
+          </TextColor>
+        </Label>
+
+        <!-- XP Progress Gauge -->
+        <Gauge item = "PS_XPGauge">
+          <ScreenID>PS_XPGauge</ScreenID>
+          <Font>2</Font>
+          <RelativePosition>true</RelativePosition>
+          <Location>
+            <X>10</X>
+            <Y>26</Y>
+          </Location>
+          <Size>
+            <CX>320</CX>
+            <CY>18</CY>
+          </Size>
+          <TooltipReference>Current tier XP progress</TooltipReference>
+          <DrawTemplate>GDT_Gauge</DrawTemplate>
+          <FillTint>
+            <R>64</R>
+            <G>200</G>
+            <B>64</B>
+          </FillTint>
+          <Style>
+            <transparent>false</transparent>
+          </Style>
+        </Gauge>
+
+        <!-- Status label (tier info) -->
+        <Label item = "PS_StatusLabel">
+          <ScreenID>PS_StatusLabel</ScreenID>
+          <Font>2</Font>
+          <RelativePosition>true</RelativePosition>
+          <Location>
+            <X>10</X>
+            <Y>48</Y>
+          </Location>
+          <Size>
+            <CX>320</CX>
+            <CY>16</CY>
+          </Size>
+          <Text>Tier: -- | XP: --/--</Text>
+          <NoWrap>true</NoWrap>
+          <AlignCenter>true</AlignCenter>
+          <TextColor>
+            <R>220</R>
+            <G>220</G>
+            <B>220</B>
+          </TextColor>
+        </Label>
+
+        <!-- Power Slots list -->
+        <Listbox item = "PS_SlotList">
+          <ScreenID>PS_SlotList</ScreenID>
+          <Font>2</Font>
+          <RelativePosition>true</RelativePosition>
+          <Location>
+            <X>10</X>
+            <Y>68</Y>
+          </Location>
+          <Size>
+            <CX>320</CX>
+            <CY>220</CY>
+          </Size>
+          <Style>
+            <transparent>false</transparent>
+            <vscroll>true</vscroll>
+          </Style>
+          <DrawTemplate>WDT_Inner</DrawTemplate>
+          <Columns>
+            <Column>
+              <ColumnWidth>50</ColumnWidth>
+              <ColumnLabel>Slot</ColumnLabel>
+            </Column>
+            <Column>
+              <ColumnWidth>130</ColumnWidth>
+              <ColumnLabel>Item</ColumnLabel>
+            </Column>
+            <Column>
+              <ColumnWidth>50</ColumnWidth>
+              <ColumnLabel>Tier</ColumnLabel>
+            </Column>
+            <Column>
+              <ColumnWidth>90</ColumnWidth>
+              <ColumnLabel>XP</ColumnLabel>
+            </Column>
+          </Columns>
+        </Listbox>
+
+        <!-- Refresh button -->
+        <Button item = "PS_RefreshBtn">
+          <ScreenID>PS_RefreshBtn</ScreenID>
+          <Font>2</Font>
+          <RelativePosition>true</RelativePosition>
+          <Location>
+            <X>10</X>
+            <Y>294</Y>
+          </Location>
+          <Size>
+            <CX>100</CX>
+            <CY>24</CY>
+          </Size>
+          <Text>Refresh</Text>
+          <TooltipReference>Request updated slot data from server</TooltipReference>
+          <DrawTemplate>BDT_Normal</DrawTemplate>
+        </Button>
+
+        <!-- Salvage button (placeholder) -->
+        <Button item = "PS_SalvageBtn">
+          <ScreenID>PS_SalvageBtn</ScreenID>
+          <Font>2</Font>
+          <RelativePosition>true</RelativePosition>
+          <Location>
+            <X>120</X>
+            <Y>294</Y>
+          </Location>
+          <Size>
+            <CX>100</CX>
+            <CY>24</CY>
+          </Size>
+          <Text>Salvage</Text>
+          <TooltipReference>Salvage selected item for essence (placeholder)</TooltipReference>
+          <DrawTemplate>BDT_Normal</DrawTemplate>
+        </Button>
+
+        <!-- Close button -->
+        <Button item = "PS_CloseBtn">
+          <ScreenID>PS_CloseBtn</ScreenID>
+          <Font>2</Font>
+          <RelativePosition>true</RelativePosition>
+          <Location>
+            <X>230</X>
+            <Y>294</Y>
+          </Location>
+          <Size>
+            <CX>100</CX>
+            <CY>24</CY>
+          </Size>
+          <Text>Close</Text>
+          <TooltipReference>Close this window</TooltipReference>
+          <DrawTemplate>BDT_Normal</DrawTemplate>
+        </Button>
+
+        <!-- Info label (bottom) -->
+        <Label item = "PS_InfoLabel">
+          <ScreenID>PS_InfoLabel</ScreenID>
+          <Font>1</Font>
+          <RelativePosition>true</RelativePosition>
+          <Location>
+            <X>10</X>
+            <Y>324</Y>
+          </Location>
+          <Size>
+            <CX>320</CX>
+            <CY>14</CY>
+          </Size>
+          <Text>POC: Custom SIDL Window + Server Data</Text>
+          <NoWrap>true</NoWrap>
+          <AlignCenter>true</AlignCenter>
+          <TextColor>
+            <R>128</R>
+            <G>128</G>
+            <B>128</B>
+          </TextColor>
+        </Label>
+
+      </Pieces>
+    </ScreenItem>
+  </Composite>
+</XML>

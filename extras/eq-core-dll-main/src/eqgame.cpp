@@ -873,9 +873,10 @@ static bool logged_profile_candidate = false;
 static int packetCount = 0;
 
 // EdgeStatLabel (opcode 0x1338) key/value stat cache
-static constexpr uint32_t kEdgeStatMaxKey = 4096;
-static uint64_t g_edgeStatValue[kEdgeStatMaxKey]{};
-static uint8_t  g_edgeStatHas[kEdgeStatMaxKey]{};
+// NOTE: non-static so PowerSlotWnd.cpp (and future SIDL windows) can read the cache.
+constexpr uint32_t kEdgeStatMaxKey = 4096;
+uint64_t g_edgeStatValue[kEdgeStatMaxKey]{};
+uint8_t  g_edgeStatHas[kEdgeStatMaxKey]{};
 
 // Server-reported multiclass classes bitmask (from EdgeStatLabel key 200).
 // The server sends this as an "item classes" bitmask: bit positions are (class_id - 1).

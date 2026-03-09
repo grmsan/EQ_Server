@@ -27,7 +27,7 @@ Tracks non-multiclass engineering work:
 
 ### Smoke Ops (15-20 min)
 
-Run: `O-01, O-02, B-01, B-02, B-03, C-01, C-02`
+Run: `O-01, O-02, B-01, B-02, B-03, C-01, C-02, W-06`
 
 ### Full Ops (45-90 min)
 
@@ -231,7 +231,113 @@ Run all entries.
 
 ---
 
-## 4) Data & Script Operations
+## 4) Waypoint Runestone Placement
+
+Reference: [game_design/qol/WAYPOINTS.md](../qol/WAYPOINTS.md)
+
+### [W-01] Runestone SQL Bootstrap
+
+**Goal**: Confirm waypoint DB rows and NPC template are installed.
+**Steps**:
+
+1. Run `python run_sql.py utils/sql/install_waypoint_runestones.sql`.
+2. Verify: `SELECT COUNT(*) FROM thj_waypoints WHERE category = 7;` → 15.
+3. Verify: `SELECT id, name FROM npc_types WHERE id = 999300;` → `a_faded_runestone`.
+**Expected**: 15 dungeon waypoints + 1 NPC template exist.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [W-02] Runestone Placement — Antonica Dungeons
+
+**Goal**: Place runestones in all Antonica dungeon zones.
+**Steps** (repeat per zone):
+
+1. `#zone <shortname>`, walk to desired spot near entrance.
+2. `#npcspawn create 999300`.
+3. `#reloadquests` to activate proximity.
+
+| Zone | shortname | Placed? |
+|------|-----------|---------|
+| Befallen | befallen | [ ] |
+| Najena | najena | [ ] |
+| Permafrost Caverns | permafrost | [ ] |
+| Solusek's Eye | soldunga | [ ] |
+| Nagafen's Lair | soldungb | [ ] |
+| Ruins of Old Guk | gukbottom | [ ] |
+| Estate of Unrest | unrest | [ ] |
+| The Hole | hole | [ ] |
+
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [W-03] Runestone Placement — Faydwer Dungeons
+
+**Goal**: Place runestones in all Faydwer dungeon zones.
+
+| Zone | shortname | Placed? |
+|------|-----------|---------|
+| Crushbone | crushbone | [ ] |
+| Castle Mistmoore | mistmoore | [ ] |
+| Kedge Keep | kedge | [ ] |
+
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [W-04] Runestone Placement — Kunark Dungeons
+
+**Goal**: Place runestones in all Kunark dungeon zones.
+
+| Zone | shortname | Placed? |
+|------|-----------|---------|
+| Ruins of Sebilis | sebilis | [ ] |
+| Chardok | chardok | [ ] |
+| Karnor's Castle | karnor | [ ] |
+
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [W-05] Runestone Placement — Velious Dungeons
+
+**Goal**: Place runestone in Velious dungeon zone.
+
+| Zone | shortname | Placed? |
+|------|-----------|---------|
+| Kael Drakkel | kael | [ ] |
+
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [W-06] Runestone Discovery Smoke Test
+
+**Goal**: Confirm the full discovery → travel loop works end-to-end.
+**Steps**:
+
+1. Pick one placed runestone zone (e.g. `befallen`).
+2. Zone in and walk near the runestone.
+3. Confirm attunement message: "You have attuned yourself to this location."
+4. Zone to Bazaar, hail Tearel.
+5. Confirm the dungeon now appears as a clickable link under "Dungeons."
+6. Click the link and confirm teleport to the dungeon.
+7. Return to Bazaar, hail Tearel again — confirm it still shows as unlocked.
+**Expected**: Full loop: discover → menu appears → teleport works → persists.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [W-07] Runestone Re-entry Silence Test
+
+**Goal**: Confirm already-attuned runestones don't spam the player.
+**Steps**:
+
+1. Return to the zone used in W-06.
+2. Walk near the runestone again.
+3. Confirm NO attunement message appears (already unlocked = silent).
+**Expected**: No message on repeat visits.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+---
+
+## 5) Data & Script Operations
 
 ### [D-01] SQL Script Application Record
 

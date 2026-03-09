@@ -20,6 +20,7 @@ GNU General Public License for more details.
 
 //#define DEBUG_TRY 1
 #include "MQ2Main.h"
+#include "PowerSlotWnd.h"
 
 // External logging function from eqgame.cpp
 extern void LogDebug(const char* format, ...);
@@ -261,6 +262,7 @@ void Pulse()
 void Heartbeat()
 {
     static int s_lastLoggedState = -99;
+    static DWORD s_prevGameState = 0;
     int GameState=GetGameState();
     if (GameState!=-1)
     {
@@ -277,6 +279,12 @@ void Heartbeat()
         LogDebug("DEBUG_ZONE: Heartbeat current GameState=%d", GameState);
         s_lastLoggedState = GameState;
     }
+    // PowerSlotWnd: detect game state transitions and pulse
+    if ((DWORD)GameState != s_prevGameState) {
+        PowerSlotWnd_SetGameState((DWORD)GameState);
+        s_prevGameState = (DWORD)GameState;
+    }
+    PowerSlotWnd_Pulse();
     UpdateMQ2SpawnSort();
 }
 

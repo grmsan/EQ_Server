@@ -52,6 +52,8 @@ extern volatile bool RunLoops;
 #include "bot_command.h"
 #include "string_ids.h"
 #include "dialogue_window.h"
+#include "power_slot_xp.h"
+#include "../common/item_tier.h"
 #include <algorithm>
 #include <unordered_map>
 #include <vector>
@@ -14350,7 +14352,7 @@ void Client::SendEdgeStats()
 		uint64 value;
 	};
 
-	const Pair pairs[] = {
+	std::vector<Pair> pairs = {
 		{ kCurHP,   static_cast<uint64>(GetHP()) },
 		{ kMaxHP,   static_cast<uint64>(GetMaxHP()) },
 		{ kCurMana, static_cast<uint64>(GetMana()) },
@@ -14368,7 +14370,72 @@ void Client::SendEdgeStats()
 		{ kClassesBitmask, static_cast<uint64>(GetClassesBits() & 0xFFFF) }
 	};
 
-	constexpr uint32 count = static_cast<uint32>(sizeof(pairs) / sizeof(pairs[0]));
+	// ---- Power Slot progression data (keys 300-343) ----
+	// Sends current Power Source slot item tier + XP for the DLL's PowerSlotWnd POC.
+	constexpr uint32 kPSSlotCount   = 300;
+	constexpr uint32 kPSFocusTier   = 301;
+	constexpr uint32 kPSFocusXP     = 302;
+	constexpr uint32 kPSFocusXPMax  = 303;
+	constexpr uint32 kPSSlotTierBase  = 304;  // +i = tier for slot i
+	constexpr uint32 kPSSlotXPBase    = 314;  // +i = current XP for slot i
+	constexpr uint32 kPSSlotXPMaxBase = 324;  // +i = XP needed for slot i
+	constexpr uint32 kPSSlotItemBase  = 334;  // +i = item ID for slot i
+
+	// Check the Power Source slot (the only slot with XP tracking currently)
+	auto* pow_item = GetInv().GetItem(EQ::invslot::slotPowerSource);
+	int ps_tier = 0;
+	int ps_xp = 0;
+	int ps_xp_max = 0;
+	uint32 ps_item_id = 0;
+
+	if (pow_item && pow_item->GetItem()) {
+		ps_item_id = pow_item->GetItem()->ID;
+		ps_tier = ItemProgression::GetTierFromItemID(ps_item_id);
+		std::string xp_str = pow_item->GetCustomData("Exp");
+		ps_xp = xp_str.empty() ? 0 : Strings::ToInt(xp_str);
+		ps_xp_max = PowerSlotXP::GetThresholdForNextTier(ps_tier);
+	}
+
+	// Slot count = 1 (Power Source is the only tracked slot in current system)
+	pairs.push_back({ kPSSlotCount,  static_cast<uint64>(pow_item ? 1 : 0) });
+	pairs.push_back({ kPSFocusTier,  static_cast<uint64>(ps_tier) });
+	pairs.push_back({ kPSFocusXP,    static_cast<uint64>(ps_xp) });
+	pairs.push_back({ kPSFocusXPMax, static_cast<uint64>(ps_xp_max) });
+
+	// Slot 0 = Power Source
+	pairs.push_back({ kPSSlotTierBase + 0,   static_cast<uint64>(ps_tier) });
+	pairs.push_back({ kPSSlotXPBase + 0,     static_cast<uint64>(ps_xp) });
+	pairs.push_back({ kPSSlotXPMaxBase + 0,  static_cast<uint64>(ps_xp_max) });
+	pairs.push_back({ kPSSlotItemBase + 0,   static_cast<uint64>(ps_item_id) });
+
+	// Slots 1-9: report equipped item IDs/tiers even though they don't track XP yet.
+	// This lets the POC window show the full equipped inventory picture.
+	constexpr int kEquipSlots[] = {
+		EQ::invslot::slotHead,      // slot 1 = Head
+		EQ::invslot::slotChest,     // slot 2 = Chest
+		EQ::invslot::slotArms,      // slot 3 = Arms
+		EQ::invslot::slotWrist1,    // slot 4 = Wrist
+		EQ::invslot::slotHands,     // slot 5 = Hands
+		EQ::invslot::slotLegs,      // slot 6 = Legs
+		EQ::invslot::slotFeet,      // slot 7 = Feet
+		EQ::invslot::slotPrimary,   // slot 8 = Primary
+		EQ::invslot::slotSecondary, // slot 9 = Secondary
+	};
+	for (int i = 0; i < 9; ++i) {
+		auto* equip = GetInv().GetItem(kEquipSlots[i]);
+		uint32 item_id = 0;
+		int item_tier = 0;
+		if (equip && equip->GetItem()) {
+			item_id = equip->GetItem()->ID;
+			item_tier = ItemProgression::GetTierFromItemID(item_id);
+		}
+		pairs.push_back({ kPSSlotTierBase + (i + 1),  static_cast<uint64>(item_tier) });
+		pairs.push_back({ kPSSlotXPBase + (i + 1),    0 }); // no XP tracking for these yet
+		pairs.push_back({ kPSSlotXPMaxBase + (i + 1), 0 });
+		pairs.push_back({ kPSSlotItemBase + (i + 1),  static_cast<uint64>(item_id) });
+	}
+
+	const uint32 count = static_cast<uint32>(pairs.size());
 	constexpr uint16 edge_opcode = 0x1338;
 	const uint32 payload_size = sizeof(uint32) + count * (sizeof(uint32) + sizeof(uint64));
 

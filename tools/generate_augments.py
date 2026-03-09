@@ -49,6 +49,12 @@ NPC_ID_BASE      = 181200
 SPAWNGROUP_START = 3290000
 SPAWN2_START     = 3270000
 
+# Salvage Gnome NPC — separate from the Augment Guild vendors
+SALVAGE_GNOME_ID        = 181250
+SALVAGE_GNOME_SG_ID     = 3290004
+SALVAGE_GNOME_SPAWN2_ID = 3270004
+SALVAGE_SATCHEL_ID      = 200020
+
 # --- Currency IDs ---
 COMMON_ESSENCE_CURRENCY = 100
 RARE_ESSENCE_CURRENCY   = 101
@@ -832,6 +838,9 @@ def generate():
     lines.append(f"DELETE FROM `spells_new` WHERE id BETWEEN {ENDGAME_SPELL_ID_BASE} AND {ENDGAME_SPELL_ID_BASE + 999};")
     # Also clean up old Step 8 spell range if it overlapped
     lines.append(f"DELETE FROM `spells_new` WHERE id BETWEEN 65100 AND 65199;")
+    # Clean up db_str entries for our spells
+    lines.append(f"DELETE FROM `db_str` WHERE id BETWEEN {LEVEL_SPELL_ID_BASE} AND {LEVEL_SPELL_ID_BASE + 999};")
+    lines.append(f"DELETE FROM `db_str` WHERE id BETWEEN {ENDGAME_SPELL_ID_BASE} AND {ENDGAME_SPELL_ID_BASE + 999};")
     for npc in VENDOR_NPCS:
         lines.append(f"DELETE FROM `merchantlist` WHERE merchantid = {npc['merchant_id']};")
         lines.append(f"DELETE FROM `spawnentry` WHERE npcID = {npc['id']};")
@@ -920,6 +929,41 @@ def generate():
                 is_dot=is_dot, is_heal=is_heal
             )
             lines.append(spell_insert_sql(sv))
+
+    lines.append("")
+
+    # ------------------------------------------------------------------
+    # 2b. DB_STR entries for all proc spells (type 6 = description)
+    # ------------------------------------------------------------------
+    lines.append("-- ============================================================")
+    lines.append("-- DB_STR: Spell descriptions for client display")
+    lines.append("-- ============================================================")
+    lines.append("")
+    lines.append(f"DELETE FROM `db_str` WHERE id BETWEEN {LEVEL_SPELL_ID_BASE} AND {LEVEL_SPELL_ID_BASE + 999} AND type = 6;")
+    lines.append(f"DELETE FROM `db_str` WHERE id BETWEEN {ENDGAME_SPELL_ID_BASE} AND {ENDGAME_SPELL_ID_BASE + 999} AND type = 6;")
+
+    # Leveling spell descriptions
+    for tier_idx, (req_lv, prefix, dd_dmg, lt_heal, mn_restore, _) in enumerate(LEVELING_TIERS):
+        sid = combat_spell_ids[tier_idx]
+        lines.append(f"INSERT INTO `db_str` (id, type, value) VALUES ({sid}, 6, 'Strikes your target with a burst of magical energy, dealing direct damage.');")
+        sid = lifetap_spell_ids[tier_idx]
+        lines.append(f"INSERT INTO `db_str` (id, type, value) VALUES ({sid}, 6, 'Drains life force from your target, healing you for the amount drained.');")
+        sid = mana_spell_ids[tier_idx]
+        lines.append(f"INSERT INTO `db_str` (id, type, value) VALUES ({sid}, 6, 'Siphons arcane energy from your target, restoring your mana.');")
+
+    # Endgame spell descriptions
+    desc_map = {
+        "fire_dd":    "Engulfs your target in searing flames, dealing fire damage.",
+        "cold_dd":    "Encases your target in bitter cold, dealing cold damage.",
+        "poison_dot": "Introduces a virulent toxin into your target, dealing poison damage over time.",
+        "heal":       "Channels restorative energy through your weapon, healing you on each strike.",
+        "lifetap":    "Tears life force from your target and adds it to your own.",
+    }
+    for fi, (key, name, proc_type, base_val, re_cost, pp_cost) in enumerate(ENDGAME_PROC_AUGS):
+        for lv in range(MAX_AUG_LEVEL):
+            sid = endgame_spell_id(fi, lv + 1)
+            desc = desc_map.get(proc_type, "A magical proc effect.")
+            lines.append(f"INSERT INTO `db_str` (id, type, value) VALUES ({sid}, 6, '{desc}');")
 
     lines.append("")
 
@@ -1164,6 +1208,9 @@ def generate():
     for idx, npc in enumerate(VENDOR_NPCS):
         npc_id = npc["id"]
         alt_currency_id = npc["alt_currency"]
+        # Class 70 = AlternateCurrencyMerchant (required for alt-currency shops)
+        # Class 41 = Merchant (regular platinum vendor)
+        npc_class = 70 if alt_currency_id > 0 else 41
 
         lines.append(
             f"INSERT INTO `npc_types` (id, name, lastname, level, race, class, bodytype, "
@@ -1177,7 +1224,7 @@ def generate():
             f"aggroradius, assistradius, findable, trackable) "
             f"VALUES ("
             f"{npc_id}, '{sql_str(npc['name'])}', '{sql_str(npc['last_name'])}', "
-            f"{npc['level']}, {npc['race']}, 41, 1, "
+            f"{npc['level']}, {npc['race']}, {npc_class}, 1, "
             f"100000, 0, {npc['gender']}, {npc['texture']}, {npc['texture']}, 6.0, "
             f"{npc['merchant_id']}, {alt_currency_id}, "
             f"0, 0, "
@@ -1205,6 +1252,68 @@ def generate():
         lines.append("")
 
     # ------------------------------------------------------------------
+    # 10. SALVAGE GNOME NPC — Fizzwick Boltsprocket
+    # ------------------------------------------------------------------
+    lines.append("-- ============================================================")
+    lines.append("-- SALVAGE GNOME — Fizzwick Boltsprocket (Salvage Master)")
+    lines.append("-- ============================================================")
+    lines.append("")
+
+    # Delete old entries
+    lines.append(f"DELETE FROM `npc_types` WHERE id = {SALVAGE_GNOME_ID};")
+    lines.append(f"DELETE FROM `merchantlist` WHERE merchantid = {SALVAGE_GNOME_ID};")
+    lines.append(f"DELETE FROM `spawnentry` WHERE npcID = {SALVAGE_GNOME_ID};")
+    lines.append(f"DELETE FROM `spawngroup` WHERE id = {SALVAGE_GNOME_SG_ID};")
+    lines.append(f"DELETE FROM `spawn2` WHERE id = {SALVAGE_GNOME_SPAWN2_ID};")
+
+    # NPC — gnome (race 12), male (gender 0), class 41 (merchant, platinum)
+    # Small size, quirky texture
+    lines.append(
+        f"INSERT INTO `npc_types` (id, name, lastname, level, race, class, bodytype, "
+        f"hp, mana, gender, texture, helmtexture, size, "
+        f"merchant_id, alt_currency_id, "
+        f"loottable_id, npc_faction_id, "
+        f"mindmg, maxdmg, "
+        f"npc_spells_id, npc_spells_effects_id, "
+        f"d_melee_texture1, d_melee_texture2, "
+        f"runspeed, walkspeed, "
+        f"aggroradius, assistradius, findable, trackable) "
+        f"VALUES ("
+        f"{SALVAGE_GNOME_ID}, 'Fizzwick_Boltsprocket', 'Salvage Master', "
+        f"55, 12, 41, 1, "
+        f"50000, 0, 0, 2, 2, 4.0, "
+        f"{SALVAGE_GNOME_ID}, 0, "
+        f"0, 0, "
+        f"10, 20, "
+        f"0, 0, "
+        f"0, 0, "
+        f"1.25, 0.6, "
+        f"0, 0, 1, 1);"
+    )
+
+    # Merchantlist — Salvage Satchel (10pp)
+    lines.append(merchant_entry(SALVAGE_GNOME_ID, 0, SALVAGE_SATCHEL_ID))
+
+    # Also sell Purified Solvent on the gnome for convenience (100pp)
+    lines.append(merchant_entry(SALVAGE_GNOME_ID, 1, SOLVENT_ID))
+
+    # Spawngroup + spawnentry + spawn2 — slightly offset from aug vendors
+    lines.append(
+        f"INSERT INTO `spawngroup` (id, name, spawn_limit, dist) "
+        f"VALUES ({SALVAGE_GNOME_SG_ID}, 'bazaar_salvage_gnome', 0, 0.0);"
+    )
+    lines.append(
+        f"INSERT INTO `spawnentry` (spawngroupID, npcID, chance) "
+        f"VALUES ({SALVAGE_GNOME_SG_ID}, {SALVAGE_GNOME_ID}, 100);"
+    )
+    lines.append(
+        f"INSERT INTO `spawn2` (id, spawngroupID, zone, version, x, y, z, heading, respawntime) "
+        f"VALUES ({SALVAGE_GNOME_SPAWN2_ID}, {SALVAGE_GNOME_SG_ID}, 'bazaar', 0, "
+        f"-140.0, -840.0, 3.44, 0.0, 640);"
+    )
+    lines.append("")
+
+    # ------------------------------------------------------------------
     # SUMMARY
     # ------------------------------------------------------------------
     total_spells = (next_level_spell - LEVEL_SPELL_ID_BASE) + \
@@ -1215,14 +1324,14 @@ def generate():
                   len(CATALYSTS) + 1 + 1  # catalysts + container + solvent
 
     lines.append("-- ============================================================")
-    lines.append(f"-- Summary: {total_spells} spells, {total_items} items, {len(VENDOR_NPCS)} NPCs")
+    lines.append(f"-- Summary: {total_spells} spells, {total_items} items, {len(VENDOR_NPCS) + 1} NPCs")
     lines.append(f"-- Leveling aug IDs: {LEVEL_AUG_ID_BASE}-{LEVEL_AUG_ID_BASE + NUM_LEVEL_FAMILIES * LEVELS_PER_FAMILY - 1}")
     lines.append(f"-- Stat aug IDs:     {STAT_AUG_ID_BASE}-{STAT_AUG_ID_BASE + NUM_STAT_FAMILIES * LEVELS_PER_FAMILY - 1}")
     lines.append(f"-- Proc aug IDs:     {PROC_AUG_ID_BASE}-{PROC_AUG_ID_BASE + NUM_PROC_FAMILIES * LEVELS_PER_FAMILY - 1}")
     lines.append(f"-- Catalyst IDs:     {CATALYST_ID_BASE}-{CATALYST_ID_BASE + len(CATALYSTS) - 1}")
     lines.append(f"-- Container ID:     {FORGEMASTER_CONTAINER_ID}")
     lines.append(f"-- Solvent ID:       {SOLVENT_ID}")
-    lines.append(f"-- NPC IDs:          {NPC_ID_BASE}-{NPC_ID_BASE + len(VENDOR_NPCS) - 1}")
+    lines.append(f"-- NPC IDs:          {NPC_ID_BASE}-{NPC_ID_BASE + len(VENDOR_NPCS) - 1}, {SALVAGE_GNOME_ID}")
     lines.append("-- ============================================================")
 
     # Write SQL

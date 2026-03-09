@@ -44,11 +44,11 @@ ON DUPLICATE KEY UPDATE `item_id` = 200011;
 INSERT INTO `items` (
     `id`, `Name`, `itemclass`, `weight`, `norent`, `nodrop`, `magic`,
     `icon`, `lore`, `idfile`, `bagtype`, `bagslots`, `bagsize`, `bagwr`,
-    `classes`, `races`, `slots`
+    `classes`, `races`, `slots`, `price`
 ) VALUES (
     200020, 'Salvage Satchel', 1, 0, 0, 1, 1,
     677, 'Salvage Satchel', 'IT63', 10, 20, 10, 100,
-    65535, 65535, 0
+    65535, 65535, 0, 10000
 )
 ON DUPLICATE KEY UPDATE
     `Name` = 'Salvage Satchel',

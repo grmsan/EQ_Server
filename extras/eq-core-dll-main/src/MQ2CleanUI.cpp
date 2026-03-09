@@ -22,6 +22,7 @@ GNU General Public License for more details.
 
 //#define DEBUG_TRY 1
 #include "MQ2Main.h"
+#include "PowerSlotWnd.h"
 
 // Intermediary to call plugin draw hooks & built-in HUD drawers
 EQLIB_API VOID PluginsDrawHUD()
@@ -44,6 +45,7 @@ public:
     VOID CleanUI_Trampoline(VOID);
     VOID CleanUI_Detour(VOID)
     {
+        DebugTry(PowerSlotWnd_CleanUI());
         DebugTry(CleanUI_Trampoline());
     }
 
@@ -51,6 +53,7 @@ public:
     VOID ReloadUI_Detour(BOOL UseINI)
     {
         DebugTry(ReloadUI_Trampoline(UseINI));
+        DebugTry(PowerSlotWnd_ReloadUI());
     }
 
     /* This function is still in the client; however, it was phased out as of
@@ -163,7 +166,7 @@ VOID InitializeDisplayHook()
     EzDetour(CDisplay__ReloadUI,&CDisplayHook::ReloadUI_Detour,&CDisplayHook::ReloadUI_Trampoline);
     //EzDetour(CDisplay__GetWorldFilePath,&CDisplayHook::GetWorldFilePath_Detour,&CDisplayHook::GetWorldFilePath_Trampoline);
 #ifndef ISXEQ
-   // EzDetour(DrawNetStatus,DrawHUD_Detour,DrawHUD_Trampoline);
+    EzDetour(DrawNetStatus,DrawHUD_Detour,DrawHUD_Trampoline);
 #endif
     EzDetour(EQ_LoadingS__SetProgressBar,&EQ_LoadingSHook::SetProgressBar_Detour,&EQ_LoadingSHook::SetProgressBar_Trampoline);
 }

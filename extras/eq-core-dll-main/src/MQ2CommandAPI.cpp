@@ -21,6 +21,7 @@ GNU General Public License for more details.
 
 
 #include "MQ2Main.h"
+#include "PowerSlotWnd.h"
 
 CRITICAL_SECTION gCommandCS;
 
@@ -549,6 +550,8 @@ void InitializeMQ2Commands()
     AddCommand("/customhud", CustomHUDCmd, 0, 1, 1);
     // HUD mode command (normal | underui | always)
     AddCommand("/hud", HudCmd, 0, 1, 1);
+    // POC: Power Slot Manager window
+    AddCommand("/powerslots", PowerSlotCmd, 0, 1, 1);
 
     /* ALIASES FOR OUT OF ORDER SHORTHAND COMMANDS */
     AddAlias("/d","/duel");

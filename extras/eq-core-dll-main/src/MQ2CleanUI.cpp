@@ -23,6 +23,9 @@ GNU General Public License for more details.
 //#define DEBUG_TRY 1
 #include "MQ2Main.h"
 #include "PowerSlotWnd.h"
+#include "WaypointPOCWnd.h"
+#include "WaypointOverlayPOC.h"
+#include "WaypointLuaImGuiPOC.h"
 
 // Intermediary to call plugin draw hooks & built-in HUD drawers
 EQLIB_API VOID PluginsDrawHUD()
@@ -35,6 +38,8 @@ EQLIB_API VOID PluginsDrawHUD()
     }
     // Call built-in custom HUD draw if implemented
     DrawCustomHUD();
+    WaypointOverlayPOC_Draw();
+    WaypointLuaImGuiPOC_Draw();
 }
 
 char *OurCaption = "Core is loading...";
@@ -46,6 +51,9 @@ public:
     VOID CleanUI_Detour(VOID)
     {
         DebugTry(PowerSlotWnd_CleanUI());
+        DebugTry(WaypointPOCWnd_CleanUI());
+        DebugTry(WaypointOverlayPOC_CleanUI());
+        DebugTry(WaypointLuaImGuiPOC_CleanUI());
         DebugTry(CleanUI_Trampoline());
     }
 
@@ -54,6 +62,9 @@ public:
     {
         DebugTry(ReloadUI_Trampoline(UseINI));
         DebugTry(PowerSlotWnd_ReloadUI());
+        DebugTry(WaypointPOCWnd_ReloadUI());
+        DebugTry(WaypointOverlayPOC_CleanUI());
+        DebugTry(WaypointLuaImGuiPOC_CleanUI());
     }
 
     /* This function is still in the client; however, it was phased out as of

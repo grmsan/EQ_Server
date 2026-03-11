@@ -23,6 +23,9 @@
 #include <iphlpapi.h>
 #include <IPTypes.h>
 #include "spaghetti.h"
+#include "WaypointPOCWnd.h"
+#include "WaypointOverlayPOC.h"
+#include "WaypointLuaImGuiPOC.h"
 #include <thread>
 #include <chrono>
 #include <limits.h>
@@ -1595,6 +1598,12 @@ unsigned char __fastcall HandleWorldMessage_Detour(DWORD *con, DWORD edx, unsign
 				ConditionalDumpOpcode(lop, buf, size, "enable_dump_1338");
 				// Also write a readable, parsed EdgeStat log when toggled
 				ConditionalLogEdgeStat(buf, size, "enable_log_1338");
+			}
+			// OP_WaypointList (RoF2) - parsed by custom waypoint POC window.
+			if (lop == 0x1402) {
+				WaypointPOCWnd_OnWaypointListPacket(buf, size);
+				WaypointOverlayPOC_OnWaypointListPacket(buf, size);
+				WaypointLuaImGuiPOC_OnWaypointListPacket(buf, size);
 			}
 			if (lop == 0x575b) {
 				ConditionalDumpOpcode(lop, buf, size, "enable_dump_575b");

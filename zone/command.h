@@ -208,6 +208,7 @@ void command_upgrade(Client *c, const Seperator *sep);
 void command_wc(Client *c, const Seperator *sep);
 void command_worldshutdown(Client *c, const Seperator *sep);
 void command_wp(Client *c, const Seperator *sep);
+void command_wppoc(Client *c, const Seperator *sep);
 void command_wpadd(Client *c, const Seperator *sep);
 void command_worldwide(Client *c, const Seperator *sep);
 void command_zone(Client *c, const Seperator *sep);

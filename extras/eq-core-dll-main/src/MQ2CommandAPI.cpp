@@ -22,6 +22,9 @@ GNU General Public License for more details.
 
 #include "MQ2Main.h"
 #include "PowerSlotWnd.h"
+#include "WaypointPOCWnd.h"
+#include "WaypointOverlayPOC.h"
+#include "WaypointLuaImGuiPOC.h"
 
 CRITICAL_SECTION gCommandCS;
 
@@ -552,6 +555,12 @@ void InitializeMQ2Commands()
     AddCommand("/hud", HudCmd, 0, 1, 1);
     // POC: Power Slot Manager window
     AddCommand("/powerslots", PowerSlotCmd, 0, 1, 1);
+    // POC: Waypoint travel window
+    AddCommand("/waypointpoc", WaypointPOCCmd, 0, 1, 1);
+    // POC: Waypoint overlay panel (no SIDL/ImGui)
+    AddCommand("/waypointoverlay", WaypointOverlayPOCCmd, 0, 1, 1);
+    // POC: Lua/ImGui waypoint path (scaffold mode until runtime deps are added)
+    AddCommand("/waypointimgui", WaypointLuaImGuiPOCCmd, 0, 1, 1);
 
     /* ALIASES FOR OUT OF ORDER SHORTHAND COMMANDS */
     AddAlias("/d","/duel");

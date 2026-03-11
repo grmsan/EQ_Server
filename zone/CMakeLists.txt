@@ -491,6 +491,7 @@ set(gm_command_sources
     gm_commands/worldshutdown.cpp
     gm_commands/worldwide.cpp
     gm_commands/wp.cpp
+    gm_commands/wppoc.cpp
     gm_commands/wpadd.cpp
     gm_commands/zone.cpp
     gm_commands/zonebootup.cpp

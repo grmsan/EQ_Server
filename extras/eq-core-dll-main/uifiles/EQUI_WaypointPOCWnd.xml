@@ -1,0 +1,164 @@
+<?xml version = "1.0"?>
+<!-- POC: Waypoint travel window for custom DLL -->
+<XML>
+  <Schema xmlns="EverQuestData" xmlns:dt="EverQuestDataTypes" />
+  <Composite>
+    <ScreenItem>
+      <ScreenID>WaypointPOCWnd</ScreenID>
+      <Font>2</Font>
+      <RelativePosition>true</RelativePosition>
+      <Location>
+        <X>440</X>
+        <Y>180</Y>
+      </Location>
+      <Size>
+        <CX>420</CX>
+        <CY>420</CY>
+      </Size>
+      <Style>
+        <vscroll>false</vscroll>
+        <hscroll>false</hscroll>
+        <transparent>false</transparent>
+        <sizable>true</sizable>
+        <closebox>true</closebox>
+        <minimizebox>true</minimizebox>
+        <border>true</border>
+        <titlebar>true</titlebar>
+      </Style>
+      <DrawTemplate>WDT_Inner</DrawTemplate>
+      <TooltipReference>Waypoint Travel POC</TooltipReference>
+      <Text>Waypoint Travel (POC)</Text>
+      <Pieces>
+
+        <Label item = "WP_StatusLabel">
+          <ScreenID>WP_StatusLabel</ScreenID>
+          <Font>2</Font>
+          <RelativePosition>true</RelativePosition>
+          <Location>
+            <X>10</X>
+            <Y>4</Y>
+          </Location>
+          <Size>
+            <CX>400</CX>
+            <CY>18</CY>
+          </Size>
+          <Text>Available: 0 | Total: 0</Text>
+          <NoWrap>true</NoWrap>
+          <AlignCenter>true</AlignCenter>
+          <TextColor>
+            <R>220</R>
+            <G>220</G>
+            <B>220</B>
+          </TextColor>
+        </Label>
+
+        <Listbox item = "WP_List">
+          <ScreenID>WP_List</ScreenID>
+          <Font>2</Font>
+          <RelativePosition>true</RelativePosition>
+          <Location>
+            <X>10</X>
+            <Y>26</Y>
+          </Location>
+          <Size>
+            <CX>400</CX>
+            <CY>320</CY>
+          </Size>
+          <Style>
+            <transparent>false</transparent>
+            <vscroll>true</vscroll>
+          </Style>
+          <DrawTemplate>WDT_Inner</DrawTemplate>
+          <Columns>
+            <Column>
+              <ColumnWidth>110</ColumnWidth>
+              <ColumnLabel>Category</ColumnLabel>
+            </Column>
+            <Column>
+              <ColumnWidth>230</ColumnWidth>
+              <ColumnLabel>Waypoint</ColumnLabel>
+            </Column>
+            <Column>
+              <ColumnWidth>60</ColumnWidth>
+              <ColumnLabel>ID</ColumnLabel>
+            </Column>
+          </Columns>
+        </Listbox>
+
+        <Button item = "WP_RefreshBtn">
+          <ScreenID>WP_RefreshBtn</ScreenID>
+          <Font>2</Font>
+          <RelativePosition>true</RelativePosition>
+          <Location>
+            <X>10</X>
+            <Y>352</Y>
+          </Location>
+          <Size>
+            <CX>120</CX>
+            <CY>24</CY>
+          </Size>
+          <Text>Refresh</Text>
+          <TooltipReference>Request waypoint list from server</TooltipReference>
+          <DrawTemplate>BDT_Normal</DrawTemplate>
+        </Button>
+
+        <Button item = "WP_TravelBtn">
+          <ScreenID>WP_TravelBtn</ScreenID>
+          <Font>2</Font>
+          <RelativePosition>true</RelativePosition>
+          <Location>
+            <X>150</X>
+            <Y>352</Y>
+          </Location>
+          <Size>
+            <CX>120</CX>
+            <CY>24</CY>
+          </Size>
+          <Text>Travel</Text>
+          <TooltipReference>Travel to selected waypoint</TooltipReference>
+          <DrawTemplate>BDT_Normal</DrawTemplate>
+        </Button>
+
+        <Button item = "WP_CloseBtn">
+          <ScreenID>WP_CloseBtn</ScreenID>
+          <Font>2</Font>
+          <RelativePosition>true</RelativePosition>
+          <Location>
+            <X>290</X>
+            <Y>352</Y>
+          </Location>
+          <Size>
+            <CX>120</CX>
+            <CY>24</CY>
+          </Size>
+          <Text>Close</Text>
+          <TooltipReference>Close this window</TooltipReference>
+          <DrawTemplate>BDT_Normal</DrawTemplate>
+        </Button>
+
+        <Label item = "WP_InfoLabel">
+          <ScreenID>WP_InfoLabel</ScreenID>
+          <Font>1</Font>
+          <RelativePosition>true</RelativePosition>
+          <Location>
+            <X>10</X>
+            <Y>382</Y>
+          </Location>
+          <Size>
+            <CX>400</CX>
+            <CY>14</CY>
+          </Size>
+          <Text>Select a waypoint and click Travel</Text>
+          <NoWrap>true</NoWrap>
+          <AlignCenter>true</AlignCenter>
+          <TextColor>
+            <R>128</R>
+            <G>128</G>
+            <B>128</B>
+          </TextColor>
+        </Label>
+
+      </Pieces>
+    </ScreenItem>
+  </Composite>
+</XML>

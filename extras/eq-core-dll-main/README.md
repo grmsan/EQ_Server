@@ -5,6 +5,16 @@ Core DLL for EverQuest to do patching, opt in to features
 - Visual Studio 2022 or 2019 (2017 in theory could work but attempting was a lot of linker errors not worth fixing)
 - Windows 10 SDK (You can find it via the Visual Studio Installer program, modify, individual components, if you get an error about it on compile)
 
+## Optional: Install Lua + ImGui Dependencies (PowerShell)
+
+For Win32 client DLL work (LuaJIT + Dear ImGui DX9/Win32 backends), run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\extras\eq-core-dll-main\install_lua_imgui_deps.ps1
+```
+
+This installs via `vcpkg` and prints include/lib paths for project wiring.
+
 ## Usage
 
 - Fork this repo (or clone, and make your copy private)

@@ -41,9 +41,15 @@ class ServerManagerApp(tk.Tk):
 
         self.build_dir = os.path.join(os.getcwd(), "build")
         self.bin_dir = self.find_bin_dir()
-        # DLL search path (only care about this one build output)
-        self.extra_dll_dir = os.path.join("extras", "eq-core-dll-main", "bin")
-        self.vcpkg_bin_dir = os.path.join(os.getcwd(), "vcpkg", "vcpkg-export-x64", "installed", "x64-windows", "bin")
+        self.eqcore_root_dir = os.path.join(os.getcwd(), "extras", "eq-core-dll-main")
+        self.extra_dll_dir = os.path.join(self.eqcore_root_dir, "bin")
+        self.eqcore_dll_search_dirs = [
+            self.extra_dll_dir,
+            os.path.join(self.extra_dll_dir, "debug"),
+            os.path.join(self.extra_dll_dir, "vs2019"),
+            os.path.join(self.extra_dll_dir, "vs2019", "debug"),
+        ]
+        self.vcpkg_bin_dir = self._resolve_vcpkg_bin_dir()
         self.perl_bin_dir = os.path.join(os.getcwd(), "perl", "x64", "perl", "bin")
         # Default EQ client directory for exports/copies
         self.eq_dir_var = tk.StringVar(value=self._settings.get("eq_dir", r"D:\Rof2"))
@@ -125,6 +131,16 @@ class ServerManagerApp(tk.Tk):
             if os.path.exists(path):
                 return path
         return os.path.join(self.build_dir, "bin")
+
+    def _resolve_vcpkg_bin_dir(self):
+        candidates = [
+            os.path.join(os.getcwd(), "vcpkg", "vcpkg-export-x64", "installed", "x64-windows", "bin"),
+            os.path.join(os.getcwd(), "vcpkg", "vcpkg-tool", "installed", "x64-windows", "bin"),
+        ]
+        for path in candidates:
+            if os.path.isdir(path):
+                return path
+        return candidates[0]
 
     def ui_call(self, fn, *args, **kwargs):
         if threading.current_thread() is threading.main_thread():
@@ -2114,25 +2130,39 @@ class ServerManagerApp(tk.Tk):
                 self.ui_call(self._append_text_widget, self.db_output, f"dbstr export failed: {e}\n")
 
     def _dll_candidates(self):
-        path = os.path.join(self.extra_dll_dir, "dinput8.dll")
-        return [path] if os.path.exists(path) else []
+        candidates = []
+        for folder in self.eqcore_dll_search_dirs:
+            path = os.path.join(folder, "dinput8.dll")
+            if os.path.isfile(path):
+                candidates.append(os.path.abspath(path))
+        # Keep order stable while deduplicating.
+        seen = set()
+        ordered = []
+        for path in candidates:
+            key = os.path.normcase(path)
+            if key in seen:
+                continue
+            seen.add(key)
+            ordered.append(path)
+        return ordered
 
     def _compute_dll_status(self):
         candidates = self._dll_candidates()
-        src_path = os.path.join(self.extra_dll_dir, "dinput8.dll")
         if not candidates:
-            return False, f"DLL: missing {src_path}"
-        src = candidates[0]
+            searched = ", ".join(self.eqcore_dll_search_dirs)
+            return False, f"DLL: missing dinput8.dll in [{searched}]"
+        src = max(candidates, key=os.path.getmtime)
         src_size = os.path.getsize(src)
         src_mtime = datetime.fromtimestamp(os.path.getmtime(src)).strftime("%Y-%m-%d %H:%M:%S")
+        src_label = os.path.relpath(src, os.getcwd())
         client_path = os.path.join(self.eq_dir_var.get(), "dinput8.dll")
         if not os.path.exists(client_path):
-            return False, f"DLL: client dinput8 missing (built {os.path.basename(src)} {src_size/1024:.1f} KB @ {src_mtime})"
+            return False, f"DLL: client dinput8 missing (built {src_label} {src_size/1024:.1f} KB @ {src_mtime})"
         dst_size = os.path.getsize(client_path)
         dst_mtime = datetime.fromtimestamp(os.path.getmtime(client_path)).strftime("%Y-%m-%d %H:%M:%S")
         ok = src_size == dst_size
         status = "DLL: up to date" if ok else "DLL: OUT OF DATE"
-        msg = f"{status} (built {src_size/1024:.1f} KB {src_mtime} vs client {dst_size/1024:.1f} KB {dst_mtime})"
+        msg = f"{status} (built {src_label} {src_size/1024:.1f} KB {src_mtime} vs client {dst_size/1024:.1f} KB {dst_mtime})"
         return ok, msg
 
     def _compute_export_status(self):
@@ -2216,14 +2246,14 @@ class ServerManagerApp(tk.Tk):
             self.log("Building eq-core DLL (MSBuild)...")
 
             msbuild = self._find_msbuild()
-            sln_path = os.path.join("extras", "eq-core-dll-main", "eq-core-dll-visualstudio2022.sln")
+            sln_path = os.path.join(self.eqcore_root_dir, "eq-core-dll-visualstudio2022.sln")
 
             if not msbuild:
                 self.log("MSBuild not found. Install VS Build Tools or add msbuild to PATH.")
                 return
 
             if not os.path.exists(sln_path):
-                self.log(f"Solution not found at {sln_path}")
+                self.log(f"VS2022 solution not found at {sln_path}")
                 return
 
             cmd = [
@@ -2231,8 +2261,10 @@ class ServerManagerApp(tk.Tk):
                 sln_path,
                 "/p:Configuration=Release",
                 "/p:Platform=Win32",
-                "/p:PlatformToolset=v143"
+                "/p:PlatformToolset=v143",
+                "/m",
             ]
+            self.log(f"Using solution: {sln_path}")
 
             proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
             while True:
@@ -2247,6 +2279,7 @@ class ServerManagerApp(tk.Tk):
             if proc.returncode == 0:
                 self.log("DLL build complete, copying...")
                 self.copy_eqcore_dll()
+                self.refresh_status_indicators()
             else:
                 self.log(f"DLL build failed with code {proc.returncode}")
         except Exception as e:
@@ -2254,19 +2287,23 @@ class ServerManagerApp(tk.Tk):
 
     def copy_eqcore_dll(self):
         try:
-            # search for dll in extras/eq-core-dll-main/bin only
             candidates = self._dll_candidates()
             if not candidates:
-                self.ui_call(messagebox.showerror, "Error", f"No dinput8.dll found in {self.extra_dll_dir}")
+                searched = "\n".join(self.eqcore_dll_search_dirs)
+                self.ui_call(messagebox.showerror, "Error", f"No dinput8.dll found in:\n{searched}")
                 return
             src = max(candidates, key=os.path.getmtime)
             dest_dir = self.eq_dir_var.get()
+            if not dest_dir:
+                self.ui_call(messagebox.showerror, "Error", "EQ client folder is not set.")
+                return
             os.makedirs(dest_dir, exist_ok=True)
             dest_name = "dinput8.dll" if "dinput8" in os.path.basename(src).lower() else os.path.basename(src)
             dest = os.path.join(dest_dir, dest_name)
             self._backup_existing(dest)
             shutil.copy2(src, dest)
             self.log(f"Copied {src} -> {dest}")
+            self.refresh_status_indicators()
         except Exception as e:
             self.log(f"Copy eqcore DLL failed: {e}")
 
@@ -2292,12 +2329,13 @@ class ServerManagerApp(tk.Tk):
             return f"{label}: {os.path.basename(path)} | {size_kb:.1f} KB | modified {mtime}"
 
         try:
-            # Only care about dinput8.dll in extras/eq-core-dll-main/bin
             candidates = self._dll_candidates()
-            built_msg = f"Built dll: none found at {os.path.join(self.extra_dll_dir, 'dinput8.dll')}"
+            built_msg = "Built dll: none found"
             if candidates:
-                src = candidates[0]
-                built_msg = info_for(src, "Built dll")
+                src = max(candidates, key=os.path.getmtime)
+                built_msg = info_for(src, "Built dll (latest)")
+                if len(candidates) > 1:
+                    built_msg += f"\nOther candidates: {len(candidates) - 1}"
 
             # Client dinput8.dll in EQ folder
             client_dinput = os.path.join(self.eq_dir_var.get(), "dinput8.dll")

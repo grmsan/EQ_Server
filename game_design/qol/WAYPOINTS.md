@@ -121,6 +121,22 @@ Then use `cat => "New Category"` in Tearel.pl entries. Categories display in the
 #wp lock zoneshort                  -- re-locks it
 ```
 
+## DLL Waypoint UI POC Commands
+
+If using the custom `eq-core-dll-main` waypoint POCs:
+
+```
+#wppoc list
+#wppoc travel <waypoint_id>
+#wppoc expedition
+```
+
+- `#wppoc list` sends `OP_WaypointList` to client.
+- `#wppoc travel` routes directly to `TransportToWaypoint()` and still enforces unlock checks.
+- Client DLL command `/waypointpoc` opens the SIDL waypoint window and uses these server commands under the hood.
+- Client DLL command `/waypointoverlay` drives a HUD overlay POC (no SIDL, no ImGui) using the same `#wppoc` bridge.
+- Client DLL command `/waypointimgui` drives the Lua/ImGui scaffold POC command surface using the same `#wppoc` bridge.
+
 Or via Perl in a quest script:
 
 ```perl

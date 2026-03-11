@@ -21,6 +21,7 @@ GNU General Public License for more details.
 //#define DEBUG_TRY 1
 #include "MQ2Main.h"
 #include "PowerSlotWnd.h"
+#include "WaypointPOCWnd.h"
 
 // External logging function from eqgame.cpp
 extern void LogDebug(const char* format, ...);
@@ -282,9 +283,11 @@ void Heartbeat()
     // PowerSlotWnd: detect game state transitions and pulse
     if ((DWORD)GameState != s_prevGameState) {
         PowerSlotWnd_SetGameState((DWORD)GameState);
+        WaypointPOCWnd_SetGameState((DWORD)GameState);
         s_prevGameState = (DWORD)GameState;
     }
     PowerSlotWnd_Pulse();
+    WaypointPOCWnd_Pulse();
     UpdateMQ2SpawnSort();
 }
 

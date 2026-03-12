@@ -1,6 +1,6 @@
 # Lua + ImGui Integration in eq-core-dll
 
-Last updated: 2026-03-10
+Last updated: 2026-03-11
 
 ## Purpose
 This is a living implementation document for adding Lua-driven ImGui UI to `extras/eq-core-dll-main` without breaking legacy EQ client behavior.
@@ -14,14 +14,16 @@ This is a living implementation document for adding Lua-driven ImGui UI to `extr
 - [x] Custom UI proof-of-concept via SIDL (`PowerSlotWnd`)
 - [x] Waypoint travel SIDL POC (`WaypointPOCWnd`) parsing `OP_WaypointList` (`0x1402`) and issuing travel actions via server command bridge (`#wppoc`)
 - [x] Waypoint overlay POC (`WaypointOverlayPOC`) using HUD text and command-driven interaction
-- [x] Lua/ImGui waypoint scaffold POC (`WaypointLuaImGuiPOC`) with command/data/action plumbing ready for runtime swap-in
+- [x] Lua/ImGui waypoint runtime POC (`WaypointLuaImGuiPOC`) with:
+  - D3D9 `CreateDevice` -> `Present`/`Reset` hook chain
+  - Dear ImGui DX9 + Win32 backend initialization
+  - embedded Lua runtime (`LuaJIT`) and frame-time `draw()` execution
+  - script bridge API (`imgui.*`, `waypoint.*`)
 - [x] Command registration and HUD overlay extension points (`/powerslots`, `/customhud`)
 
 ### Not implemented yet (for this Lua/ImGui plan)
-- [ ] Embedded Lua runtime inside `eq-core-dll-main`
-- [ ] ImGui renderer integrated into active DLL build
-- [ ] D3D9 Present/EndScene hook in the active project path
-- [ ] Production DLL -> server action RPC channel (current callback is diagnostic chat command)
+- [ ] Production DLL -> server action RPC channel (current callback path still uses command bridge via `#wppoc`)
+- [ ] Multi-module script loader/hot-swap manager (currently single script: `waypoint_imgui_poc.lua`)
 
 ## Waypoint POC Snapshot (Three Paths)
 
@@ -36,18 +38,22 @@ This is a living implementation document for adding Lua-driven ImGui UI to `extr
 - File:
   - `extras/eq-core-dll-main/src/WaypointOverlayPOC.cpp`
 
-3. Lua+ImGui path (scaffold mode)
+3. Lua+ImGui path (runtime mode)
 - Command: `/waypointimgui`
 - Files:
   - `extras/eq-core-dll-main/src/WaypointLuaImGuiPOC.cpp`
   - `extras/eq-core-dll-main/scripts/waypoint_imgui_poc.lua`
 - Current status:
   - packet ingest + action callback path is wired
-  - actual embedded Lua + ImGui runtime is not wired yet
+  - Lua state and ImGui render loop are active
+  - script reload available via `/waypointimgui reload`
+  - fallback native ImGui window is used when script load/draw fails
 
 ## Build Verification
 
 - 2026-03-10: `eq-core-dll-vs2022.vcxproj` built successfully for `Release|Win32` with all three waypoint POC modules compiled and linked.
+- 2026-03-11: Lua/ImGui runtime implementation landed in `WaypointLuaImGuiPOC.cpp` and is now part of the active VS2022/VS2019 build targets.
+- 2026-03-11: Verified VS2022 build for Lua/ImGui runtime by compiling to `extras/eq-core-dll-main/bin/verify/dinput8.dll` (`Release|Win32`).
 
 ## PowerShell Dependency Install (Lua + ImGui)
 
@@ -74,6 +80,16 @@ This is a living implementation document for adding Lua-driven ImGui UI to `extr
   - Added missing compile entries to align with VS2022 project:
     - `MQ2KeyBinds.cpp`
     - `MQ2Protect.cpp`
+  - Added linker dep for runtime hook path:
+    - `d3d9.lib`
+
+## Server Manager Deployment Notes
+
+- `server_manager.py` now syncs:
+  - DLL (`dinput8.dll`)
+  - UI XML files (`EQUI_PowerSlotWnd.xml`, `EQUI_WaypointPOCWnd.xml`) + manifest includes
+  - Lua script (`scripts/waypoint_imgui_poc.lua`) into client `<EQ>/scripts`
+- Build command uses dedicated output folder (`..\bin\sm\`) to reduce file-lock contention on default `..\bin\` artifacts.
 
 ## Retarget Verification
 
@@ -83,11 +99,10 @@ This is a living implementation document for adding Lua-driven ImGui UI to `extr
 
 ## Findings Added During DLL Review
 
-1. The active VS2022 project (`src/eq-core-dll-vs2022.vcxproj`) does not currently compile a Lua/ImGui integration path.
-2. `d3d_example.cpp` and `main.cpp` exist but are not active integration points in the current build.
-3. The most practical existing custom UI pattern is `PowerSlotWnd` (SIDL + server-fed data + lifecycle hooks).
-4. The best current transport for new feature data is the existing `0x1338` key/value bus (or a new envelope on a dedicated custom opcode).
-5. Server Lua already supports raw opcode packet bypass (`zone/lua_packet.cpp`, `zone/lua_client.cpp`), which can help rapid prototyping even before DLL-embedded Lua is added.
+1. `d3d_example.cpp`/`main.cpp` remain standalone examples and are still not the active integration path.
+2. Active Lua/ImGui runtime now lives in `WaypointLuaImGuiPOC.cpp` and is initialized from main DLL hook lifecycle.
+3. The most practical existing custom UI pattern remains `PowerSlotWnd` (SIDL + server-fed data + lifecycle hooks).
+4. The best current transport for new feature data remains existing custom packet/command bridge paths (`0x1338`, `OP_WaypointList`, and server command handlers).
 
 ## Integration Strategy
 
@@ -95,24 +110,32 @@ This is a living implementation document for adding Lua-driven ImGui UI to `extr
 - Keep using EdgeStatLabel and `OP_ServerStatsUpdate` for authoritative state snapshots.
 - Keep legacy UI operational when custom DLL paths are absent.
 
-### Phase 1: Add Lua runtime to DLL
-1. Add Lua runtime dependency (LuaJIT or Lua 5.4) to `eq-core-dll-main` dependencies.
-2. Create a minimal script host in DLL init/shutdown lifecycle.
-3. Expose a constrained API surface first:
-   - read-only stat cache
-   - player/target metadata
-   - safe command/action emit stubs
+### Phase 1: Add Lua runtime to DLL (completed baseline)
+1. Added runtime dependency wiring via vcpkg (`LuaJIT` + `ImGui` with DX9/Win32 bindings).
+2. Added script host lifecycle:
+   - init in `WaypointLuaImGuiPOC_Initialize()`
+   - shutdown in `WaypointLuaImGuiPOC_Shutdown()`
+3. Exposed Lua API surface:
+   - `waypoint.get_entries()`
+   - `waypoint.refresh()`
+   - `waypoint.travel(id)`
+   - `waypoint.get_selected_index()/set_selected_index()`
+   - `waypoint.has_packet()`
+   - `imgui.*` minimal immediate-mode bindings used by POC script
 
-### Phase 2: Add ImGui render loop
-1. Add ImGui + Win32 + D3D9 backends to project.
-2. Hook D3D9 device Present/EndScene in active runtime path.
-3. Create frame loop:
-   - begin frame
-   - call Lua `draw()`
-   - render
-4. Handle device lost/reset cleanly.
+### Phase 2: Add ImGui render loop (completed baseline)
+1. Hooked D3D9 vtables in active runtime path:
+   - `IDirect3D9::CreateDevice`
+   - `IDirect3DDevice9::Present`
+   - `IDirect3DDevice9::Reset`
+2. Frame loop now runs in `Present` hook:
+   - `ImGui_ImplDX9_NewFrame()`
+   - `ImGui_ImplWin32_NewFrame()`
+   - Lua `draw()` execution
+   - `ImGui_ImplDX9_RenderDrawData(...)`
+3. Device lost/reset flow uses `ImGui_ImplDX9_InvalidateDeviceObjects()` and `CreateDeviceObjects()`.
 
-### Phase 3: Feature module model
+### Phase 3: Feature module model (next)
 1. Add `feature_id` routing between packets and Lua modules.
 2. Add a registration model for UI modules:
    - `on_packet(feature_id, payload)`

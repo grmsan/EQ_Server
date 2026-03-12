@@ -3363,6 +3363,7 @@ void InitHooks()
 		LogDebug("InitHooks: Applying mq2 injects");
 		DebugSpew("Applying mq2 injects");
 		InitializeDisplayHook();
+		WaypointLuaImGuiPOC_Initialize();
 		InitializeChatHook();
 		InitializeMQ2Commands();
 		InitializeMQ2Pulse();
@@ -3822,6 +3823,7 @@ bool WINAPI DllMain(HMODULE hModule, DWORD dwReason, LPVOID lpReserved)
 	   break;
 
    case DLL_PROCESS_DETACH:
+	   WaypointLuaImGuiPOC_Shutdown();
 	   CoUninitialize();
 	   FreeLibrary(dinput8dll);
 	   break;

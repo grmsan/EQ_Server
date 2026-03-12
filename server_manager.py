@@ -6,6 +6,7 @@ import sys
 import time
 import threading
 import glob
+import filecmp
 from datetime import datetime
 import shutil
 import json
@@ -46,8 +47,16 @@ class ServerManagerApp(tk.Tk):
         self.eqcore_dll_search_dirs = [
             self.extra_dll_dir,
             os.path.join(self.extra_dll_dir, "debug"),
+            os.path.join(self.extra_dll_dir, "sm"),
             os.path.join(self.extra_dll_dir, "vs2019"),
             os.path.join(self.extra_dll_dir, "vs2019", "debug"),
+        ]
+        self.eqcore_ui_xml_files = [
+            "EQUI_PowerSlotWnd.xml",
+            "EQUI_WaypointPOCWnd.xml",
+        ]
+        self.eqcore_lua_script_files = [
+            "waypoint_imgui_poc.lua",
         ]
         self.vcpkg_bin_dir = self._resolve_vcpkg_bin_dir()
         self.perl_bin_dir = os.path.join(os.getcwd(), "perl", "x64", "perl", "bin")
@@ -2040,6 +2049,109 @@ class ServerManagerApp(tk.Tk):
             os.replace(path, new_name)
             self.log(f"Backed up existing file to {new_name}")
 
+    def _eq_default_ui_dir(self):
+        return os.path.join(self.eq_dir_var.get(), "uifiles", "default")
+
+    def _eq_scripts_dir(self):
+        return os.path.join(self.eq_dir_var.get(), "scripts")
+
+    def _manifest_candidates(self):
+        ui_dir = self._eq_default_ui_dir()
+        return [
+            os.path.join(ui_dir, "EQUI.xml"),
+            os.path.join(ui_dir, "default.xml"),
+        ]
+
+    def _ensure_manifest_include(self, xml_filename):
+        manifest_path = next((p for p in self._manifest_candidates() if os.path.isfile(p)), None)
+        if not manifest_path:
+            self.log(f"UI manifest not found for auto-include ({xml_filename}). Checked: {self._manifest_candidates()}")
+            return False
+
+        try:
+            with open(manifest_path, "r", encoding="utf-8", errors="ignore") as f:
+                content = f.read()
+
+            include_pattern = rf"<Include>\s*{re.escape(xml_filename)}\s*</Include>"
+            if re.search(include_pattern, content, flags=re.IGNORECASE):
+                return True
+
+            include_line = f"<Include>{xml_filename}</Include>"
+            if re.search(r"</XML\s*>", content, flags=re.IGNORECASE):
+                updated = re.sub(r"</XML\s*>", include_line + "\n</XML>", content, count=1, flags=re.IGNORECASE)
+            else:
+                updated = content.rstrip() + "\n" + include_line + "\n"
+
+            if updated != content:
+                self._backup_existing(manifest_path)
+                self._atomic_write_text(manifest_path, updated, encoding="utf-8", newline="")
+                self.log(f"Added UI include to manifest: {include_line} ({manifest_path})")
+            return True
+        except Exception as e:
+            self.log(f"Failed to update UI manifest include for {xml_filename}: {e}")
+            return False
+
+    def _sync_eqcore_ui_xml(self):
+        eq_dir = self.eq_dir_var.get()
+        if not eq_dir:
+            self.log("EQ client folder is not set; skipping UI XML sync.")
+            return
+
+        src_dir = os.path.join(self.eqcore_root_dir, "uifiles")
+        dst_dir = self._eq_default_ui_dir()
+
+        try:
+            os.makedirs(dst_dir, exist_ok=True)
+            for xml_name in self.eqcore_ui_xml_files:
+                src = os.path.join(src_dir, xml_name)
+                dst = os.path.join(dst_dir, xml_name)
+
+                if not os.path.isfile(src):
+                    self.log(f"UI XML source missing, skipping: {src}")
+                    continue
+
+                if os.path.isfile(dst) and filecmp.cmp(src, dst, shallow=False):
+                    self.log(f"UI XML up to date: {dst}")
+                else:
+                    if os.path.exists(dst):
+                        self._backup_existing(dst)
+                    shutil.copy2(src, dst)
+                    self.log(f"Copied UI XML {src} -> {dst}")
+
+                self._ensure_manifest_include(xml_name)
+        except Exception as e:
+            self.log(f"UI XML sync failed: {e}")
+
+    def _sync_eqcore_scripts(self):
+        eq_dir = self.eq_dir_var.get()
+        if not eq_dir:
+            self.log("EQ client folder is not set; skipping Lua script sync.")
+            return
+
+        src_dir = os.path.join(self.eqcore_root_dir, "scripts")
+        dst_dir = self._eq_scripts_dir()
+
+        try:
+            os.makedirs(dst_dir, exist_ok=True)
+            for script_name in self.eqcore_lua_script_files:
+                src = os.path.join(src_dir, script_name)
+                dst = os.path.join(dst_dir, script_name)
+
+                if not os.path.isfile(src):
+                    self.log(f"Lua script source missing, skipping: {src}")
+                    continue
+
+                if os.path.isfile(dst) and filecmp.cmp(src, dst, shallow=False):
+                    self.log(f"Lua script up to date: {dst}")
+                    continue
+
+                if os.path.exists(dst):
+                    self._backup_existing(dst)
+                shutil.copy2(src, dst)
+                self.log(f"Copied Lua script {src} -> {dst}")
+        except Exception as e:
+            self.log(f"Lua script sync failed: {e}")
+
     def _load_db_config(self):
         config_path = "eqemu_config.json"
         with open(config_path, "r", encoding="utf-8") as f:
@@ -2262,6 +2374,8 @@ class ServerManagerApp(tk.Tk):
                 "/p:Configuration=Release",
                 "/p:Platform=Win32",
                 "/p:PlatformToolset=v143",
+                "/p:OutDir=..\\bin\\sm\\",
+                "/p:IntDir=ReleaseSM\\",
                 "/m",
             ]
             self.log(f"Using solution: {sln_path}")
@@ -2303,6 +2417,8 @@ class ServerManagerApp(tk.Tk):
             self._backup_existing(dest)
             shutil.copy2(src, dest)
             self.log(f"Copied {src} -> {dest}")
+            self._sync_eqcore_ui_xml()
+            self._sync_eqcore_scripts()
             self.refresh_status_indicators()
         except Exception as e:
             self.log(f"Copy eqcore DLL failed: {e}")

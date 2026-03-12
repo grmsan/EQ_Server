@@ -559,7 +559,7 @@ void InitializeMQ2Commands()
     AddCommand("/waypointpoc", WaypointPOCCmd, 0, 1, 1);
     // POC: Waypoint overlay panel (no SIDL/ImGui)
     AddCommand("/waypointoverlay", WaypointOverlayPOCCmd, 0, 1, 1);
-    // POC: Lua/ImGui waypoint path (scaffold mode until runtime deps are added)
+    // POC: Lua/ImGui waypoint path (runtime mode)
     AddCommand("/waypointimgui", WaypointLuaImGuiPOCCmd, 0, 1, 1);
 
     /* ALIASES FOR OUT OF ORDER SHORTHAND COMMANDS */

@@ -210,6 +210,8 @@ void WaypointOverlayPOC_Draw()
 void WaypointOverlayPOC_CleanUI()
 {
 	g_selected_index = 0;
+	g_have_packet = false;
+	g_entries.clear();
 }
 
 void WaypointOverlayPOCCmd(PSPAWNINFO pChar, PCHAR szLine)

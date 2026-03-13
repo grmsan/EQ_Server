@@ -81,5 +81,6 @@ extras/eq-core-dll-main/msbuild_output.log
 # Local tool outputs
 /tools/__pycache__/
 /tools/output/
-/shared
+/shared/
+/export/
 /__pycache__

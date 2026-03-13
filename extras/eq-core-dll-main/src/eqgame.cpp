@@ -240,6 +240,9 @@ static void ConditionalDumpOpcode(uint16_t op, const char* buf, size_t size, con
 	if (lop == 0x1338 && !isEdgeStatLabelDumpEnabled) {
 		return;
 	}
+	if (lop == 0x1402 && !isWaypointPacketDumpEnabled) {
+		return;
+	}
 	if (lop == 0x575b && !isOpcode575bDumpEnabled) {
 		return;
 	}
@@ -1593,6 +1596,7 @@ unsigned char __fastcall HandleWorldMessage_Detour(DWORD *con, DWORD edx, unsign
 		//  - enable_dump_575b  (suspected large item/HME packet)
 		{
 			uint16_t lop = opcode & 0xFFFF;
+			WaypointPOC_LogIncomingOpcode(lop, size);
 			if (lop == 0x1338) {
 				ApplyEdgeStatLabelPacket(buf, size);
 				ConditionalDumpOpcode(lop, buf, size, "enable_dump_1338");
@@ -1601,6 +1605,20 @@ unsigned char __fastcall HandleWorldMessage_Detour(DWORD *con, DWORD edx, unsign
 			}
 			// OP_WaypointList (RoF2) - parsed by custom waypoint POC window.
 			if (lop == 0x1402) {
+				if (isDebugLoggingEnabled && isWaypointPOCLoggingEnabled) {
+					LogDebug("[WAYPOINT_PACKET] opcode=0x1402 size=%zu", size);
+				}
+				ConditionalDumpOpcode(lop, buf, size, "enable_dump_1402");
+				WaypointPOCWnd_OnWaypointListPacket(buf, size);
+				WaypointOverlayPOC_OnWaypointListPacket(buf, size);
+				WaypointLuaImGuiPOC_OnWaypointListPacket(buf, size);
+			}
+			// Some clients appear to surface OP_WaypointList as opcode 0x0000 at this hook point.
+			// Only treat it as a waypoint candidate while a waypoint request trace is armed.
+			if (lop == 0x0000 && WaypointPOC_IsPacketTraceActive()) {
+				if (isDebugLoggingEnabled && isWaypointPOCLoggingEnabled) {
+					LogDebug("[WAYPOINT_PACKET] opcode=0x0000 treated_as_waypoint_candidate size=%zu", size);
+				}
 				WaypointPOCWnd_OnWaypointListPacket(buf, size);
 				WaypointOverlayPOC_OnWaypointListPacket(buf, size);
 				WaypointLuaImGuiPOC_OnWaypointListPacket(buf, size);

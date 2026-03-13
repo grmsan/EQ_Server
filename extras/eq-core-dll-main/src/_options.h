@@ -62,7 +62,7 @@ bool isMulticlassClassNameOverrideEnabled = true;
 
 // isMulticlassUsableClassesVerboseLoggingEnabled logs every GetUsableClasses decision (RVA/native/mask/return)
 // into dinput8_debug.log. Keep false during normal play to avoid log spam.
-bool isMulticlassUsableClassesVerboseLoggingEnabled = true;
+bool isMulticlassUsableClassesVerboseLoggingEnabled = false;
 
 // isPatchmeDisabled if set to true will let you double click eqgame.exe and not get the "Please run EverQuest" message, will start properly
 bool isPatchmeDisabled = true;
@@ -113,6 +113,12 @@ bool isEdgeStatLabelDumpEnabled = false;
 
 // Dump raw opcode 0x575b packets into repo logs/dumps/ (directory auto-created).
 bool isOpcode575bDumpEnabled = false;
+
+// Log waypoint/UI POC activity (command bridge, packet parse, render readiness) into dinput8_debug.log.
+bool isWaypointPOCLoggingEnabled = true;
+
+// Dump raw OP_WaypointList (0x1402 RoF2) packets into repo logs/dumps/ when debugging client parsing issues.
+bool isWaypointPacketDumpEnabled = false;
 
 // Enable write-watch diagnostics during zone-in (guards selected pages to detect first writer).
 // WARNING: This is invasive; leave off unless actively debugging stat corruption.

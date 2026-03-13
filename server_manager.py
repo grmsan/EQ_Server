@@ -2072,14 +2072,68 @@ class ServerManagerApp(tk.Tk):
             with open(manifest_path, "r", encoding="utf-8", errors="ignore") as f:
                 content = f.read()
 
-            include_pattern = rf"<Include>\s*{re.escape(xml_filename)}\s*</Include>"
-            if re.search(include_pattern, content, flags=re.IGNORECASE):
-                return True
-
             include_line = f"<Include>{xml_filename}</Include>"
-            if re.search(r"</XML\s*>", content, flags=re.IGNORECASE):
+
+            composite_match = re.search(
+                r"(<Composite\b[^>]*>)(.*?)(</Composite\s*>)",
+                content,
+                flags=re.IGNORECASE | re.DOTALL,
+            )
+
+            updated = content
+            include_pattern = rf"^[ \t]*<Include>\s*{re.escape(xml_filename)}\s*</Include>[ \t]*\r?\n?"
+
+            if composite_match:
+                composite_open = composite_match.group(1)
+                composite_body = composite_match.group(2)
+                composite_close = composite_match.group(3)
+
+                body_has_include = re.search(
+                    rf"<Include>\s*{re.escape(xml_filename)}\s*</Include>",
+                    composite_body,
+                    flags=re.IGNORECASE,
+                )
+
+                # Remove duplicate/misplaced copies anywhere in the file, then insert one canonical copy inside Composite.
+                stripped = re.sub(include_pattern, "", content, flags=re.IGNORECASE | re.MULTILINE)
+
+                if body_has_include:
+                    updated = stripped
+                    if updated == content:
+                        return True
+                else:
+                    refreshed_match = re.search(
+                        r"(<Composite\b[^>]*>)(.*?)(</Composite\s*>)",
+                        stripped,
+                        flags=re.IGNORECASE | re.DOTALL,
+                    )
+                    if not refreshed_match:
+                        refreshed_match = composite_match
+                        stripped = content
+
+                    refreshed_body = refreshed_match.group(2)
+                    indent_match = re.search(r"\n([ \t]+)<Include>", refreshed_body)
+                    indent = indent_match.group(1) if indent_match else "\t\t"
+                    insertion = f"{indent}{include_line}\n"
+                    new_composite = (
+                        refreshed_match.group(1)
+                        + refreshed_body.rstrip()
+                        + "\n"
+                        + insertion
+                        + refreshed_match.group(3)
+                    )
+                    updated = (
+                        stripped[:refreshed_match.start()]
+                        + new_composite
+                        + stripped[refreshed_match.end():]
+                    )
+            elif re.search(r"</XML\s*>", content, flags=re.IGNORECASE):
+                if re.search(rf"<Include>\s*{re.escape(xml_filename)}\s*</Include>", content, flags=re.IGNORECASE):
+                    return True
                 updated = re.sub(r"</XML\s*>", include_line + "\n</XML>", content, count=1, flags=re.IGNORECASE)
             else:
+                if re.search(rf"<Include>\s*{re.escape(xml_filename)}\s*</Include>", content, flags=re.IGNORECASE):
+                    return True
                 updated = content.rstrip() + "\n" + include_line + "\n"
 
             if updated != content:

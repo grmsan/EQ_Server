@@ -20,6 +20,9 @@
 #include <cstring>
 #include <utility>
 
+extern bool isDebugLoggingEnabled;
+extern bool isWaypointPOCLoggingEnabled;
+
 // WndNotification message IDs
 #define XWM_LCLICK    1
 #define XWM_CLOSE     10
@@ -92,7 +95,7 @@ bool SelectWaypointPacketLayout(const char* buf, size_t size, size_t& entries_of
 
 		const size_t local_entries_off = c.count_off + sizeof(uint32_t);
 		const size_t required = local_entries_off + (static_cast<size_t>(local_count) * c.entry_stride);
-		if (required > size) {
+		if (required != size) {
 			continue;
 		}
 
@@ -110,6 +113,7 @@ bool SelectWaypointPacketLayout(const char* buf, size_t size, size_t& entries_of
 }
 
 CWaypointPOCWnd* g_pWaypointPOCWnd = nullptr;
+DWORD g_waypoint_packet_trace_until = 0;
 
 CWaypointPOCWnd::CWaypointPOCWnd()
 	: CCustomWnd("WaypointPOCWnd")
@@ -155,7 +159,12 @@ void CWaypointPOCWnd::RequestWaypointListFromServer()
 	}
 
 	dwLastRefreshRequest = GetTickCount();
-	DoCommand((PSPAWNINFO)pLocalPlayer, "/say #wppoc list");
+	if (isDebugLoggingEnabled && isWaypointPOCLoggingEnabled) {
+		LogDebug("[WAYPOINT_SIDL] request list");
+	}
+	WaypointPOC_BeginPacketTrace("sidl");
+	char cmd[] = "/say #wppoc list";
+	DoCommand((PSPAWNINFO)pLocalPlayer, cmd);
 }
 
 void CWaypointPOCWnd::TravelToSelectedWaypoint()
@@ -172,12 +181,15 @@ void CWaypointPOCWnd::TravelToSelectedWaypoint()
 
 	const uint32_t waypoint_id = pWaypointList->GetItemData(row);
 	if (waypoint_id == 0) {
-		WriteChatColor("Waypoint POC: invalid waypoint selection.", 0x0D);
+		WriteChatColor("Waypoint POC: selected waypoint is locked. Use #wp unlock <shortname> for testing.", 0x0E);
 		return;
 	}
 
 	char cmd[128] = { 0 };
 	sprintf_s(cmd, "/say #wppoc travel %u", waypoint_id);
+	if (isDebugLoggingEnabled && isWaypointPOCLoggingEnabled) {
+		LogDebug("[WAYPOINT_SIDL] travel waypoint_id=%u cmd=%s", waypoint_id, cmd);
+	}
 	DoCommand((PSPAWNINFO)pLocalPlayer, cmd);
 }
 
@@ -193,20 +205,22 @@ void CWaypointPOCWnd::RebuildWaypointList()
 	const int total_count = static_cast<int>(g_waypoint_entries.size());
 
 	for (const auto& e : g_waypoint_entries) {
-		if (!e.enabled) {
-			continue;
-		}
-
 		const int row = pWaypointList->AddString(" ", 0xFFFFFFFF, static_cast<uint32_t>(e.waypoint_id), nullptr);
 		if (row < 0) {
 			continue;
 		}
 
-		++available_count;
-		pWaypointList->SetItemData(row, static_cast<uint32_t>(e.waypoint_id));
+		if (e.enabled) {
+			++available_count;
+		}
+		pWaypointList->SetItemData(row, e.enabled ? static_cast<uint32_t>(e.waypoint_id) : 0);
 
 		CXStr cat((char*)CategoryName(e.category_id));
-		CXStr name((char*)e.name.c_str());
+		std::string display_name = e.name;
+		if (!e.enabled) {
+			display_name += " [Locked]";
+		}
+		CXStr name((char*)display_name.c_str());
 
 		char id_buf[16] = { 0 };
 		sprintf_s(id_buf, "%d", e.waypoint_id);
@@ -215,6 +229,11 @@ void CWaypointPOCWnd::RebuildWaypointList()
 		pWaypointList->SetItemText(row, 0, &cat);
 		pWaypointList->SetItemText(row, 1, &name);
 		pWaypointList->SetItemText(row, 2, &id);
+
+		const DWORD color = e.enabled ? 0xFFFFFFFF : 0xFF808080;
+		pWaypointList->SetItemColor(row, 0, color);
+		pWaypointList->SetItemColor(row, 1, color);
+		pWaypointList->SetItemColor(row, 2, color);
 	}
 
 	if (pStatusLabel) {
@@ -278,7 +297,11 @@ int CWaypointPOCWnd::WndNotification(CXWnd* pWnd, unsigned int Message, void* un
 			if (row >= 0) {
 				const uint32_t waypoint_id = pWaypointList->GetItemData(row);
 				char info[128] = { 0 };
-				sprintf_s(info, "Selected waypoint id: %u", waypoint_id);
+				if (waypoint_id > 0) {
+					sprintf_s(info, "Selected waypoint id: %u", waypoint_id);
+				} else {
+					sprintf_s(info, "Selected waypoint is locked. Unlock it before travel.");
+				}
 				pInfoLabel->SetWindowTextA(CXStr(info));
 			}
 		}
@@ -345,6 +368,18 @@ void WaypointPOCWnd_OnWaypointListPacket(const char* buf, size_t size)
 		g_group_enabled ? 1 : 0,
 		g_expedition_enabled ? 1 : 0
 	);
+	if (isDebugLoggingEnabled && isWaypointPOCLoggingEnabled) {
+		unsigned enabled_count = 0;
+		for (const auto& e : g_waypoint_entries) {
+			if (e.enabled) {
+				++enabled_count;
+			}
+		}
+		LogDebug("[WAYPOINT_SIDL] packet parsed total=%u enabled=%u force_show=%d",
+			static_cast<unsigned>(g_waypoint_entries.size()),
+			enabled_count,
+			g_force_show ? 1 : 0);
+	}
 
 	if (g_pWaypointPOCWnd) {
 		g_pWaypointPOCWnd->RebuildWaypointList();
@@ -353,6 +388,32 @@ void WaypointPOCWnd_OnWaypointListPacket(const char* buf, size_t size)
 			((CXWnd*)g_pWaypointPOCWnd)->Show(1, 1);
 		}
 	}
+}
+
+void WaypointPOC_BeginPacketTrace(const char* source)
+{
+	g_waypoint_packet_trace_until = GetTickCount() + 8000;
+	if (isDebugLoggingEnabled && isWaypointPOCLoggingEnabled) {
+		LogDebug("[WAYPOINT_TRACE] armed source=%s window_ms=8000", source ? source : "unknown");
+	}
+}
+
+void WaypointPOC_LogIncomingOpcode(uint16_t opcode, size_t size)
+{
+	const DWORD now = GetTickCount();
+	if ((LONG)(g_waypoint_packet_trace_until - now) <= 0) {
+		return;
+	}
+
+	if (isDebugLoggingEnabled && isWaypointPOCLoggingEnabled) {
+		LogDebug("[WAYPOINT_TRACE] opcode=0x%04X size=%zu", opcode, size);
+	}
+}
+
+bool WaypointPOC_IsPacketTraceActive()
+{
+	const DWORD now = GetTickCount();
+	return ((LONG)(g_waypoint_packet_trace_until - now) > 0);
 }
 
 void WaypointPOCWnd_Create()

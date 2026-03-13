@@ -98,7 +98,10 @@ DWORD __cdecl DrawHUD_Detour(DWORD a,DWORD b,DWORD c,DWORD d)
     DrawHUDParams[2]=c;
     DrawHUDParams[3]=d;
     if (gbHUDUnderUI || gbAlwaysDrawMQHUD)
+    {
+        PluginsDrawHUD();
         return 0;
+    }
     int Ret= DrawHUD_Trampoline(a,b,c,d);
     PluginsDrawHUD();
     if (HMODULE hmEQPlayNice=GetModuleHandle("EQPlayNice.dll"))

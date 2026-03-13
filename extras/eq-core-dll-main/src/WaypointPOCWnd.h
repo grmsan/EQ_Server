@@ -41,5 +41,8 @@ void WaypointPOCWnd_CleanUI();
 void WaypointPOCWnd_ReloadUI();
 void WaypointPOCWnd_SetGameState(DWORD gs);
 void WaypointPOCWnd_OnWaypointListPacket(const char* buf, size_t size);
+void WaypointPOC_BeginPacketTrace(const char* source);
+void WaypointPOC_LogIncomingOpcode(uint16_t opcode, size_t size);
+bool WaypointPOC_IsPacketTraceActive();
 
 void WaypointPOCCmd(PSPAWNINFO pChar, PCHAR szLine);

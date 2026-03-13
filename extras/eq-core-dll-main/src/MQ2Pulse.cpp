@@ -22,6 +22,7 @@ GNU General Public License for more details.
 #include "MQ2Main.h"
 #include "PowerSlotWnd.h"
 #include "WaypointPOCWnd.h"
+#include "WaypointLuaImGuiPOC.h"
 
 // External logging function from eqgame.cpp
 extern void LogDebug(const char* format, ...);
@@ -288,6 +289,7 @@ void Heartbeat()
     }
     PowerSlotWnd_Pulse();
     WaypointPOCWnd_Pulse();
+    WaypointLuaImGuiPOC_Pulse();
     UpdateMQ2SpawnSort();
 }
 

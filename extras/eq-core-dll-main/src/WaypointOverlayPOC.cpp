@@ -1,10 +1,15 @@
 #include "WaypointOverlayPOC.h"
 #include "MQ2Main.h"
+#include "WaypointPOCWnd.h"
 
 #include <vector>
 #include <string>
 #include <cstdint>
 #include <cstring>
+
+extern void LogDebug(const char* format, ...);
+extern bool isDebugLoggingEnabled;
+extern bool isWaypointPOCLoggingEnabled;
 
 namespace {
 struct WaypointEntry {
@@ -17,6 +22,8 @@ std::vector<WaypointEntry> g_entries;
 bool g_overlay_enabled = false;
 int g_selected_index = 0;
 bool g_have_packet = false;
+bool g_logged_first_draw = false;
+bool g_forced_show_net_status = false;
 
 int MinInt(int a, int b)
 {
@@ -72,7 +79,7 @@ bool SelectLayout(const char* buf, size_t size, size_t& entries_off, size_t& str
 
 		const size_t local_entries_off = c.count_off + sizeof(uint32_t);
 		const size_t required = local_entries_off + (static_cast<size_t>(local_count) * c.entry_stride);
-		if (required > size) {
+		if (required != size) {
 			continue;
 		}
 
@@ -90,7 +97,12 @@ void RequestListFromServer()
 	if (!pLocalPlayer) {
 		return;
 	}
-	DoCommand((PSPAWNINFO)pLocalPlayer, "/say #wppoc list");
+	if (isDebugLoggingEnabled && isWaypointPOCLoggingEnabled) {
+		LogDebug("[WAYPOINT_OVERLAY] request list");
+	}
+	WaypointPOC_BeginPacketTrace("overlay");
+	char cmd[] = "/say #wppoc list";
+	DoCommand((PSPAWNINFO)pLocalPlayer, cmd);
 }
 
 void TravelSelected()
@@ -110,6 +122,9 @@ void TravelSelected()
 	const auto& selected = g_entries[g_selected_index];
 	char cmd[128] = { 0 };
 	sprintf_s(cmd, "/say #wppoc travel %d", selected.waypoint_id);
+	if (isDebugLoggingEnabled && isWaypointPOCLoggingEnabled) {
+		LogDebug("[WAYPOINT_OVERLAY] travel waypoint_id=%d cmd=%s", selected.waypoint_id, cmd);
+	}
 	DoCommand((PSPAWNINFO)pLocalPlayer, cmd);
 }
 }
@@ -157,12 +172,23 @@ void WaypointOverlayPOC_OnWaypointListPacket(const char* buf, size_t size)
 	if (g_selected_index >= static_cast<int>(g_entries.size())) {
 		g_selected_index = MaxInt(0, static_cast<int>(g_entries.size()) - 1);
 	}
+	if (isDebugLoggingEnabled && isWaypointPOCLoggingEnabled) {
+		LogDebug("[WAYPOINT_OVERLAY] packet parsed enabled=%u selected=%d",
+			static_cast<unsigned>(g_entries.size()),
+			g_selected_index + 1);
+	}
 }
 
 void WaypointOverlayPOC_Draw()
 {
 	if (!g_overlay_enabled || gGameState != GAMESTATE_INGAME) {
 		return;
+	}
+	if (isDebugLoggingEnabled && isWaypointPOCLoggingEnabled && !g_logged_first_draw) {
+		LogDebug("[WAYPOINT_OVERLAY] first draw packet=%d entries=%u",
+			g_have_packet ? 1 : 0,
+			static_cast<unsigned>(g_entries.size()));
+		g_logged_first_draw = true;
 	}
 
 	const int x = 20;
@@ -212,6 +238,7 @@ void WaypointOverlayPOC_CleanUI()
 	g_selected_index = 0;
 	g_have_packet = false;
 	g_entries.clear();
+	g_logged_first_draw = false;
 }
 
 void WaypointOverlayPOCCmd(PSPAWNINFO pChar, PCHAR szLine)
@@ -220,10 +247,43 @@ void WaypointOverlayPOCCmd(PSPAWNINFO pChar, PCHAR szLine)
 
 	if (!szLine || !szLine[0] || !_stricmp(szLine, "show") || !_stricmp(szLine, "toggle")) {
 		g_overlay_enabled = !g_overlay_enabled;
+		if (g_overlay_enabled && !gbShowNetStatus) {
+			gbShowNetStatus = true;
+			g_forced_show_net_status = true;
+			if (isDebugLoggingEnabled && isWaypointPOCLoggingEnabled) {
+				LogDebug("[WAYPOINT_OVERLAY] forced ShowNetStatus=1");
+			}
+		} else if (!g_overlay_enabled && g_forced_show_net_status) {
+			gbShowNetStatus = false;
+			g_forced_show_net_status = false;
+			if (isDebugLoggingEnabled && isWaypointPOCLoggingEnabled) {
+				LogDebug("[WAYPOINT_OVERLAY] restored ShowNetStatus=0");
+			}
+		}
 		if (g_overlay_enabled && !g_have_packet) {
 			RequestListFromServer();
 		}
+		if (isDebugLoggingEnabled && isWaypointPOCLoggingEnabled) {
+			LogDebug("[WAYPOINT_OVERLAY] toggle enabled=%d", g_overlay_enabled ? 1 : 0);
+		}
 		WriteChatColor(g_overlay_enabled ? "Waypoint Overlay POC: ON" : "Waypoint Overlay POC: OFF", 0x0D);
+		return;
+	}
+
+	if (!_stricmp(szLine, "status")) {
+		char line[192] = { 0 };
+		sprintf_s(
+			line,
+			"Waypoint Overlay POC: enabled=%s packet=%s entries=%d selected=%d",
+			g_overlay_enabled ? "yes" : "no",
+			g_have_packet ? "yes" : "no",
+			static_cast<int>(g_entries.size()),
+			g_selected_index + 1
+		);
+		WriteChatColor(line, 0x0E);
+		if (isDebugLoggingEnabled && isWaypointPOCLoggingEnabled) {
+			LogDebug("[WAYPOINT_OVERLAY] %s", line);
+		}
 		return;
 	}
 
@@ -251,5 +311,5 @@ void WaypointOverlayPOCCmd(PSPAWNINFO pChar, PCHAR szLine)
 		return;
 	}
 
-	WriteChatColor("Usage: /waypointoverlay [toggle|refresh|next|prev|travel]", 0x0E);
+	WriteChatColor("Usage: /waypointoverlay [toggle|status|refresh|next|prev|travel]", 0x0E);
 }

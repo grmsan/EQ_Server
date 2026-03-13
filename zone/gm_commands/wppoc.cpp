@@ -8,6 +8,13 @@ void command_wppoc(Client *c, const Seperator *sep)
 	}
 
 	const std::string sub = Strings::ToLower(sep->arg[1]);
+	LogInfo(
+		"[WAYPOINT_WPPOC] char_id={} name={} message='{}' sub='{}'",
+		c->CharacterID(),
+		c->GetCleanName(),
+		sep->msg ? sep->msg : "",
+		sub
+	);
 
 	if (sub.empty() || sub == "list" || sub == "refresh") {
 		c->SendWaypointList(true);

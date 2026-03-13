@@ -9,5 +9,6 @@ void WaypointLuaImGuiPOC_Initialize();
 void WaypointLuaImGuiPOC_Shutdown();
 void WaypointLuaImGuiPOC_OnWaypointListPacket(const char* buf, size_t size);
 void WaypointLuaImGuiPOC_Draw();
+void WaypointLuaImGuiPOC_Pulse();
 void WaypointLuaImGuiPOC_CleanUI();
 void WaypointLuaImGuiPOCCmd(PSPAWNINFO pChar, PCHAR szLine);

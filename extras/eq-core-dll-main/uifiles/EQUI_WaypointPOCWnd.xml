@@ -1,10 +1,10 @@
 <?xml version = "1.0"?>
-<!-- POC: Waypoint travel window for custom DLL -->
+<!-- Generic SIDL tool host used by waypoint and GM/dev dashboard modules -->
 <XML ID = "EQInterfaceDefinitionLanguage">
 	<Schema xmlns = "EverQuestData" xmlns:dt = "EverQuestDataTypes"/>
 
-	<Label item = "WP_StatusLabel">
-		<ScreenID>WP_StatusLabel</ScreenID>
+	<Label item = "GT_StatusLabel">
+		<ScreenID>GT_StatusLabel</ScreenID>
 		<Font>2</Font>
 		<RelativePosition>true</RelativePosition>
 		<Location>
@@ -12,10 +12,10 @@
 			<Y>8</Y>
 		</Location>
 		<Size>
-			<CX>400</CX>
+			<CX>500</CX>
 			<CY>18</CY>
 		</Size>
-		<Text>Available: 0 | Total: 0</Text>
+		<Text>Custom Tools</Text>
 		<TextColor>
 			<R>220</R>
 			<G>220</G>
@@ -26,17 +26,57 @@
 		<AlignRight>false</AlignRight>
 	</Label>
 
-	<Listbox item = "WP_List">
-		<ScreenID>WP_List</ScreenID>
+	<Button item = "GT_WaypointModeBtn">
+		<ScreenID>GT_WaypointModeBtn</ScreenID>
+		<RelativePosition>true</RelativePosition>
+		<Location>
+			<X>10</X>
+			<Y>32</Y>
+		</Location>
+		<Size>
+			<CX>120</CX>
+			<CY>24</CY>
+		</Size>
+		<Text>Waypoints</Text>
+		<TextColor>
+			<R>255</R>
+			<G>255</G>
+			<B>255</B>
+		</TextColor>
+		<Template>BDT_Normal</Template>
+	</Button>
+
+	<Button item = "GT_DashboardModeBtn">
+		<ScreenID>GT_DashboardModeBtn</ScreenID>
+		<RelativePosition>true</RelativePosition>
+		<Location>
+			<X>140</X>
+			<Y>32</Y>
+		</Location>
+		<Size>
+			<CX>120</CX>
+			<CY>24</CY>
+		</Size>
+		<Text>GM Dash</Text>
+		<TextColor>
+			<R>255</R>
+			<G>255</G>
+			<B>255</B>
+		</TextColor>
+		<Template>BDT_Normal</Template>
+	</Button>
+
+	<Listbox item = "GT_List">
+		<ScreenID>GT_List</ScreenID>
 		<DrawTemplate>WDT_Inner</DrawTemplate>
 		<RelativePosition>true</RelativePosition>
 		<Location>
 			<X>10</X>
-			<Y>30</Y>
+			<Y>64</Y>
 		</Location>
 		<Size>
-			<CX>400</CX>
-			<CY>320</CY>
+			<CX>500</CX>
+			<CY>300</CY>
 		</Size>
 		<TextColor>
 			<R>255</R>
@@ -48,31 +88,29 @@
 			<Heading>Category</Heading>
 		</Columns>
 		<Columns>
-			<Width>230</Width>
-			<Heading>Waypoint</Heading>
+			<Width>330</Width>
+			<Heading>Item</Heading>
 		</Columns>
 		<Columns>
 			<Width>60</Width>
-			<Heading>ID</Heading>
+			<Heading>Mode</Heading>
 		</Columns>
 		<Style_Border>true</Style_Border>
 		<Style_VScroll>true</Style_VScroll>
 	</Listbox>
 
-	<Button item = "WP_RefreshBtn">
-		<ScreenID>WP_RefreshBtn</ScreenID>
+	<Button item = "GT_PrimaryBtn">
+		<ScreenID>GT_PrimaryBtn</ScreenID>
 		<RelativePosition>true</RelativePosition>
 		<Location>
 			<X>10</X>
-			<Y>358</Y>
+			<Y>372</Y>
 		</Location>
 		<Size>
 			<CX>120</CX>
 			<CY>24</CY>
 		</Size>
-		<TooltipReference>Request waypoint list from server</TooltipReference>
-		<Style_Checkbox>false</Style_Checkbox>
-		<Text>Refresh</Text>
+		<Text>Primary</Text>
 		<TextColor>
 			<R>255</R>
 			<G>255</G>
@@ -81,20 +119,18 @@
 		<Template>BDT_Normal</Template>
 	</Button>
 
-	<Button item = "WP_TravelBtn">
-		<ScreenID>WP_TravelBtn</ScreenID>
+	<Button item = "GT_SecondaryBtn">
+		<ScreenID>GT_SecondaryBtn</ScreenID>
 		<RelativePosition>true</RelativePosition>
 		<Location>
-			<X>150</X>
-			<Y>358</Y>
+			<X>140</X>
+			<Y>372</Y>
 		</Location>
 		<Size>
 			<CX>120</CX>
 			<CY>24</CY>
 		</Size>
-		<TooltipReference>Travel to selected waypoint</TooltipReference>
-		<Style_Checkbox>false</Style_Checkbox>
-		<Text>Travel</Text>
+		<Text>Secondary</Text>
 		<TextColor>
 			<R>255</R>
 			<G>255</G>
@@ -103,19 +139,17 @@
 		<Template>BDT_Normal</Template>
 	</Button>
 
-	<Button item = "WP_CloseBtn">
-		<ScreenID>WP_CloseBtn</ScreenID>
+	<Button item = "GT_CloseBtn">
+		<ScreenID>GT_CloseBtn</ScreenID>
 		<RelativePosition>true</RelativePosition>
 		<Location>
-			<X>290</X>
-			<Y>358</Y>
+			<X>390</X>
+			<Y>372</Y>
 		</Location>
 		<Size>
 			<CX>120</CX>
 			<CY>24</CY>
 		</Size>
-		<TooltipReference>Close this window</TooltipReference>
-		<Style_Checkbox>false</Style_Checkbox>
 		<Text>Close</Text>
 		<TextColor>
 			<R>255</R>
@@ -125,26 +159,26 @@
 		<Template>BDT_Normal</Template>
 	</Button>
 
-	<Label item = "WP_InfoLabel">
-		<ScreenID>WP_InfoLabel</ScreenID>
+	<Label item = "GT_InfoLabel">
+		<ScreenID>GT_InfoLabel</ScreenID>
 		<Font>1</Font>
 		<RelativePosition>true</RelativePosition>
 		<Location>
 			<X>10</X>
-			<Y>388</Y>
+			<Y>404</Y>
 		</Location>
 		<Size>
-			<CX>400</CX>
-			<CY>16</CY>
+			<CX>500</CX>
+			<CY>28</CY>
 		</Size>
-		<Text>Select a waypoint and click Travel</Text>
+		<Text>Select a tool item to see details.</Text>
 		<TextColor>
 			<R>128</R>
 			<G>128</G>
 			<B>128</B>
 		</TextColor>
-		<NoWrap>true</NoWrap>
-		<AlignCenter>true</AlignCenter>
+		<NoWrap>false</NoWrap>
+		<AlignCenter>false</AlignCenter>
 		<AlignRight>false</AlignRight>
 	</Label>
 
@@ -152,29 +186,31 @@
 		<ScreenID>WaypointPOCWnd</ScreenID>
 		<RelativePosition>false</RelativePosition>
 		<Location>
-			<X>440</X>
-			<Y>180</Y>
+			<X>420</X>
+			<Y>170</Y>
 		</Location>
 		<Size>
-			<CX>420</CX>
-			<CY>430</CY>
+			<CX>520</CX>
+			<CY>450</CY>
 		</Size>
 		<Style_VScroll>false</Style_VScroll>
 		<Style_HScroll>false</Style_HScroll>
 		<Style_Transparent>false</Style_Transparent>
-		<Text>Waypoint Travel (POC)</Text>
+		<Text>Custom Tools</Text>
 		<DrawTemplate>WDT_Rounded</DrawTemplate>
 		<Style_Titlebar>true</Style_Titlebar>
 		<Style_Closebox>true</Style_Closebox>
 		<Style_Minimizebox>true</Style_Minimizebox>
 		<Style_Border>true</Style_Border>
 		<Style_Sizable>true</Style_Sizable>
-		<Pieces>WP_StatusLabel</Pieces>
-		<Pieces>WP_List</Pieces>
-		<Pieces>WP_RefreshBtn</Pieces>
-		<Pieces>WP_TravelBtn</Pieces>
-		<Pieces>WP_CloseBtn</Pieces>
-		<Pieces>WP_InfoLabel</Pieces>
+		<Pieces>GT_StatusLabel</Pieces>
+		<Pieces>GT_WaypointModeBtn</Pieces>
+		<Pieces>GT_DashboardModeBtn</Pieces>
+		<Pieces>GT_List</Pieces>
+		<Pieces>GT_PrimaryBtn</Pieces>
+		<Pieces>GT_SecondaryBtn</Pieces>
+		<Pieces>GT_CloseBtn</Pieces>
+		<Pieces>GT_InfoLabel</Pieces>
 	</Screen>
 
 </XML>

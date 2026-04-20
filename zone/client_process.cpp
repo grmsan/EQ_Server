@@ -1397,24 +1397,7 @@ void Client::OPMemorizeSpell(const EQApplicationPacket* app)
 			!IsPlayerClass(GetClass()) ||
 			[&]() -> bool {
 				uint8 best_req_level = 255;
-				bool any_usable = false;
-				for (uint8 class_id = 1; class_id <= Class::PLAYER_CLASS_COUNT; ++class_id) {
-					if (!HasClass(class_id)) {
-						continue;
-					}
-
-					const uint8 req = spells[m->spell_id].classes[class_id - 1];
-					if (req == 255) {
-						continue;
-					}
-
-					any_usable = true;
-					if (req < best_req_level) {
-						best_req_level = req;
-					}
-				}
-
-				if (!any_usable) {
+				if (!GetSpellClassRequirementForCurrentClasses(m->spell_id, best_req_level)) {
 					Message(Chat::Red, "Your classes cannot use this spell.");
 					if (m->scribing == memSpellMemorize) {
 						cancel_memorize_ui(m->slot);
@@ -2002,7 +1985,7 @@ void Client::OPGMTrainSkill(const EQApplicationPacket *app)
 	//you can only use your own trainer, client enforces this, but why trust it
 	if (!RuleB(Character, AllowCrossClassTrainers)) {
 		int trains_class = pTrainer->GetClass() - (Class::WarriorGM - Class::Warrior);
-		
+
 		bool can_train = false;
 		if (RuleB(Custom, MulticlassingEnabled)) {
 			can_train = HasClass(trains_class);

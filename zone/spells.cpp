@@ -2884,8 +2884,8 @@ bool Mob::SpellFinished(uint16 spell_id, Mob *spell_target, CastingSlot slot, in
 					if (target_group) {
 						target_group->CastGroupSpell(this, spell_id);
 						// Multiclass: Bards (and multiclass bards) do not hit themselves via this path
-						bool is_bard = RuleB(Custom, MulticlassingEnabled) 
-							? CastToClient()->HasClass(Class::Bard) 
+						bool is_bard = RuleB(Custom, MulticlassingEnabled)
+							? CastToClient()->HasClass(Class::Bard)
 							: (GetClass() == Class::Bard);
 
 						if (target_group != GetGroup() && !is_bard) {
@@ -3860,8 +3860,8 @@ int Mob::AddBuff(Mob *caster, uint16 spell_id, int duration, int32 level_overrid
 					// Multiclass: Check if caster has Bard class
 					bool is_bard = false;
 					if (caster->IsClient()) {
-						is_bard = RuleB(Custom, MulticlassingEnabled) 
-							? caster->CastToClient()->HasClass(Class::Bard) 
+						is_bard = RuleB(Custom, MulticlassingEnabled)
+							? caster->CastToClient()->HasClass(Class::Bard)
 							: (caster->GetClass() == Class::Bard);
 					} else {
 						is_bard = (caster->GetClass() == Class::Bard);
@@ -6206,6 +6206,77 @@ void Client::MemSpell(uint16 spell_id, int slot, bool update_client)
 	if(update_client) {
 		MemorizeSpell(slot, spell_id, memSpellMemorize);
 	}
+}
+
+bool Client::IsSpellUsableByCurrentClasses(uint16 spell_id, bool check_level) const
+{
+	uint8 best_req_level = 255;
+	if (!GetSpellClassRequirementForCurrentClasses(spell_id, best_req_level)) {
+		return false;
+	}
+
+	return !check_level || GetLevel() >= best_req_level;
+}
+
+bool Client::GetSpellClassRequirementForCurrentClasses(uint16 spell_id, uint8 &best_req_level) const
+{
+	best_req_level = 255;
+
+	if (!IsValidSpell(spell_id)) {
+		return false;
+	}
+
+	bool any_usable = false;
+
+	if (RuleB(Custom, MulticlassingEnabled)) {
+		for (uint8 class_id = 1; class_id <= Class::PLAYER_CLASS_COUNT; ++class_id) {
+			if (!HasClass(class_id)) {
+				continue;
+			}
+
+			const uint8 req = spells[spell_id].classes[class_id - 1];
+			if (req == 0 || req == 255) {
+				continue;
+			}
+
+			any_usable = true;
+			if (req < best_req_level) {
+				best_req_level = req;
+			}
+		}
+	} else {
+		const uint8 req = spells[spell_id].classes[GetClass() - 1];
+		if (req > 0 && req < 255) {
+			any_usable = true;
+			best_req_level = req;
+		}
+	}
+
+	if (!any_usable) {
+		return false;
+	}
+
+	return true;
+}
+
+uint16 Client::UnmemInvalidSpellsForCurrentClasses(bool update_client, bool check_level)
+{
+	uint16 removed_count = 0;
+
+	for (int spell_gem = 0; spell_gem < EQ::spells::SPELL_GEM_COUNT; ++spell_gem) {
+		if (!IsValidSpell(m_pp.mem_spells[spell_gem])) {
+			continue;
+		}
+
+		if (IsSpellUsableByCurrentClasses(m_pp.mem_spells[spell_gem], check_level)) {
+			continue;
+		}
+
+		UnmemSpell(spell_gem, update_client);
+		++removed_count;
+	}
+
+	return removed_count;
 }
 
 void Client::UnmemSpell(int slot, bool update_client)

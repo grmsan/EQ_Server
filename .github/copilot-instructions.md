@@ -35,8 +35,15 @@ Multiclass tracking (in game_design/multiclass/):
   DLL_INTEGRATION.md        Client DLL build and debug guide
   QUICK_START.md            15-minute setup guide
 
-Other project tracking (root level):
+Project tracking (root level):
+  PROJECT_DASHBOARD.md      Master entry point - consolidated TODOs, progress, session log
   TODO_DEX_MIGRATION.md     DEX stat migration tracking
+
+For returning after extended breaks, start with PROJECT_DASHBOARD.md to see:
+  - What was last worked on (Session Log)
+  - Highest priority items (Active Work Items)
+  - Progress overview by domain
+  - Quick links to all trackers
 
 Before modifying or implementing any behavior, you must:
 

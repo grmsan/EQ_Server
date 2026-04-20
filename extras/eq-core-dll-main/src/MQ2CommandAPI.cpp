@@ -557,6 +557,9 @@ void InitializeMQ2Commands()
     AddCommand("/powerslots", PowerSlotCmd, 0, 1, 1);
     // POC: Waypoint travel window
     AddCommand("/waypointpoc", WaypointPOCCmd, 0, 1, 1);
+    // Generic SIDL tool host
+    AddCommand("/toolwnd", GenericToolWndCmd, 0, 1, 1);
+    AddCommand("/gmdashboard", GMDashboardCmd, 0, 1, 1);
     // POC: Waypoint overlay panel (no SIDL/ImGui)
     AddCommand("/waypointoverlay", WaypointOverlayPOCCmd, 0, 1, 1);
     // POC: Lua/ImGui waypoint path (runtime mode)

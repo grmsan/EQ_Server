@@ -5,8 +5,13 @@
 #include "EQClasses.h"
 #include <cstddef>
 
-// Logging helper from eqgame.cpp
 extern void LogDebug(const char* format, ...);
+
+enum class GenericToolMode : int
+{
+	Waypoints = 0,
+	GMDashboard = 1,
+};
 
 class CWaypointPOCWnd : public CCustomWnd
 {
@@ -15,14 +20,20 @@ public:
 	~CWaypointPOCWnd();
 
 	int WndNotification(CXWnd* pWnd, unsigned int Message, void* unknown);
-	void RebuildWaypointList();
+	void RebuildActiveTool();
 	void RequestWaypointListFromServer();
 	void TravelToSelectedWaypoint();
+	void RunSelectedDashboardCommand(bool dry_run);
+	void SwitchTool(GenericToolMode mode, bool ensure_visible);
 	void Toggle();
+	void UpdateToolChrome();
+	void UpdateSelectionDetails();
 
-	CListWnd* pWaypointList;
-	CButtonWnd* pRefreshBtn;
-	CButtonWnd* pTravelBtn;
+	CButtonWnd* pModeWaypointsBtn;
+	CButtonWnd* pModeDashboardBtn;
+	CListWnd* pToolList;
+	CButtonWnd* pPrimaryBtn;
+	CButtonWnd* pSecondaryBtn;
 	CButtonWnd* pCloseBtn;
 	CXWnd* pStatusLabel;
 	CXWnd* pInfoLabel;
@@ -46,3 +57,5 @@ void WaypointPOC_LogIncomingOpcode(uint16_t opcode, size_t size);
 bool WaypointPOC_IsPacketTraceActive();
 
 void WaypointPOCCmd(PSPAWNINFO pChar, PCHAR szLine);
+void GenericToolWndCmd(PSPAWNINFO pChar, PCHAR szLine);
+void GMDashboardCmd(PSPAWNINFO pChar, PCHAR szLine);

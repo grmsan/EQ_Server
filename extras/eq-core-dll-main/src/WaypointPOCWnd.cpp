@@ -1,29 +1,28 @@
 /*****************************************************************************
- * WaypointPOCWnd.cpp - POC custom SIDL window for waypoint travel
+ * WaypointPOCWnd.cpp - Generic SIDL tool host for custom DLL UI modules
  *
- * Demonstrates:
- *   - Parsing server waypoint packets (OP_WaypointList / 0x1402 RoF2)
- *   - Rendering available waypoints in a custom CCustomWnd list
- *   - Sending travel actions back to server through # command bridge
+ * Current tools:
+ *   - Waypoints: account waypoint list + travel action
+ *   - GM Dashboard: common development / ops commands from the runbook
  *
- * XML requirements:
- *   - EQUI_WaypointPOCWnd.xml in <EQ_Client_Dir>/uifiles/default/
- *   - Add this XML filename to uifiles/default/default.xml
+ * Compatibility:
+ *   - /waypointpoc still opens the waypoint tool
+ *   - /toolwnd opens the generic host
+ *   - /gmdashboard opens the GM/dev dashboard tool
  *****************************************************************************/
 
 #include "WaypointPOCWnd.h"
 #include "eqgame.h"
 
-#include <vector>
-#include <string>
 #include <cstdint>
 #include <cstring>
+#include <string>
 #include <utility>
+#include <vector>
 
 extern bool isDebugLoggingEnabled;
 extern bool isWaypointPOCLoggingEnabled;
 
-// WndNotification message IDs
 #define XWM_LCLICK    1
 #define XWM_CLOSE     10
 #define XWM_NEWVALUE  14
@@ -36,6 +35,14 @@ struct WaypointPOCEntry {
 	std::string name;
 };
 
+struct DashboardEntry {
+	const char* category;
+	const char* title;
+	const char* command;
+	const char* description;
+	bool runnable;
+};
+
 std::vector<WaypointPOCEntry> g_waypoint_entries;
 bool g_group_enabled = false;
 bool g_expedition_enabled = false;
@@ -43,6 +50,20 @@ bool g_group_selected = false;
 bool g_autoconfirm_selected = false;
 bool g_force_show = false;
 DWORD g_last_waypoint_packet_tick = 0;
+GenericToolMode g_active_tool = GenericToolMode::Waypoints;
+
+const DashboardEntry kDashboardEntries[] = {
+	{ "Inspect", "Print Location", "#loc", "Capture exact coordinates and heading for placement work.", true },
+	{ "Zone", "Reload Quests", "#reloadquests", "Reload quest scripts in the current zone without restarting.", true },
+	{ "Zone", "Repop Zone", "#repop", "Repopulate the current zone from database spawns.", true },
+	{ "Spawns", "Show Spawn Status", "#show spawn_status all", "List spawn state for the current zone.", true },
+	{ "Spawns", "Persist Target", "#spawnfix", "Save targeted NPC location and heading to spawn2.", true },
+	{ "Spawns", "Save NPC Visuals", "#npcedit save", "Persist the target's current appearance and spawn position.", true },
+	{ "Waypoints", "Spawn Runestone", "#npcspawn create 999300", "Spawn a faded runestone at your current location.", true },
+	{ "Waypoints", "Unlock City Test", "#wp unlock qeynos2", "Example waypoint unlock command for quick client testing.", true },
+	{ "Templates", "Spawn NPC By ID", "#spawn <npc_type_id>", "Template command. Replace <npc_type_id> manually in chat for ad-hoc spawns.", false },
+	{ "Templates", "Goto NPC Name", "#goto <npc_name>", "Template command. Replace <npc_name> manually in chat for quick movement.", false },
+};
 
 const char* CategoryName(int category_id)
 {
@@ -61,11 +82,32 @@ const char* CategoryName(int category_id)
 	}
 }
 
+const char* ToolWindowTitle(GenericToolMode mode)
+{
+	switch (mode) {
+	case GenericToolMode::Waypoints:
+		return "Waypoint Tools";
+	case GenericToolMode::GMDashboard:
+		return "GM Dashboard";
+	default:
+		return "Custom Tools";
+	}
+}
+
+const char* ToolInfoLine(GenericToolMode mode)
+{
+	switch (mode) {
+	case GenericToolMode::Waypoints:
+		return "Select a waypoint and click Travel.";
+	case GenericToolMode::GMDashboard:
+		return "Select a command and click Run. Template rows describe manual commands.";
+	default:
+		return "";
+	}
+}
+
 bool SelectWaypointPacketLayout(const char* buf, size_t size, size_t& entries_off, size_t& stride, uint32_t& count)
 {
-	// Server build typically uses natural alignment:
-	//   header count at offset 8, entry stride 76.
-	// DLL build uses 1-byte member alignment, so we also accept packed fallbacks.
 	struct Candidate {
 		size_t count_off;
 		size_t entry_stride;
@@ -73,15 +115,14 @@ bool SelectWaypointPacketLayout(const char* buf, size_t size, size_t& entries_of
 	};
 
 	const Candidate candidates[] = {
-		{ 8, 76, 4 }, // expected server layout
+		{ 8, 76, 4 },
 		{ 8, 73, 3 },
 		{ 5, 76, 2 },
-		{ 5, 73, 1 }  // fully packed fallback
+		{ 5, 73, 1 }
 	};
 
 	int best_score = -1;
 	bool found = false;
-
 	for (const auto& c : candidates) {
 		if (size < c.count_off + sizeof(uint32_t)) {
 			continue;
@@ -110,6 +151,52 @@ bool SelectWaypointPacketLayout(const char* buf, size_t size, size_t& entries_of
 
 	return found;
 }
+
+void SetButtonText(CButtonWnd* button, const char* text)
+{
+	if (button && text) {
+		((CXWnd*)button)->SetWindowTextA(CXStr(text));
+	}
+}
+
+void ExecuteSayCommand(const char* command)
+{
+	if (!pLocalPlayer || !command || !command[0]) {
+		return;
+	}
+
+	char cmd[256] = { 0 };
+	sprintf_s(cmd, "/say %s", command);
+	DoCommand((PSPAWNINFO)pLocalPlayer, cmd);
+}
+
+void ExecuteClientCommand(const char* command)
+{
+	if (!pLocalPlayer || !command || !command[0]) {
+		return;
+	}
+
+	DoCommand((PSPAWNINFO)pLocalPlayer, const_cast<char*>(command));
+}
+
+const DashboardEntry* GetSelectedDashboardEntry(const CListWnd* list)
+{
+	if (!list) {
+		return nullptr;
+	}
+
+	const int row = list->GetCurSel();
+	if (row < 0) {
+		return nullptr;
+	}
+
+	const uint32_t index = list->GetItemData(row);
+	if (index >= (sizeof(kDashboardEntries) / sizeof(kDashboardEntries[0]))) {
+		return nullptr;
+	}
+
+	return &kDashboardEntries[index];
+}
 }
 
 CWaypointPOCWnd* g_pWaypointPOCWnd = nullptr;
@@ -117,9 +204,11 @@ DWORD g_waypoint_packet_trace_until = 0;
 
 CWaypointPOCWnd::CWaypointPOCWnd()
 	: CCustomWnd("WaypointPOCWnd")
-	, pWaypointList(nullptr)
-	, pRefreshBtn(nullptr)
-	, pTravelBtn(nullptr)
+	, pModeWaypointsBtn(nullptr)
+	, pModeDashboardBtn(nullptr)
+	, pToolList(nullptr)
+	, pPrimaryBtn(nullptr)
+	, pSecondaryBtn(nullptr)
 	, pCloseBtn(nullptr)
 	, pStatusLabel(nullptr)
 	, pInfoLabel(nullptr)
@@ -127,29 +216,97 @@ CWaypointPOCWnd::CWaypointPOCWnd()
 	, bUIValid(true)
 	, dwLastRefreshRequest(0)
 {
-	pWaypointList = (CListWnd*)GetChildItem("WP_List");
-	pRefreshBtn = (CButtonWnd*)GetChildItem("WP_RefreshBtn");
-	pTravelBtn = (CButtonWnd*)GetChildItem("WP_TravelBtn");
-	pCloseBtn = (CButtonWnd*)GetChildItem("WP_CloseBtn");
-	pStatusLabel = GetChildItem("WP_StatusLabel");
-	pInfoLabel = GetChildItem("WP_InfoLabel");
+	pModeWaypointsBtn = (CButtonWnd*)GetChildItem("GT_WaypointModeBtn");
+	pModeDashboardBtn = (CButtonWnd*)GetChildItem("GT_DashboardModeBtn");
+	pToolList = (CListWnd*)GetChildItem("GT_List");
+	pPrimaryBtn = (CButtonWnd*)GetChildItem("GT_PrimaryBtn");
+	pSecondaryBtn = (CButtonWnd*)GetChildItem("GT_SecondaryBtn");
+	pCloseBtn = (CButtonWnd*)GetChildItem("GT_CloseBtn");
+	pStatusLabel = GetChildItem("GT_StatusLabel");
+	pInfoLabel = GetChildItem("GT_InfoLabel");
 
-	if (!pWaypointList || !pRefreshBtn || !pTravelBtn || !pCloseBtn) {
+	if (!pModeWaypointsBtn || !pModeDashboardBtn || !pToolList || !pPrimaryBtn || !pSecondaryBtn || !pCloseBtn) {
 		bUIValid = false;
-		LogDebug("WaypointPOCWnd: WARNING - required child controls not found");
+		LogDebug("GenericToolWnd: WARNING - required child controls not found");
 	}
 
 	SetWndNotification(CWaypointPOCWnd);
 	CloseOnESC = 0;
 
-	RebuildWaypointList();
-	RequestWaypointListFromServer();
-	LogDebug("WaypointPOCWnd: created (bUIValid=%d)", bUIValid ? 1 : 0);
+	if (pToolList) {
+		pToolList->SetColumnWidth(0, 110);
+		pToolList->SetColumnWidth(1, 330);
+		pToolList->SetColumnWidth(2, 60);
+	}
+
+	UpdateToolChrome();
+	RebuildActiveTool();
+	LogDebug("GenericToolWnd: created (bUIValid=%d active_tool=%d)", bUIValid ? 1 : 0, static_cast<int>(g_active_tool));
 }
 
 CWaypointPOCWnd::~CWaypointPOCWnd()
 {
-	LogDebug("WaypointPOCWnd: destroyed");
+	LogDebug("GenericToolWnd: destroyed");
+}
+
+void CWaypointPOCWnd::UpdateToolChrome()
+{
+	((CXWnd*)this)->SetWindowTextA(CXStr((char*)ToolWindowTitle(g_active_tool)));
+
+	if (pToolList) {
+		if (g_active_tool == GenericToolMode::Waypoints) {
+			pToolList->SetColumnWidth(0, 110);
+			pToolList->SetColumnWidth(1, 230);
+			pToolList->SetColumnWidth(2, 60);
+		} else {
+			pToolList->SetColumnWidth(0, 110);
+			pToolList->SetColumnWidth(1, 330);
+			pToolList->SetColumnWidth(2, 60);
+		}
+	}
+
+	if (g_active_tool == GenericToolMode::Waypoints) {
+		SetButtonText(pPrimaryBtn, "Refresh");
+		SetButtonText(pSecondaryBtn, "Travel");
+	} else {
+		SetButtonText(pPrimaryBtn, "Run");
+		SetButtonText(pSecondaryBtn, "Details");
+	}
+	SetButtonText(pModeWaypointsBtn, "Waypoints");
+	SetButtonText(pModeDashboardBtn, "GM Dash");
+	SetButtonText(pCloseBtn, "Close");
+}
+
+void CWaypointPOCWnd::UpdateSelectionDetails()
+{
+	if (!pToolList || !pInfoLabel) {
+		return;
+	}
+
+	const int row = pToolList->GetCurSel();
+	if (row < 0) {
+		pInfoLabel->SetWindowTextA(CXStr((char*)ToolInfoLine(g_active_tool)));
+		return;
+	}
+
+	char info[256] = { 0 };
+	if (g_active_tool == GenericToolMode::Waypoints) {
+		const uint32_t waypoint_id = pToolList->GetItemData(row);
+		if (waypoint_id > 0) {
+			sprintf_s(info, "Selected waypoint id: %u", waypoint_id);
+		} else {
+			sprintf_s(info, "Selected waypoint is locked. Unlock it before travel.");
+		}
+	} else {
+		const DashboardEntry* entry = GetSelectedDashboardEntry(pToolList);
+		if (entry) {
+			sprintf_s(info, "%s", entry->description);
+		} else {
+			sprintf_s(info, "%s", ToolInfoLine(g_active_tool));
+		}
+	}
+
+	pInfoLabel->SetWindowTextA(CXStr(info));
 }
 
 void CWaypointPOCWnd::RequestWaypointListFromServer()
@@ -163,103 +320,181 @@ void CWaypointPOCWnd::RequestWaypointListFromServer()
 		LogDebug("[WAYPOINT_SIDL] request list");
 	}
 	WaypointPOC_BeginPacketTrace("sidl");
-	char cmd[] = "/say #wppoc list";
-	DoCommand((PSPAWNINFO)pLocalPlayer, cmd);
+	ExecuteSayCommand("#wppoc list");
 }
 
 void CWaypointPOCWnd::TravelToSelectedWaypoint()
 {
-	if (!pWaypointList || !pLocalPlayer) {
+	if (!pToolList || !pLocalPlayer) {
 		return;
 	}
 
-	const int row = pWaypointList->GetCurSel();
+	const int row = pToolList->GetCurSel();
 	if (row < 0) {
-		WriteChatColor("Waypoint POC: select a waypoint first.", 0x0E);
+		WriteChatColor("Waypoint Tools: select a waypoint first.", 0x0E);
 		return;
 	}
 
-	const uint32_t waypoint_id = pWaypointList->GetItemData(row);
+	const uint32_t waypoint_id = pToolList->GetItemData(row);
 	if (waypoint_id == 0) {
-		WriteChatColor("Waypoint POC: selected waypoint is locked. Use #wp unlock <shortname> for testing.", 0x0E);
+		WriteChatColor("Waypoint Tools: selected waypoint is locked. Use #wp unlock <shortname> for testing.", 0x0E);
 		return;
 	}
 
-	char cmd[128] = { 0 };
-	sprintf_s(cmd, "/say #wppoc travel %u", waypoint_id);
 	if (isDebugLoggingEnabled && isWaypointPOCLoggingEnabled) {
-		LogDebug("[WAYPOINT_SIDL] travel waypoint_id=%u cmd=%s", waypoint_id, cmd);
+		LogDebug("[WAYPOINT_SIDL] travel waypoint_id=%u", waypoint_id);
 	}
-	DoCommand((PSPAWNINFO)pLocalPlayer, cmd);
+
+	char cmd[64] = { 0 };
+	sprintf_s(cmd, "#wppoc travel %u", waypoint_id);
+	ExecuteSayCommand(cmd);
 }
 
-void CWaypointPOCWnd::RebuildWaypointList()
+void CWaypointPOCWnd::RunSelectedDashboardCommand(bool dry_run)
 {
-	if (!pWaypointList) {
+	if (!pToolList) {
 		return;
 	}
 
-	pWaypointList->DeleteAll();
-
-	int available_count = 0;
-	const int total_count = static_cast<int>(g_waypoint_entries.size());
-
-	for (const auto& e : g_waypoint_entries) {
-		const int row = pWaypointList->AddString(" ", 0xFFFFFFFF, static_cast<uint32_t>(e.waypoint_id), nullptr);
-		if (row < 0) {
-			continue;
-		}
-
-		if (e.enabled) {
-			++available_count;
-		}
-		pWaypointList->SetItemData(row, e.enabled ? static_cast<uint32_t>(e.waypoint_id) : 0);
-
-		CXStr cat((char*)CategoryName(e.category_id));
-		std::string display_name = e.name;
-		if (!e.enabled) {
-			display_name += " [Locked]";
-		}
-		CXStr name((char*)display_name.c_str());
-
-		char id_buf[16] = { 0 };
-		sprintf_s(id_buf, "%d", e.waypoint_id);
-		CXStr id(id_buf);
-
-		pWaypointList->SetItemText(row, 0, &cat);
-		pWaypointList->SetItemText(row, 1, &name);
-		pWaypointList->SetItemText(row, 2, &id);
-
-		const DWORD color = e.enabled ? 0xFFFFFFFF : 0xFF808080;
-		pWaypointList->SetItemColor(row, 0, color);
-		pWaypointList->SetItemColor(row, 1, color);
-		pWaypointList->SetItemColor(row, 2, color);
+	const DashboardEntry* entry = GetSelectedDashboardEntry(pToolList);
+	if (!entry) {
+		WriteChatColor("GM Dashboard: select a command first.", 0x0E);
+		return;
 	}
 
-	if (pStatusLabel) {
-		char status[256] = { 0 };
-		sprintf_s(
-			status,
-			"Available: %d  |  Total: %d  |  Group: %s  |  Auto: %s",
-			available_count,
-			total_count,
-			g_group_selected ? "On" : "Off",
-			g_autoconfirm_selected ? "On" : "Off"
-		);
-		pStatusLabel->SetWindowTextA(CXStr(status));
+	if (dry_run || !entry->runnable) {
+		char line[256] = { 0 };
+		sprintf_s(line, "GM Dashboard: %s", entry->description);
+		WriteChatColor(line, 0x0E);
+		if (pInfoLabel) {
+			pInfoLabel->SetWindowTextA(CXStr((char*)entry->description));
+		}
+		return;
 	}
 
-	if (pInfoLabel) {
-		char info[256] = { 0 };
-		const DWORD now = GetTickCount();
-		sprintf_s(
-			info,
-			"Last packet: %u ms ago | Expedition: %s | ForceShow: %s",
-			(g_last_waypoint_packet_tick > 0) ? (now - g_last_waypoint_packet_tick) : 0,
-			g_expedition_enabled ? "Yes" : "No",
-			g_force_show ? "Yes" : "No"
-		);
-		pInfoLabel->SetWindowTextA(CXStr(info));
+	if (isDebugLoggingEnabled && isWaypointPOCLoggingEnabled) {
+		LogDebug("[GENERIC_TOOL] gm_dashboard run command=%s", entry->command);
+	}
+	ExecuteClientCommand(entry->command);
+}
+
+void CWaypointPOCWnd::RebuildActiveTool()
+{
+	if (!pToolList) {
+		return;
+	}
+
+	UpdateToolChrome();
+	pToolList->DeleteAll();
+
+	if (g_active_tool == GenericToolMode::Waypoints) {
+		int available_count = 0;
+		const int total_count = static_cast<int>(g_waypoint_entries.size());
+
+		for (const auto& e : g_waypoint_entries) {
+			const int row = pToolList->AddString(" ", 0xFFFFFFFF, static_cast<uint32_t>(e.waypoint_id), nullptr);
+			if (row < 0) {
+				continue;
+			}
+
+			if (e.enabled) {
+				++available_count;
+			}
+
+			pToolList->SetItemData(row, e.enabled ? static_cast<uint32_t>(e.waypoint_id) : 0);
+
+			CXStr cat((char*)CategoryName(e.category_id));
+			std::string display_name = e.name;
+			if (!e.enabled) {
+				display_name += " [Locked]";
+			}
+			CXStr name((char*)display_name.c_str());
+
+			char id_buf[16] = { 0 };
+			sprintf_s(id_buf, "%d", e.waypoint_id);
+			CXStr id(id_buf);
+
+			pToolList->SetItemText(row, 0, &cat);
+			pToolList->SetItemText(row, 1, &name);
+			pToolList->SetItemText(row, 2, &id);
+
+			const DWORD color = e.enabled ? 0xFFFFFFFF : 0xFF808080;
+			pToolList->SetItemColor(row, 0, color);
+			pToolList->SetItemColor(row, 1, color);
+			pToolList->SetItemColor(row, 2, color);
+		}
+
+		if (pStatusLabel) {
+			char status[256] = { 0 };
+			sprintf_s(
+				status,
+				"Waypoints: %d available / %d total | Group: %s | Auto: %s",
+				available_count,
+				total_count,
+				g_group_selected ? "On" : "Off",
+				g_autoconfirm_selected ? "On" : "Off"
+			);
+			pStatusLabel->SetWindowTextA(CXStr(status));
+		}
+
+		if (pInfoLabel) {
+			char info[256] = { 0 };
+			const DWORD now = GetTickCount();
+			sprintf_s(
+				info,
+				"Last packet: %u ms ago | Expedition: %s | ForceShow: %s",
+				(g_last_waypoint_packet_tick > 0) ? (now - g_last_waypoint_packet_tick) : 0,
+				g_expedition_enabled ? "Yes" : "No",
+				g_force_show ? "Yes" : "No"
+			);
+			pInfoLabel->SetWindowTextA(CXStr(info));
+		}
+	} else {
+		for (uint32_t i = 0; i < (sizeof(kDashboardEntries) / sizeof(kDashboardEntries[0])); ++i) {
+			const DashboardEntry& e = kDashboardEntries[i];
+			const int row = pToolList->AddString(" ", 0xFFFFFFFF, i, nullptr);
+			if (row < 0) {
+				continue;
+			}
+
+			CXStr category((char*)e.category);
+			CXStr title((char*)e.title);
+			CXStr mode((char*)(e.runnable ? "Run" : "Manual"));
+			pToolList->SetItemText(row, 0, &category);
+			pToolList->SetItemText(row, 1, &title);
+			pToolList->SetItemText(row, 2, &mode);
+
+			const DWORD color = e.runnable ? 0xFFFFFFFF : 0xFFB0A060;
+			pToolList->SetItemColor(row, 0, color);
+			pToolList->SetItemColor(row, 1, color);
+			pToolList->SetItemColor(row, 2, color);
+		}
+
+		if (pStatusLabel) {
+			char status[256] = { 0 };
+			sprintf_s(
+				status,
+				"GM Dashboard: %u commands | target-aware placement, zone refresh, and waypoint helpers",
+				static_cast<unsigned>(sizeof(kDashboardEntries) / sizeof(kDashboardEntries[0]))
+			);
+			pStatusLabel->SetWindowTextA(CXStr(status));
+		}
+
+		if (pInfoLabel) {
+			pInfoLabel->SetWindowTextA(CXStr((char*)ToolInfoLine(g_active_tool)));
+		}
+	}
+
+	UpdateSelectionDetails();
+}
+
+void CWaypointPOCWnd::SwitchTool(GenericToolMode mode, bool ensure_visible)
+{
+	g_active_tool = mode;
+	RebuildActiveTool();
+	if (ensure_visible) {
+		bShow = true;
+		((CXWnd*)this)->Show(1, 1);
 	}
 }
 
@@ -268,7 +503,7 @@ void CWaypointPOCWnd::Toggle()
 	bShow = !bShow;
 	((CXWnd*)this)->Show(bShow ? 1 : 0, bShow ? 1 : 0);
 	if (bShow) {
-		RebuildWaypointList();
+		RebuildActiveTool();
 	}
 }
 
@@ -277,12 +512,28 @@ int CWaypointPOCWnd::WndNotification(CXWnd* pWnd, unsigned int Message, void* un
 	(void)unknown;
 
 	if (Message == XWM_LCLICK) {
-		if (pWnd == (CXWnd*)pRefreshBtn) {
-			RequestWaypointListFromServer();
+		if (pWnd == (CXWnd*)pModeWaypointsBtn) {
+			SwitchTool(GenericToolMode::Waypoints, true);
 			return 0;
 		}
-		if (pWnd == (CXWnd*)pTravelBtn) {
-			TravelToSelectedWaypoint();
+		if (pWnd == (CXWnd*)pModeDashboardBtn) {
+			SwitchTool(GenericToolMode::GMDashboard, true);
+			return 0;
+		}
+		if (pWnd == (CXWnd*)pPrimaryBtn) {
+			if (g_active_tool == GenericToolMode::Waypoints) {
+				RequestWaypointListFromServer();
+			} else {
+				RunSelectedDashboardCommand(false);
+			}
+			return 0;
+		}
+		if (pWnd == (CXWnd*)pSecondaryBtn) {
+			if (g_active_tool == GenericToolMode::Waypoints) {
+				TravelToSelectedWaypoint();
+			} else {
+				RunSelectedDashboardCommand(true);
+			}
 			return 0;
 		}
 		if (pWnd == (CXWnd*)pCloseBtn) {
@@ -290,23 +541,11 @@ int CWaypointPOCWnd::WndNotification(CXWnd* pWnd, unsigned int Message, void* un
 			((CXWnd*)this)->Show(0, 0);
 			return 0;
 		}
-	}
-	else if (Message == XWM_NEWVALUE) {
-		if (pWnd == (CXWnd*)pWaypointList && pInfoLabel) {
-			const int row = pWaypointList->GetCurSel();
-			if (row >= 0) {
-				const uint32_t waypoint_id = pWaypointList->GetItemData(row);
-				char info[128] = { 0 };
-				if (waypoint_id > 0) {
-					sprintf_s(info, "Selected waypoint id: %u", waypoint_id);
-				} else {
-					sprintf_s(info, "Selected waypoint is locked. Unlock it before travel.");
-				}
-				pInfoLabel->SetWindowTextA(CXStr(info));
-			}
+	} else if (Message == XWM_NEWVALUE) {
+		if (pWnd == (CXWnd*)pToolList) {
+			UpdateSelectionDetails();
 		}
-	}
-	else if (Message == XWM_CLOSE) {
+	} else if (Message == XWM_CLOSE) {
 		bShow = false;
 		((CXWnd*)this)->Show(0, 0);
 		return 0;
@@ -331,7 +570,7 @@ void WaypointPOCWnd_OnWaypointListPacket(const char* buf, size_t size)
 	size_t stride = 0;
 	uint32_t count = 0;
 	if (!SelectWaypointPacketLayout(buf, size, entries_off, stride, count)) {
-		LogDebug("WaypointPOCWnd: failed to parse OP_WaypointList packet (size=%zu)", size);
+		LogDebug("GenericToolWnd: failed to parse OP_WaypointList packet (size=%zu)", size);
 		return;
 	}
 
@@ -361,13 +600,14 @@ void WaypointPOCWnd_OnWaypointListPacket(const char* buf, size_t size)
 	g_last_waypoint_packet_tick = GetTickCount();
 
 	LogDebug(
-		"WaypointPOCWnd: parsed waypoint packet count=%u parsed=%u stride=%zu group_enabled=%d expedition_enabled=%d",
+		"GenericToolWnd: parsed waypoint packet count=%u parsed=%u stride=%zu group_enabled=%d expedition_enabled=%d",
 		count,
 		static_cast<unsigned>(g_waypoint_entries.size()),
 		stride,
 		g_group_enabled ? 1 : 0,
 		g_expedition_enabled ? 1 : 0
 	);
+
 	if (isDebugLoggingEnabled && isWaypointPOCLoggingEnabled) {
 		unsigned enabled_count = 0;
 		for (const auto& e : g_waypoint_entries) {
@@ -382,11 +622,7 @@ void WaypointPOCWnd_OnWaypointListPacket(const char* buf, size_t size)
 	}
 
 	if (g_pWaypointPOCWnd) {
-		g_pWaypointPOCWnd->RebuildWaypointList();
-		if (g_force_show) {
-			g_pWaypointPOCWnd->bShow = true;
-			((CXWnd*)g_pWaypointPOCWnd)->Show(1, 1);
-		}
+		g_pWaypointPOCWnd->SwitchTool(GenericToolMode::Waypoints, g_force_show);
 	}
 }
 
@@ -427,9 +663,9 @@ void WaypointPOCWnd_Create()
 		if (g_pWaypointPOCWnd && g_pWaypointPOCWnd->bShow) {
 			((CXWnd*)g_pWaypointPOCWnd)->Show(1, 1);
 		}
-		LogDebug("WaypointPOCWnd_Create: created");
+		LogDebug("GenericToolWnd_Create: created");
 	} else {
-		LogDebug("WaypointPOCWnd_Create: template 'WaypointPOCWnd' not found (missing EQUI_WaypointPOCWnd.xml/default.xml entry)");
+		LogDebug("GenericToolWnd_Create: template 'WaypointPOCWnd' not found (missing EQUI_WaypointPOCWnd.xml/default.xml entry)");
 	}
 }
 
@@ -473,28 +709,121 @@ void WaypointPOCCmd(PSPAWNINFO pChar, PCHAR szLine)
 {
 	(void)pChar;
 
-	if (!szLine || !szLine[0] || !_stricmp(szLine, "show")) {
-		if (g_pWaypointPOCWnd) {
-			g_pWaypointPOCWnd->Toggle();
-		} else {
-			WaypointPOCWnd_Create();
-		}
+	if (!g_pWaypointPOCWnd) {
+		WaypointPOCWnd_Create();
+	}
+	if (!g_pWaypointPOCWnd) {
 		return;
 	}
 
+	if (!szLine || !szLine[0] || !_stricmp(szLine, "show")) {
+		g_pWaypointPOCWnd->SwitchTool(GenericToolMode::Waypoints, true);
+		return;
+	}
+
+	g_pWaypointPOCWnd->SwitchTool(GenericToolMode::Waypoints, true);
+
 	if (!_stricmp(szLine, "refresh")) {
-		if (g_pWaypointPOCWnd) {
-			g_pWaypointPOCWnd->RequestWaypointListFromServer();
-		}
+		g_pWaypointPOCWnd->RequestWaypointListFromServer();
 		return;
 	}
 
 	if (!_stricmp(szLine, "travel")) {
-		if (g_pWaypointPOCWnd) {
-			g_pWaypointPOCWnd->TravelToSelectedWaypoint();
-		}
+		g_pWaypointPOCWnd->TravelToSelectedWaypoint();
 		return;
 	}
 
 	WriteChatColor("Usage: /waypointpoc [show|refresh|travel]", 0x0E);
+}
+
+void GenericToolWndCmd(PSPAWNINFO pChar, PCHAR szLine)
+{
+	(void)pChar;
+
+	if (!g_pWaypointPOCWnd) {
+		WaypointPOCWnd_Create();
+	}
+	if (!g_pWaypointPOCWnd) {
+		return;
+	}
+
+	if (!szLine || !szLine[0] || !_stricmp(szLine, "show")) {
+		g_pWaypointPOCWnd->SwitchTool(g_active_tool, true);
+		return;
+	}
+
+	if (!_stricmp(szLine, "waypoints")) {
+		g_pWaypointPOCWnd->SwitchTool(GenericToolMode::Waypoints, true);
+		return;
+	}
+
+	if (!_stricmp(szLine, "gm") || !_stricmp(szLine, "dashboard")) {
+		g_pWaypointPOCWnd->SwitchTool(GenericToolMode::GMDashboard, true);
+		return;
+	}
+
+	if (!_stricmp(szLine, "refresh")) {
+		if (g_active_tool == GenericToolMode::Waypoints) {
+			g_pWaypointPOCWnd->RequestWaypointListFromServer();
+		} else {
+			g_pWaypointPOCWnd->RebuildActiveTool();
+		}
+		return;
+	}
+
+	if (!_stricmp(szLine, "primary")) {
+		if (g_active_tool == GenericToolMode::Waypoints) {
+			g_pWaypointPOCWnd->RequestWaypointListFromServer();
+		} else {
+			g_pWaypointPOCWnd->RunSelectedDashboardCommand(false);
+		}
+		return;
+	}
+
+	if (!_stricmp(szLine, "secondary")) {
+		if (g_active_tool == GenericToolMode::Waypoints) {
+			g_pWaypointPOCWnd->TravelToSelectedWaypoint();
+		} else {
+			g_pWaypointPOCWnd->RunSelectedDashboardCommand(true);
+		}
+		return;
+	}
+
+	WriteChatColor("Usage: /toolwnd [show|waypoints|gm|refresh|primary|secondary]", 0x0E);
+}
+
+void GMDashboardCmd(PSPAWNINFO pChar, PCHAR szLine)
+{
+	(void)pChar;
+
+	if (!g_pWaypointPOCWnd) {
+		WaypointPOCWnd_Create();
+	}
+	if (!g_pWaypointPOCWnd) {
+		return;
+	}
+
+	if (!szLine || !szLine[0] || !_stricmp(szLine, "show")) {
+		g_pWaypointPOCWnd->SwitchTool(GenericToolMode::GMDashboard, true);
+		return;
+	}
+
+	g_pWaypointPOCWnd->SwitchTool(GenericToolMode::GMDashboard, true);
+
+	if (!_stricmp(szLine, "run")) {
+		g_pWaypointPOCWnd->RunSelectedDashboardCommand(false);
+		return;
+	}
+
+	if (!_stricmp(szLine, "details")) {
+		g_pWaypointPOCWnd->RunSelectedDashboardCommand(true);
+		return;
+	}
+
+	if (!_stricmp(szLine, "refresh")) {
+		g_pWaypointPOCWnd->RebuildActiveTool();
+		return;
+	}
+
+	WriteChatColor("Usage: /gmdashboard [show|run|details|refresh]", 0x0E);
 }

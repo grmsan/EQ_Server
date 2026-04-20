@@ -1016,6 +1016,9 @@ public:
 	void UnmemSpell(int slot, bool update_client = true);
 	void UnmemSpellBySpellID(int32 spell_id);
 	void UnmemSpellAll(bool update_client = true);
+	bool GetSpellClassRequirementForCurrentClasses(uint16 spell_id, uint8 &best_req_level) const;
+	bool IsSpellUsableByCurrentClasses(uint16 spell_id, bool check_level = false) const;
+	uint16 UnmemInvalidSpellsForCurrentClasses(bool update_client = true, bool check_level = true);
 	int FindEmptyMemSlot();
 	uint16 FindMemmedSpellBySlot(int slot);
 	int FindMemmedSpellBySpellID(uint16 spell_id);

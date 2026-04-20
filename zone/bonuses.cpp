@@ -648,6 +648,10 @@ void Mob::CalcAABonuses(StatBonuses *newbon)
 		if (rank->effects.empty())
 			continue;
 
+		if (!CanUseAlternateAdvancementRank(rank)) {
+			continue;
+		}
+
 		ApplyAABonuses(*rank, newbon);
 	}
 }

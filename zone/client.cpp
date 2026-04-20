@@ -13926,6 +13926,21 @@ bool Client::RemoveExtraClass(uint8 class_id)
 		return false;
 	}
 
+	if (IsCasting() && IsValidSpell(casting_spell_id) && !IsSpellUsableByCurrentClasses(casting_spell_id, true)) {
+		InterruptSpell();
+	}
+
+	const uint16 removed_spells = UnmemInvalidSpellsForCurrentClasses(true, true);
+	if (removed_spells > 0) {
+		Message(
+			Chat::Yellow,
+			"%u memorized spell%s removed because your current classes can no longer use %s.",
+			removed_spells,
+			removed_spells == 1 ? " was" : "s were",
+			removed_spells == 1 ? "it" : "them"
+		);
+	}
+
 	CalcBonuses();
 	SendHPUpdate();
 	SendManaUpdate();

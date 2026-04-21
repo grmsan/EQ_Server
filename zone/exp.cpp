@@ -798,10 +798,6 @@ void Client::SetEXP(ExpSource exp_source, uint64 set_exp, uint64 set_aaxp, bool 
 	}
 
 	auto client_max_level = GetClientMaxLevel();
-	if (client_max_level) {
-		max_level = client_max_level + 1;
-	}
-
 	if (check_level > max_level) {
 		check_level = max_level;
 
@@ -809,6 +805,15 @@ void Client::SetEXP(ExpSource exp_source, uint64 set_exp, uint64 set_aaxp, bool 
 			set_exp = GetEXPForLevel(GetLevel()+1);
 		} else {
 			set_exp = GetEXPForLevel(max_level);
+		}
+	}
+
+	if (client_max_level) {
+		if (GetLevel() >= client_max_level) {
+			auto exp_needed = GetEXPForLevel(client_max_level);
+			if (set_exp > exp_needed) {
+				set_exp = exp_needed;
+			}
 		}
 	}
 
@@ -1003,7 +1008,11 @@ void Client::SetLevel(uint8 set_level, bool command)
 	}
 
 	if (IsInAGuild()) {
-		guild_mgr.SendToWorldMemberLevelUpdate(GuildID(), GetLevel(), std::string(GetCleanName()));
+		guild_mgr.SendToWorldMemberLevelUpdate(
+			GuildID(),
+			RuleB(Custom, MulticlassingEnabled) ? GetClassesBits() : GetLevel(),
+			std::string(GetCleanName())
+		);
 		DoGuildTributeUpdate();
 	}
 

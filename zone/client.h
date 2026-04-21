@@ -291,6 +291,9 @@ public:
 	bool SetClassesBits(uint32 classes_bits);
 	uint16 GetClassesBitmask() const;
 	bool SetClassesBitmask(uint16 classes_bitmask);
+	uint32 LoadPersistedClassesBits() const;
+	uint8 ResolveCompatibilityClass(uint32 classes_bits) const;
+	void SyncCompatibilityClass(uint32 classes_bits);
 	bool AddExtraClass(uint8 class_id);
 	bool RemoveExtraClass(uint8 class_id);
 	uint8 GetClassesCount();

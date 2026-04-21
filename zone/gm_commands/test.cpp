@@ -330,7 +330,7 @@ bool SelectClassMutationCandidate(Client *c, bool prefer_mana_class, uint8 &clas
 		}
 
 		for (uint8 cid = Class::Warrior; cid <= Class::Berserker; ++cid) {
-			if (cid == c->GetClass() || c->HasClass(cid)) {
+			if (c->HasClass(cid)) {
 				continue;
 			}
 			if (mana_only && !IsManaCapableClass(cid)) {
@@ -343,8 +343,12 @@ bool SelectClassMutationCandidate(Client *c, bool prefer_mana_class, uint8 &clas
 	};
 
 	auto find_remove = [&](bool mana_only) -> uint8 {
+		if (current_count <= 1) {
+			return 0;
+		}
+
 		for (uint8 cid = Class::Warrior; cid <= Class::Berserker; ++cid) {
-			if (cid == c->GetClass() || !c->HasClass(cid)) {
+			if (!c->HasClass(cid)) {
 				continue;
 			}
 			if (mana_only && !IsManaCapableClass(cid)) {

@@ -13687,15 +13687,23 @@ uint32 Client::GetClassesBits() const
 
 	// THJ parity: if profile already has multiclass bits loaded, prefer that as authoritative runtime state.
 	if (m_pp.classes != 0) {
-		const uint32 bits = (static_cast<uint32>(m_pp.classes) | base_bit);
+		const uint32 bits = static_cast<uint32>(m_pp.classes) & 0xFFFF;
 		m_classes_bits_cache = bits;
 		return bits;
 	}
 
 	if (m_classes_bits_cache) {
-		return (m_classes_bits_cache | base_bit);
+		return m_classes_bits_cache & 0xFFFF;
 	}
 
+	const uint32 bits = LoadPersistedClassesBits();
+	m_classes_bits_cache = bits;
+	return bits;
+}
+
+uint32 Client::LoadPersistedClassesBits() const
+{
+	const uint32 base_bit = GetPlayerClassBit(GetClass());
 	uint32 bits = base_bit;
 
 	// THJServer parity: prefer the canonical GestaltClasses bucket.
@@ -13717,9 +13725,46 @@ uint32 Client::GetClassesBits() const
 		bits = static_cast<uint32>(Strings::ToUnsignedInt(raw, base_bit) & 0xFFFFFFFF);
 	}
 
-	bits |= base_bit;
-	m_classes_bits_cache = bits;
-	return bits;
+	return bits & 0xFFFF;
+}
+
+uint8 Client::ResolveCompatibilityClass(uint32 classes_bits) const
+{
+	const uint32 bits = classes_bits & 0xFFFF;
+
+	if (!RuleB(Custom, MulticlassingEnabled)) {
+		return static_cast<uint8>(GetClass());
+	}
+
+	for (uint8 class_id = Class::Warrior; class_id <= Class::Berserker; ++class_id) {
+		if (bits & GetPlayerClassBit(class_id)) {
+			return class_id;
+		}
+	}
+
+	return 0;
+}
+
+void Client::SyncCompatibilityClass(uint32 classes_bits)
+{
+	if (!RuleB(Custom, MulticlassingEnabled)) {
+		return;
+	}
+
+	const uint8 compatibility_class = ResolveCompatibilityClass(classes_bits);
+	if (!EQ::ValueWithin(compatibility_class, 1, 16) || m_pp.class_ == compatibility_class) {
+		return;
+	}
+
+	m_pp.class_ = compatibility_class;
+	if (!CharacterDataRepository::UpdateClass(database, CharacterID(), compatibility_class)) {
+		LogError(
+			"Failed to persist multiclass compatibility class [{}] for [{}] (char_id [{}])",
+			static_cast<int>(compatibility_class),
+			GetCleanName(),
+			CharacterID()
+		);
+	}
 }
 
 bool Client::SetClassesBits(uint32 classes_bits)
@@ -13728,11 +13773,14 @@ bool Client::SetClassesBits(uint32 classes_bits)
 		return false;
 	}
 
-	const uint32 base_bit = GetPlayerClassBit(GetClass());
-	const uint32 bits = (classes_bits | base_bit);
+	const uint32 bits = classes_bits & 0xFFFF;
+	if (bits == 0) {
+		return false;
+	}
 
 	m_classes_bits_cache = bits;
 	m_pp.classes = bits;
+	SyncCompatibilityClass(bits);
 
 	// THJServer parity: always write GestaltClasses.
 	SetBucket(kGestaltClassesBucketKey, std::to_string(bits));
@@ -13886,6 +13934,14 @@ bool Client::AddExtraClass(uint8 class_id)
 	SendAlternateAdvancementStats();
 	// Ensure our custom clients see a consistent post-change snapshot (SetClassesBitmask() may have sent pre-recalc values).
 	SendEdgeStats();
+	if (IsInAGuild()) {
+		guild_mgr.SendToWorldMemberLevelUpdate(
+			GuildID(),
+			RuleB(Custom, MulticlassingEnabled) ? GetClassesBits() : GetLevel(),
+			std::string(GetCleanName())
+		);
+		DoGuildTributeUpdate();
+	}
 	UpdateWho();
 
 	// If this class change introduces mana (e.g., adding Ranger/Cleric/Wizard), fill to max once to avoid 0/0 UI confusion.
@@ -13909,15 +13965,14 @@ bool Client::RemoveExtraClass(uint8 class_id)
 		return false;
 	}
 
-	// Prevent removing the base class.
-	if (class_id == GetClass()) {
-		return false;
-	}
-
 	const uint32 remove_bit = GetPlayerClassBit(class_id);
 	uint32 bits = GetClassesBits();
 
 	if ((bits & remove_bit) == 0) {
+		return false;
+	}
+
+	if (CountClassBits(bits) <= 1) {
 		return false;
 	}
 
@@ -13949,6 +14004,14 @@ bool Client::RemoveExtraClass(uint8 class_id)
 	SendAlternateAdvancementPoints();
 	SendAlternateAdvancementStats();
 	SendEdgeStats();
+	if (IsInAGuild()) {
+		guild_mgr.SendToWorldMemberLevelUpdate(
+			GuildID(),
+			RuleB(Custom, MulticlassingEnabled) ? GetClassesBits() : GetLevel(),
+			std::string(GetCleanName())
+		);
+		DoGuildTributeUpdate();
+	}
 	UpdateWho();
 	return true;
 }

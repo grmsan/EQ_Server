@@ -161,11 +161,14 @@ void WorldDatabase::GetCharSelectInfo(uint32 account_id, EQApplicationPacket **o
 		strcpy(cse->Name, e.name.c_str());
 		// THJ parity: when multiclass is enabled, represent char-select class/deity from GestaltClasses.
 		if (RuleB(Custom, MulticlassingEnabled)) {
-			const uint16 base_bit = GetPlayerClassBit(e.class_);
-			uint16 bits = base_bit;
+			uint16 bits = 0;
 			auto it = multiclass_bits_by_character_id.find(character_id);
 			if (it != multiclass_bits_by_character_id.end()) {
-				bits = static_cast<uint16>((it->second | base_bit) & 0xFFFF);
+				bits = static_cast<uint16>(it->second & 0xFFFF);
+			}
+
+			if (bits == 0) {
+				bits = GetPlayerClassBit(e.class_);
 			}
 
 			pp.classes = bits;
@@ -180,7 +183,7 @@ void WorldDatabase::GetCharSelectInfo(uint32 account_id, EQApplicationPacket **o
 			}
 
 			if (!class_ids.empty()) {
-				cse->Class = static_cast<uint32>(class_ids[rand() % class_ids.size()]);
+				cse->Class = class_ids.front();
 			}
 			else {
 				cse->Class = e.class_;

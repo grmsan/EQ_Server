@@ -556,7 +556,8 @@ void Client::CompleteConnect()
 
 	if (RuleB(Custom, MulticlassingEnabled)) {
 		m_pp.classes = Strings::ToInt(GetBucket("GestaltClasses"), GetPlayerClassBit(m_pp.class_));
-		m_classes_bits_cache = (m_pp.classes | GetPlayerClassBit(GetClass()));
+		SyncCompatibilityClass(m_pp.classes);
+		m_classes_bits_cache = static_cast<uint32>(m_pp.classes) & 0xFFFF;
 	}
 
 	// RoF2 + custom DLL: ensure the client gets an initial server-authoritative snapshot (including multiclass bitmask)
@@ -3406,6 +3407,20 @@ void Client::Handle_OP_AugmentItem(const EQApplicationPacket *app)
 				} else {
 					if (!RuleB(Inventory, AllowMultipleOfSameAugment) && tobe_auged->ContainsAugmentByID(new_aug->GetID())) {
 						Message(Chat::Red, "Error: Cannot put multiple of the same augment in an item.");
+						break;
+					}
+
+					if (!new_aug->IsEquipable(GetBaseRace(), GetClassesBits())) {
+						Message(Chat::Red, "Error: Your current class set cannot use this augment.");
+						break;
+					}
+
+					const uint32 ignored_slots = (1u << EQ::invslot::slotPowerSource);
+					const auto slots_new = new_aug->GetItem()->Slots & ~ignored_slots;
+					const auto slots_old = tobe_auged->GetItem()->Slots & ~ignored_slots;
+
+					if (!(slots_new & slots_old)) {
+						Message(Chat::Red, "The result of this combine would produce an item unusable by anyone.");
 						break;
 					}
 

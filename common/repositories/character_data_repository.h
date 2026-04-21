@@ -81,6 +81,21 @@ public:
 		return l.empty() ? CharacterDataRepository::NewEntity() : l.front();
 	}
 
+	static bool UpdateClass(Database& db, uint32 character_id, uint8 class_id)
+	{
+		auto results = db.QueryDatabase(
+			fmt::format(
+				"UPDATE {} SET `class` = {} WHERE {} = {}",
+				TableName(),
+				class_id,
+				PrimaryKey(),
+				character_id
+			)
+		);
+
+		return results.Success() && results.RowsAffected() > 0;
+	}
+
 	struct InstancePlayerCount {
 		int32_t instance_id;
 		uint32_t zone_id;

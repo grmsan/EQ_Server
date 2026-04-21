@@ -6,7 +6,7 @@ void command_removeclass(Client *c, const Seperator *sep)
 {
 	const int arguments = sep->argnum;
 	if (arguments < 1 || !sep->IsNumber(1)) {
-		c->Message(Chat::White, "Usage: #removeclass [class_id] - Removes a class from your or your targeted player's multiclass bitmask (cannot remove base class).");
+		c->Message(Chat::White, "Usage: #removeclass [class_id] - Removes a class from your or your targeted player's multiclass bitmask (must leave at least one class).");
 		return;
 	}
 
@@ -23,11 +23,6 @@ void command_removeclass(Client *c, const Seperator *sep)
 	const uint8 class_id = static_cast<uint8>(Strings::ToUnsignedInt(sep->arg[1]));
 	if (!EQ::ValueWithin(class_id, 1, 16)) {
 		c->Message(Chat::White, "Class ID must be between 1 and 16.");
-		return;
-	}
-
-	if (class_id == t->GetClass()) {
-		c->Message(Chat::White, "Cannot remove the base class.");
 		return;
 	}
 
@@ -48,6 +43,10 @@ void command_removeclass(Client *c, const Seperator *sep)
 
 	const uint8 before_count = t->GetClassesCount();
 	const uint16 before_bits = t->GetClassesBitmask();
+	if (before_count <= 1) {
+		c->Message(Chat::White, "Cannot remove the last remaining class.");
+		return;
+	}
 
 	if (!t->RemoveExtraClass(class_id)) {
 		c->Message(

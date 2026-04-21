@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-04-20 19:22:40",
+  "updated_at": "2026-04-20 19:26:49",
   "tests": {
     "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\multiclass\\test_tracker.md::P-01": {
       "status": "Pass",
@@ -50,6 +50,16 @@
       "status": "Pass",
       "notes": "",
       "updated_at": "2026-04-20 17:32:56"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\multiclass\\test_tracker.md::C-01": {
+      "status": "Pass",
+      "notes": "",
+      "updated_at": "2026-04-20 19:25:45"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\multiclass\\test_tracker.md::C-03": {
+      "status": "Pass",
+      "notes": "",
+      "updated_at": "2026-04-20 19:26:49"
     }
   }
 }

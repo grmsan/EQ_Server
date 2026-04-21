@@ -1,6 +1,6 @@
 # EQ Core DLL Feature Reference
 
-Last updated: 2026-03-10
+Last updated: 2026-03-13
 
 ## Purpose
 This document maps the important feature surfaces in `extras/eq-core-dll-main` so server and client work can be planned against the real implementation, not assumptions.
@@ -27,6 +27,7 @@ This document maps the important feature surfaces in `extras/eq-core-dll-main` s
   - `PowerSlotWnd_Pulse()`
   - `WaypointPOCWnd_SetGameState()`
   - `WaypointPOCWnd_Pulse()`
+  - `WaypointLuaImGuiPOC_Pulse()`
 
 ## Important Implemented Features
 
@@ -56,15 +57,17 @@ This document maps the important feature surfaces in `extras/eq-core-dll-main` s
   - `extras/eq-core-dll-main/src/PowerSlotWnd.cpp`
   - command registration in `extras/eq-core-dll-main/src/MQ2CommandAPI.cpp`
 
-### Waypoint travel POC window
+### Generic SIDL tool host
 - `WaypointPOCWnd` demonstrates:
-  - parsing native waypoint packets (`OP_WaypointList`, RoF2 `0x1402`) inside DLL packet detour path
-  - custom waypoint list rendering in SIDL
-  - action callbacks to server via `#wppoc list` and `#wppoc travel <id>`
+  - one XML-backed `CCustomWnd` hosting multiple tools
+  - waypoint packet parsing and travel interaction
+  - GM/dev dashboard commands and reusable list/detail workflow
+  - action callbacks to server via `#wppoc ...` and runbook command bridges
 - files:
   - `extras/eq-core-dll-main/src/WaypointPOCWnd.h`
   - `extras/eq-core-dll-main/src/WaypointPOCWnd.cpp`
   - packet hook callsite in `extras/eq-core-dll-main/src/eqgame.cpp`
+  - UI XML in `extras/eq-core-dll-main/uifiles/EQUI_WaypointPOCWnd.xml`
 
 ### Waypoint overlay POC (no SIDL, no ImGui)
 - `WaypointOverlayPOC` demonstrates:
@@ -76,11 +79,11 @@ This document maps the important feature surfaces in `extras/eq-core-dll-main` s
   - `extras/eq-core-dll-main/src/WaypointOverlayPOC.cpp`
   - command registration in `extras/eq-core-dll-main/src/MQ2CommandAPI.cpp`
 
-### Waypoint Lua/ImGui scaffold POC
+### Waypoint Lua/ImGui runtime POC
 - `WaypointLuaImGuiPOC` demonstrates:
-  - shared packet/data/action plumbing for script-first UI path
-  - scaffold render mode in current repo state (runtime not linked)
-  - command surface aligned with future Lua/ImGui hot-reload loop
+  - shared packet/data/action plumbing for a script-first UI path
+  - working standalone Lua + Dear ImGui host window
+  - active research path for embedded legacy-client render integration
 - files:
   - `extras/eq-core-dll-main/src/WaypointLuaImGuiPOC.h`
   - `extras/eq-core-dll-main/src/WaypointLuaImGuiPOC.cpp`
@@ -93,6 +96,8 @@ This document maps the important feature surfaces in `extras/eq-core-dll-main` s
   - `/customhud` + draw path in `extras/eq-core-dll-main/src/MQ2HUD.cpp`
 - Waypoint POC commands:
   - `/waypointpoc`
+  - `/toolwnd`
+  - `/gmdashboard`
   - `/waypointoverlay`
   - `/waypointimgui`
 
@@ -117,8 +122,8 @@ This document maps the important feature surfaces in `extras/eq-core-dll-main` s
 - See `game_design/dll/SERVER_DLL_DATA_CHANNELS.md` for wire details.
 
 ## What Is Not Implemented Yet
-- Lua runtime embedded in this DLL: not implemented.
-- ImGui runtime integrated into the active DLL build: not implemented.
+- Embedded in-client Dear ImGui rendering for the live EQ render loop is not stable yet.
+- A generic data-driven module registry for the SIDL host is not implemented yet.
 - D3D sample hook files exist (`d3d_example.cpp`, `main.cpp`) but are not currently part of the active VS2022 project compile list.
 
 ## Practical Extension Points For New Features
@@ -126,13 +131,13 @@ Use this repeatable pattern for custom client UX:
 
 1. Server publishes feature state on a stable packet channel (`0x1338` or new protocol envelope).
 2. DLL parses and caches feature state in one place.
-3. UI module reads cache and renders (SIDL window now; ImGui later).
+3. UI module reads cache and renders (generic SIDL host now; ImGui later if embedded render becomes stable).
 4. User actions send callbacks to server (prefer dedicated custom opcode over `/say` once promoted from diagnostics).
 5. Server validates action and returns updated state snapshot.
 
 ## Notes For Planned Features
 - Command buttons:
-  - already easy with custom window + command callbacks.
+  - already easy with the generic SIDL host + command callbacks.
 - Waypoint/fast travel:
   - native waypoint opcodes already exist server-side; can be wrapped with custom DLL UI for better UX.
 - Bag interception/replacement:

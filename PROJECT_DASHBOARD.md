@@ -1,0 +1,290 @@
+<!-- markdownlint-disable MD007 MD022 MD029 MD031 MD032 MD049 MD058 MD060 -->
+
+# EQ Server Project Dashboard
+
+**Your single entry point for picking up where you left off.**
+
+> This dashboard consolidates all TODO items, progress tracking, and implementation plans across the project. Each section links to detailed trackers for deep-dive work.
+
+---
+
+## 🚀 Return After Break (5-Minute Quickstart)
+
+**When you come back after days/weeks away:**
+
+1. **Read the Session Log** (below) to see what you last worked on
+2. **Check Active Work Items** for highest priority tasks
+3. **Run sanity tests** if you made code changes:
+   - Quick: `#test smoke` in-game
+   - Or: `cmake --build build --target zone --config RelWithDebInfo --parallel`
+4. **Pick one item** from Active Work Items and resume
+
+**Key Commands:**
+- Start server: `python server_manager.py` → Server Control → Start All
+- Build: `cmake --build build --config RelWithDebInfo --parallel`
+- In-game tests: `#test smoke`, `#test combat`, `#test automated`
+
+---
+
+## 📋 Session Log
+
+*Record what you worked on. Newest entries at top.*
+
+| Date | Area | Accomplishments | Next Steps |
+|------|------|-----------------|------------|
+| 2026-04-20 | Combat / Multiclass | Patched pet taunt parity so taunting pets now force stronger hate on their main target and nearby mobs attacking the owner, and fixed invalid post-class-removal spell re-memorize attempts so they now fail immediately with an error and reset the spellbar UI instead of hanging. | Re-run the pet tanking scenario plus `E-01`; keep `C-05` deprioritized unless it starts blocking spell-targeting or combat validation. |
+| 2026-04-21 | Multiclass | Fixed the XP cap drift in `zone/exp.cpp`: server `Character:MaxExpLevel` / `MaxLevel` rules stay authoritative again, and client max level now acts only as an extra clamp instead of replacing the configured exp cap. | Rebuild `zone`, then run `X-04` plus a quick sanity pass around leveling/AA gain to confirm capped characters no longer overshoot the intended server exp limit. |
+| 2026-04-21 | Multiclass | Closed the remaining augment-gating gap in the server path: `OP_AugmentItem` now rejects class-restricted augments unless the player owns a qualifying class, and it also restores THJ's wear-slot safety guard before finalizing the augmented item. | Rebuild `zone`, then run the new `I-07` augment validation case plus the rest of `I-01` to `I-07` to confirm item and augment gating behave correctly in-game. |
+| 2026-04-20 | Multiclass | Fixed the follow-up review issues in compatibility-class handling: the legacy `character_data.class` value is now derived deterministically from the owned-class bitmask instead of mutation history, and login hydration reuses the shared persisted-bucket fallback logic before syncing runtime multiclass state. | Re-run `C-01`, then relog and inspect char-select to confirm compatibility-class projection stays stable across class mutations and legacy bucket fallback cases. |
+| 2026-04-20 | Multiclass | Removed the remaining legacy base-class leakage from compatibility paths: class mutations and login hydration now keep `character_data.class` synced to an actually owned compatibility class, and char-select shaping no longer ORs the removed base class back into `GestaltClasses`. | Rebuild with `world.exe` and `zone.exe` unlocked, then rerun `C-01` plus a relog/char-select check to confirm the compatibility class stays aligned after removing the original starting class. |
+| 2026-04-20 | Multiclass | Removed the last base-class-only restriction from owned-class mutation: `GetClassesBits()`/`SetClassesBits()` now treat persisted `GestaltClasses` as authoritative, `#removeclass` can remove the starting class like any other owned class, and the only remaining safety rule is that a character must keep at least one class bit. | Re-run `C-01` and a relog pass on a character whose starting class was removed, then confirm downstream UI/display paths still behave correctly with a non-owned `character_data.class`. |
+| 2026-04-20 | Multiclass | Final pre-test cleanup landed cleanly: `/waypointpoc`, `/toolwnd`, and `/gmdashboard` now reliably show the requested tool instead of toggling it closed, and class-removal spell cleanup now enforces the same class-plus-level entitlement rules used at memorize time. | Proceed to runtime validation, especially `E-01` plus the QoL SIDL window checks, then update tracker status from actual test results. |
+| 2026-04-20 | Multiclass | Fixed the pre-testing review findings: GM dashboard actions now execute real client commands instead of going through `/say`, multiclass spell memorization now shares one eligibility helper with class-removal cleanup, the removed-spell warning text was corrected, and passive AA gating now checks current entitlement directly in the bonus path. | Move into runtime validation with `A-01` to `A-04`, `C-03`, `E-01`, `I-01` to `I-06`, `D-01`, and `D-02`; only reopen implementation if those tests fail. |
+| 2026-04-20 | Multiclass | Verified world presentation is also further along than the backlog implied: world char-select shaping reads `GestaltClasses`, `/who` intentionally stays single-class on the wire for stock compatibility, and the DLL rewrites `/who` and char-select class labels to multiclass abbreviations. | Treat `/who` and character select as fresh-build validation items (`D-01`, `D-02`) unless runtime testing shows a real gap. |
+| 2026-04-20 | Multiclass | Implemented spell soft-lock cleanup for class removal: removed-class spells remain scribed, but invalid memorized gems are now cleared immediately and in-progress invalid casts are interrupted. | Validate `E-01` alongside the AA, mana/UI, and item verification pass; keep AA entitlement policy as the remaining class-removal design decision. |
+| 2026-04-20 | Multiclass | Verified more multiclass support already exists than the docs implied: server refreshes mana on class changes, the DLL overrides mana display from server values, merchant class filtering uses owned-class bitmasks, and class-locked item clicks already check `GetClassesBits()`. | Treat mana/UI and most item gating as validation-first work; add missing tracker coverage for skills window and merchant filtering, then focus coding on true remaining gaps. |
+| 2026-04-20 | Multiclass | Confirmed `#mystats` already exposes multiclass ownership details via the stats window/chat output, so that plan item is no longer an open implementation gap. | Keep the tracker case for validation and focus coding effort on mana/UI, item gating, and world presentation. |
+| 2026-04-20 | Multiclass | Expanded the multiclass tracker to cover the remaining open plan items: level/XP cap behavior, character select, `/who`, `#mystats`, spell entitlement after class removal, and AA entitlement policy after class removal. | Continue implementation on runtime/item display paths and use the new tracker cases during testing. |
+| 2026-04-20 | Multiclass | Added passive AA ownership gating so removed-class passive AAs no longer continue applying through the bonus path; implementation plan updated to reflect AA purchase/passive support in code. | Manually validate `A-01` to `A-04`, then move to `C-03` mana/UI verification. |
+| 2026-04-20 | Multiclass | Audited multiclass docs and target files; confirmed today's work should focus on AA parity, mana/skill UI verification, item/equip gating, and world display parity. | Start with `zone/aa.cpp`, then validate `A-01` to `A-04`, then move to `C-03` and `I-01` to `I-05`. |
+| _yyyy-mm-dd_ | _e.g., Multiclass_ | _Brief summary_ | _What to do next_ |
+| | | | |
+| | | | |
+
+---
+
+## 🔥 Active Work Items (Prioritized)
+
+### HIGH PRIORITY
+
+#### 1. Multiclass System (Active Development)
+- **Status**: Core APIs implemented, testing in progress
+- **THJ Parity**: 36 same / 66 differ / 10 THJ-only files
+- **Recent Work**: Waypoint + Bazaar quest compatibility (2026-02-26)
+- **Today Goal**: Close the remaining practical multiclass gaps that block normal gameplay validation.
+- **Where We Stand**:
+  - Phase 2 Spells is mostly complete; mana bar/UI sync appears to have both server and DLL support and now needs direct validation rather than broad implementation.
+  - Phase 3 AA now has purchase, activation, window visibility, dynamic timers, and passive ownership gating implemented in code; the next step is manual validation.
+  - Phase 4 Skills is mostly complete but still needs skills-window visibility verification.
+  - Phase 5 Items/Equipment has more implementation in place than the docs previously reflected: equip paths, merchant class filtering, and item click class checks are already multiclass-aware; remaining work is mainly verification plus any uncovered edge cases.
+  - World presentation also appears implemented through the world + DLL path; `/who` and character select now look like validation items rather than net-new coding work.
+  - Class removal now preserves spellbook progress while immediately clearing invalid memorized gems; the remaining class-removal gap is the AA entitlement policy decision.
+- **Next Concrete Work**: Rebuild `zone` and validate the newly closed item/XP gaps with `I-01` through `I-07` and `X-04`, then resume AA/manual runtime validation with `A-01`, `A-02`, `A-03`, and `A-04`.
+- **After That**: Validate skills-window exposure, item/equip behavior, and world presentation (`K-05`, `I-01` through `I-06`, `D-01`, `D-02`), then focus coding on any failures rather than assuming those systems still need broad porting.
+- **Design Decision Still Needed**: final policy for removed-class AA entitlements/refunds is now tracked explicitly and should come back to you before we lock behavior.
+- **Primary Files**:
+  - `zone/aa.cpp` — AA visibility, purchase, activation, passive ownership gating
+  - `zone/client_mods.cpp` — skills/stat exposure follow-up
+  - `zone/inventory.cpp` — class-restricted item/equip validation
+  - `world/clientlist.cpp` — `/who` and character presentation parity
+- **Details**: [game_design/multiclass/IMPLEMENTATION_PLAN.md](game_design/multiclass/IMPLEMENTATION_PLAN.md)
+- **Testing**: [game_design/multiclass/test_tracker.md](game_design/multiclass/test_tracker.md)
+- **Parity Tracking**: [game_design/multiclass/PORT_CHECKLIST.md](game_design/multiclass/PORT_CHECKLIST.md)
+
+##### Multiclass Immediate Next Steps
+1. Run multiclass AA verification cases in [game_design/multiclass/test_tracker.md](game_design/multiclass/test_tracker.md): `A-01`, `A-02`, `A-03`, `A-04`.
+2. Verify mana bar/UI sync with `C-03`.
+3. Verify class-removal spell soft-lock behavior with `E-01`.
+4. Use [game_design/multiclass/PORT_CHECKLIST.md](game_design/multiclass/PORT_CHECKLIST.md) to compare `zone/inventory.cpp` against THJ.
+5. Run item/equip verification cases `I-01` to `I-07`.
+6. Research removing AA level requirements — investigate data model, AA table fields, rule flags, client-side gating, and compatibility; draft design and implementation plan.
+
+##### Multiclass Today Execution Order
+1. **AA Pass**
+  - Target: `zone/aa.cpp`
+  - Goal: validate AA visibility, purchase, activation, passive ownership gating, and special multiclass AA cases.
+  - Validate: `A-01`, `A-02`, `A-03`, `A-04`.
+2. **Caster UI / Skills Verification**
+  - Target: `zone/client_mods.cpp` plus DLL/runtime verification.
+  - Goal: confirm caster secondary classes expose mana correctly and that added-class skills are visible/usable.
+  - Validate: `C-03` and `K-05`.
+3. **Item and Equip Rules**
+  - Target: `zone/inventory.cpp`
+  - Goal: verify existing union-of-classes equip/use gating, merchant filtering, and click restrictions without breaking race restrictions; patch only uncovered edge cases.
+  - Validate: `I-01` through `I-07`.
+4. **World / Presentation Parity**
+  - Target: `world/clientlist.cpp` and any linked world-side class presentation code.
+  - Goal: verify `/who` and related multiclass presentation are aligned with the current server/client behavior, including post-mutation guild roster refreshes and guild-members-list reloads.
+  - Validate: `G-01`, `B-08`, plus any `/who` checks after rebuild.
+5. **Regression and Tracker Sync**
+  - Run `#test smoke`, targeted multiclass checks, and update tracker statuses and dashboard session log with results.
+
+#### 2. DEX Migration Follow-Ups
+- **Status**: New DEX precision system active (`Combat:UseNewDexFormulas`)
+- **Blocked Items**:
+  - Slay Undead (paladin AA) — bypassed in new path
+  - Legacy pet crit behavior — bypassed
+  - Class-specific crit nuances — need audit
+  - Whirlwind divisor — needs skill/discipline hook
+- **Next**: Playtest DEX crit/proc/twincast divisors, decide on `ENABLE_DEX_DOT_TWINCAST`
+- **Details**: [TODO_DEX_MIGRATION.md](TODO_DEX_MIGRATION.md)
+
+#### 3. Infinite Item Progression
+- **Status**: Steps 1-11 complete (iLevel, Tiers, Power Slot XP, Essence/Salvage, Consume AAs, Ghost Copy, Drop Tiers, Vendors, Aug Merge, Zone/Boss Augs, Infusion)
+- **Next**: Step 12 - DLL Visual Polish
+- **Details**: [game_design/infinite_progression/IMPLEMENTATION_STEPS.md](game_design/infinite_progression/IMPLEMENTATION_STEPS.md)
+- **Testing**: [game_design/infinite_progression/TEST_TRACKER.md](game_design/infinite_progression/TEST_TRACKER.md)
+
+### MEDIUM PRIORITY
+
+#### 4. Combat Mechanics Parity
+- **Status**: THJ-aligned proc behavior ported
+- **Focus Areas**: 2H/Bow procs, Pet/NPC weapon procs
+- **Testing**: [game_design/mechanics/TEST_TRACKER.md](game_design/mechanics/TEST_TRACKER.md)
+
+#### 5. Class-Specific Abilities
+- **Status**: Custom warrior AAs (Heroic Throw, Colossal Smash) implemented
+- **Testing**: [game_design/classes/TEST_TRACKER.md](game_design/classes/TEST_TRACKER.md)
+
+#### 6. Quest/Waypoint System
+- **Status**: THJ Bazaar + waypoint foundation complete
+- **Testing**: [game_design/quests/TEST_TRACKER.md](game_design/quests/TEST_TRACKER.md)
+
+### LOWER PRIORITY
+
+#### 7. QoL Features
+- **Items**: Bazaar and Back AA, Waypoint UI POCs, SIDL tool windows
+- **Testing**: [game_design/qol/TEST_TRACKER.md](game_design/qol/TEST_TRACKER.md)
+
+#### 8. Stat Implementation Plans
+- **Status**: DEX active, others in design
+- **Details**:
+  - [game_design/stats/DEX_IMPLEMENTATION_PLAN.md](game_design/stats/DEX_IMPLEMENTATION_PLAN.md)
+  - [game_design/stats/STR_IMPLEMENTATION_PLAN.md](game_design/stats/STR_IMPLEMENTATION_PLAN.md)
+  - [game_design/stats/STA_IMPLEMENTATION_PLAN.md](game_design/stats/STA_IMPLEMENTATION_PLAN.md)
+  - [game_design/stats/AGI_IMPLEMENTATION_PLAN.md](game_design/stats/AGI_IMPLEMENTATION_PLAN.md)
+  - [game_design/stats/INT_IMPLEMENTATION_PLAN.md](game_design/stats/INT_IMPLEMENTATION_PLAN.md)
+  - [game_design/stats/WIS_IMPLEMENTATION_PLAN.md](game_design/stats/WIS_IMPLEMENTATION_PLAN.md)
+  - [game_design/stats/CHA_IMPLEMENTATION_PLAN.md](game_design/stats/CHA_IMPLEMENTATION_PLAN.md)
+
+---
+
+## 📊 Progress Overview
+
+| Domain | Status | Tests Passed | Last Updated |
+|--------|--------|--------------|--------------|
+| **Multiclass** | 🟡 Active Dev | Auto: 2/39, Partial: 8/39 | 2026-02-27 |
+| **Infinite Progression** | 🟢 Steps 1-11 Done | — | 2026-03-06 |
+| **Operations** | 🟢 Active | — | 2026-02-28 |
+| **Classes** | 🟡 Testing | CL-06 ✓ | 2026-02-27 |
+| **Mechanics** | 🟡 Testing | — | 2026-02-28 |
+| **Quests** | 🟡 Testing | — | 2026-02-28 |
+| **QoL** | 🟡 Testing | — | 2026-03-13 |
+| **Tooling** | 🟢 Stable | TOOL-01,03,04 ✓ | 2026-02-28 |
+| **DEX Migration** | 🟡 Follow-ups | — | — |
+
+Legend: 🟢 Stable/Complete | 🟡 Active/In Progress | 🔴 Blocked
+
+---
+
+## 📁 All Trackers (Quick Links)
+
+### Test Trackers
+| Tracker | Location | Smoke Run |
+|---------|----------|-----------|
+| Multiclass | [test_tracker.md](game_design/multiclass/test_tracker.md) | C-01, C-02, C-03, S-02, P-01... |
+| Operations | [WORK_TRACKER.md](game_design/operations/WORK_TRACKER.md) | O-01, O-02, B-01, B-02... |
+| Classes | [TEST_TRACKER.md](game_design/classes/TEST_TRACKER.md) | CL-01, CL-02, CL-06 |
+| Mechanics | [TEST_TRACKER.md](game_design/mechanics/TEST_TRACKER.md) | MECH-01, MECH-03, MECH-04 |
+| Quests | [TEST_TRACKER.md](game_design/quests/TEST_TRACKER.md) | QST-01, QST-03, QST-05, QST-06 |
+| QoL | [TEST_TRACKER.md](game_design/qol/TEST_TRACKER.md) | QOL-01, QOL-02, QOL-03 |
+| Tooling | [TEST_TRACKER.md](game_design/tooling/TEST_TRACKER.md) | TOOL-01, TOOL-02, TOOL-03 |
+| Infinite Progression | [TEST_TRACKER.md](game_design/infinite_progression/TEST_TRACKER.md) | Step 1-3 Core |
+
+### Implementation Plans & Checklists
+| Document | Purpose |
+|----------|---------|
+| [IMPLEMENTATION_PLAN.md](game_design/multiclass/IMPLEMENTATION_PLAN.md) | Multiclass master technical document |
+| [PORT_CHECKLIST.md](game_design/multiclass/PORT_CHECKLIST.md) | THJServer parity file-by-file |
+| [IMPLEMENTATION_CHECKLIST.md](game_design/abilities/IMPLEMENTATION_CHECKLIST.md) | Spell/Discipline/AA implementation guide |
+| [DLL_AUTOMATION_MATRIX.md](game_design/tooling/DLL_AUTOMATION_MATRIX.md) | Test automation roadmap (86 cases) |
+| [TESTING_SYSTEM.md](game_design/TESTING_SYSTEM.md) | Tracker meta-system documentation |
+
+### Standalone TODOs
+| File | Purpose |
+|------|---------|
+| [TODO_DEX_MIGRATION.md](TODO_DEX_MIGRATION.md) | DEX stat migration follow-ups |
+
+---
+
+## 📦 In-Progress Data Files
+
+*Temporary work files in root directory — context for future sessions:*
+
+| File | Purpose | Status |
+|------|---------|--------|
+| `tmp_quest_spawn_audit.json` | Quest spawn audit data (pre-apply) | Temporary |
+| `tmp_quest_spawn_audit_post_apply.json` | Quest spawn audit (post-apply, versioned) | Temporary |
+| `tmp_quest_spawn_audit_post_apply_anyver.json` | Quest spawn audit (post-apply, any version) | Temporary |
+| `tmp_quest_numeric_pairs.json` | Quest numeric pair mapping | Temporary |
+| `tmp_quest_spawn_autogen_meta.json` | Auto-generated quest spawn metadata | Temporary |
+
+*These files support quest/spawn migration work. Safe to delete after quest system is stable.*
+
+---
+
+## 🛠️ Development Quick Reference
+
+### Build Commands
+```bash
+# Full build
+cmake --build build --config RelWithDebInfo --parallel
+
+# Zone only (fastest for combat/quest changes)
+cmake --build build --target zone --config RelWithDebInfo --parallel
+
+# World only
+cmake --build build --target world --config RelWithDebInfo --parallel
+```
+
+### Server Management
+```bash
+# Start server (GUI)
+python server_manager.py
+
+# Start server (script)
+python start_server.py
+python stop_server.py
+```
+
+### In-Game Test Commands
+```bash
+#test smoke          # Quick sanity (15-25 min)
+#test combat         # Combat/proc/pet/AA checks
+#test automated      # All automated tests
+#test 1-10           # Run range of tests
+#multiclassdiag      # Multiclass diagnostics
+#addclass list       # Show current classes
+```
+
+### DLL Build (Client-Side)
+- Use Server Manager → `Build+Copy DLL` button
+- Or: Build `extras/eq-core-dll-main/eq-core-dll-visualstudio2022.sln` (x86/Release)
+
+---
+
+## 🔗 Key Documentation
+
+| Topic | Primary Document |
+|-------|------------------|
+| Project Setup | [README.md](README.md), [BUILD.md](BUILD.md) |
+| Multiclass Quick Start | [game_design/multiclass/QUICK_START.md](game_design/multiclass/QUICK_START.md) |
+| DLL Integration | [game_design/multiclass/DLL_INTEGRATION.md](game_design/multiclass/DLL_INTEGRATION.md) |
+| Quest Systems | [game_design/quests/README.md](game_design/quests/README.md) |
+| Combat/Stats | [game_design/stats/](game_design/stats/) |
+| THJ Reference | `extras/THJServer/` (read-only reference implementation) |
+
+---
+
+## 📝 Notes
+
+*Use this space for persistent notes that don't fit elsewhere:*
+
+-
+-
+-
+
+---
+
+*Last dashboard update: 2026-04-20*
+*Dashboard created to consolidate 28 scattered tracking documents into one entry point.*

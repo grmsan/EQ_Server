@@ -3,7 +3,7 @@
 **Status**: Active Testing
 **Tracker Area**: Multiclass
 **Tracker State**: Active
-**Last Updated**: 2026-02-27
+**Last Updated**: 2026-04-20
 **Technical Plan**: [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
 
 ## Purpose
@@ -24,6 +24,28 @@ Use this when it has been days/weeks since last test session.
 3. Run `#test smoke` and `#test combat` to catch obvious wiring regressions.
 4. Pick one known-good sanity test (`C-01` or `P-01`) and confirm expected output still matches prior behavior.
 5. Start full testing only after the sanity pass is stable.
+
+## Current Execution Order (2026-04-20)
+
+Use this sequence if the goal is to knock out the remaining multiclass backlog in one focused session.
+
+1. **AA parity first**
+   - Implement/verify `zone/aa.cpp`.
+   - Run `A-01`, `A-02`, `A-03`, `A-04`.
+2. **Caster UI + skill exposure next**
+   - Verify mana bar/secondary-caster presentation and skill-window visibility.
+   - Run `C-03` and `K-05`.
+3. **Class-removal spell cleanup**
+   - Verify removed-class spells stay scribed but invalid gems are cleared immediately.
+   - Run `E-01`.
+4. **Item/equip rules after AA is stable**
+   - Verify existing `zone/inventory.cpp` and related item-class gating before patching any edge cases.
+   - Run `I-01`, `I-02`, `I-03`, `I-04`, `I-05`, `I-06`.
+5. **World/presentation parity last**
+   - Verify `/who`, titles, and guild/class projection.
+   - Run `B-08`, `G-01`, and any `/who` spot checks.
+6. **Finish with multiclass regression**
+   - Run `#test smoke`, then re-check `C-06`, `S-06`, and any cases touched by code changes.
 
 ## End-To-End Workflow
 
@@ -136,7 +158,7 @@ Legend:
 | `P-11` | Partial | `14` | Confirms pet bag rule + DB + merchant wiring; live summon/sync behavior remains manual. |
 | `P-13` | Partial | `6` | Confirms `HasClass` parity with bitmask; combat gate behavior remains manual. |
 | `B-08` | Partial | `6` | Confirms class ownership API consistency; title unlock UI/eligibility remains manual. |
-| `G-01` | Partial | `11` | Validates guild query projection shape; roster presentation validation remains manual. |
+| `G-01` | Partial | `11` | Validates guild query projection shape plus live class-mutation/level-update refreshes and forced guild-members-list reloads; roster presentation validation remains manual. |
 
 ### Manual (29/39)
 
@@ -195,7 +217,7 @@ Tooling/Server Manager UI validation was moved to:
 3. `#removeclass 1`
 4. `#addclass list`
 **Expected**: Warrior appears after add and disappears after remove.
-**Status**: [ ] Pass  [ ] Fail
+**Status**: [x] Pass  [ ] Fail
 **Notes**: ______________________________
 
 ### [C-02] Session Persistence
@@ -219,7 +241,7 @@ Tooling/Server Manager UI validation was moved to:
 2. `#addclass 12`
 3. Check Player Window immediately and after relog.
 **Expected**: Mana bar is visible and behaves correctly.
-**Status**: [ ] Pass  [ ] Fail
+**Status**: [x] Pass  [ ] Fail
 **Notes**: ______________________________
 
 ### [C-04] Smart Spell Targeting
@@ -439,6 +461,19 @@ Class-specific ranged/frenzy and custom combat ability validations were moved to
 **Status**: [ ] Pass  [ ] Fail
 **Notes**: ______________________________
 
+### [K-05] Skills Window Exposure For Added Class
+
+**Goal**: Verify the client skills window exposes skills granted by owned secondary classes.
+**Steps**:
+
+1. Base a character in a class with limited native skill coverage.
+2. Add a class that grants additional visible skills.
+3. Open the Skills window and inspect the newly granted skills.
+4. Confirm one of those skills can also be used or trained normally.
+**Expected**: The Skills window shows added-class skills and the client does not hide server-granted skill access.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
 ### [K-04] Monk Special Attack Selection
 
 **Goal**: Verify monk special path when monk is secondary.
@@ -508,6 +543,32 @@ Class-specific ranged/frenzy and custom combat ability validations were moved to
 **Status**: [ ] Pass  [ ] Fail
 **Notes**: ______________________________
 
+### [I-06] Merchant Class Filter Uses Owned Classes
+
+**Goal**: Verify merchant filtering honors multiclass ownership instead of base class only.
+**Steps**:
+
+1. Use a merchant that applies class filtering through `merchantlist.classes_required` or item class usability.
+2. Open the merchant window on a base-class-only character and record visible items.
+3. Add a qualifying secondary class and reopen the merchant window.
+4. Toggle any usable-item filtering path if applicable.
+**Expected**: Items restricted to the owned secondary class appear once that class is owned, and non-owned class items remain filtered out.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [I-07] Class-Restricted Augment Insert
+
+**Goal**: Verify augment insertion honors owned multiclass bits instead of the legacy single class.
+**Steps**:
+
+1. Use a valid augmentable item plus a class-restricted augment for a class the character does not own.
+2. Attempt to insert the augment.
+3. Add the qualifying class.
+4. Attempt the same insert again.
+**Expected**: Insert is denied while the qualifying class is not owned, then succeeds once the character owns that class.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
 ---
 
 ## 6) XP, Regen, AA
@@ -554,7 +615,7 @@ Class-specific ranged/frenzy and custom combat ability validations were moved to
 1. Level and add two AA-rich classes.
 2. Open AA window.
 **Expected**: Relevant AA lines/tabs appear for owned classes.
-**Status**: [ ] Pass  [ ] Fail
+**Status**: [x] Pass  [ ] Fail
 **Notes**: ______________________________
 
 ### [A-02] AA Purchase + Activate
@@ -566,17 +627,19 @@ Class-specific ranged/frenzy and custom combat ability validations were moved to
 2. Buy secondary-class active AA.
 3. Activate AA.
 **Expected**: Purchase and activation succeed.
-**Status**: [ ] Pass  [ ] Fail
+**Status**: [x] Pass  [ ] Fail
 **Notes**: ______________________________
 
 ### [A-03] Passive AA Effect
 
-**Goal**: Verify passive AA effects apply correctly.
+**Goal**: Verify passive AA effects apply only while the owning class is present.
 **Steps**:
 
 1. Buy passive AA.
 2. Validate effect in behavior/stats.
-**Expected**: Passive bonus is applied and persistent.
+3. Remove the class that grants that AA.
+4. Re-check the same behavior/stats after a normal bonus refresh path (relog, zone, or class refresh).
+**Expected**: Passive bonus is applied while the class is owned and stops applying once that class is removed.
 **Status**: [ ] Pass  [ ] Fail
 **Notes**: ______________________________
 
@@ -689,6 +752,82 @@ Bazaar waypoint/map/quest API smoke tests moved to:
 **Expected**: Guild member info reflects multiclass projection from `data_buckets.GestaltClasses`.
 **Status**: [ ] Pass  [ ] Fail
 **Notes**: ______________________________
+
+---
+
+## 9) Display, Entitlement, and Scaling Follow-Up
+
+### [X-04] Level Cap / Exp Cap Logic
+
+**Goal**: Verify multiclass ownership does not break intended level-cap or XP-cap rules.
+**Steps**:
+
+1. Use a character near any relevant level or XP cap rule edge.
+2. Add or remove a class that could affect cap logic.
+3. Gain XP and observe level/XP behavior.
+**Expected**: XP gain and level progression follow the intended ruleset without granting unintended cap bypasses.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [D-01] Character Select Multiclass Display
+
+**Goal**: Verify character select presentation reflects multiclass state as intended.
+**Steps**:
+
+1. Log out with a known multiclass character.
+2. Return to character select.
+3. Observe class label/presentation for that character.
+**Expected**: Character select reflects multiclass presentation according to the current client/DLL design.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [D-02] `/who` Multiclass Display
+
+**Goal**: Verify `/who` output reflects multiclass presentation as intended.
+**Steps**:
+
+1. Log in with a known multiclass character.
+2. Run `/who` and `/who all <name>` from another client or comparable observer path.
+3. Compare returned class label/presentation to expected multiclass behavior.
+**Expected**: `/who` output matches the current intended multiclass presentation policy without corrupt or unknown class output.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [D-03] `#mystats` Multiclass Info Output
+
+**Goal**: Verify `#mystats` or equivalent diagnostics expose multiclass ownership information.
+**Steps**:
+
+1. Use a known multiclass character.
+2. Run `#mystats`.
+3. Confirm owned-class or class-bitmask information appears and is accurate.
+**Expected**: Diagnostic output includes accurate multiclass ownership information.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [E-01] Class Removal Unmemorizes Invalid Spells
+
+**Goal**: Verify class removal soft-locks or clears spell access according to multiclass entitlement rules.
+**Steps**:
+
+1. Add a caster class and memorize spells only available through that owned class.
+2. Remove that class.
+3. Re-open spellbook/spell gems, attempt to cast affected spells, and try to re-memorize one from the spellbook.
+**Expected**: Spells that are no longer valid after class removal are blocked or cleared according to the intended multiclass entitlement behavior, and re-memorizing an invalid spell fails immediately with an error instead of leaving the spellbar memorize UI hanging.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [E-02] Class Removal AA Entitlement Policy
+
+**Goal**: Verify removed-class AA ownership follows the chosen entitlement policy.
+**Steps**:
+
+1. Purchase or grant AAs tied to a removable owned class.
+2. Remove that class.
+3. Re-open AA window, re-check AA point totals, and attempt to activate any affected AA.
+**Expected**: Pending design decision — either removed-class AAs remain purchased but unusable (soft-lock) or the system performs a refund/reset path. Record which policy the code currently follows.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: Pending design decision on final entitlement policy. ______________________________
 
 ---
 

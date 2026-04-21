@@ -268,26 +268,26 @@ INSERT INTO data_buckets (`key`, `value`, `character_id`) VALUES
 - [x] Spell tooltips show correct class levels (Handled by DLL)
 - [x] Spellbook UI shows all usable spells (Handled by DLL)
 - [x] Spell scribe validates class ownership (Verified client_process.cpp logic)
-- [ ] Mana bar appears when any owned class is caster (UI flag needs verification)
+- [x] Server and DLL mana refresh path are implemented for owned caster classes (Needs runtime validation via C-03)
 
 ### Phase 3: AA System (~80% Complete)
-- [ ] AA purchase checks union-of-classes
+- [x] AA purchase checks union-of-classes
 - [x] AA activation checks union-of-classes
 - [x] AA window displays AAs for all owned classes (Server side mask sending implemented)
 - [x] Dynamic AA timers (UseDynamicAATimers rule)
-- [ ] Passive AA effects gated by current ownership
+- [x] Passive AA effects gated by current ownership
 
 ### Phase 4: Skills & Training (~90% Complete)
 - [x] MaxSkill() uses best owned class cap
 - [x] Skill trainers allow training for any owned class
-- [ ] Skills window shows all available skills (Relies on DLL override)
+- [x] Skills window exposure path is implemented through DLL skill-limit override (Needs runtime validation via K-05)
 - [x] Skill use validates class ownership at runtime (via CheckIncreaseSkill)
 
-### Phase 5: Items & Equipment (~20% Complete)
-- [ ] Item class mask checks union-of-classes
-- [ ] Merchant item filtering uses union-of-classes
-- [ ] Equip validation for class-restricted items
-- [ ] Augment validation for class-restricted augs
+### Phase 5: Items & Equipment (~75% Complete)
+- [x] Item class mask checks union-of-classes in core equip/click paths
+- [x] Merchant item filtering uses union-of-classes
+- [x] Equip validation for class-restricted items
+- [x] Augment validation for class-restricted augs (augment insert now validates augment usability against owned classes and preserves THJ wear-slot safety guard; verify with I-07)
 
 ### Phase 6: Combat & Disciplines (~95% Complete)
 - [x] Discipline tome learning (Via OP_MemorizeSpell logic)
@@ -300,7 +300,7 @@ INSERT INTO data_buckets (`key`, `value`, `character_id`) VALUES
 - [x] Wearing items (Verified SwapItem/IsEquipable)
 - [x] Item Procs (Refactored spell_effects.cpp checks)
 - [x] Consumption Timers (Refactored zone/bonuses.cpp)
-- [ ] Item Clicking (Need to verify HasItemClickClass checks if any)
+- [x] Item Clicking (Verified item click/equip-cast restrictions use `GetClassesBits()`)
 
 ### Phase 8: AA System (50% Complete)
 - [x] Viewing/Buying AAs (zone/aa.cpp already supports multiclass via SendAATable)
@@ -308,14 +308,15 @@ INSERT INTO data_buckets (`key`, `value`, `character_id`) VALUES
 
 ### Phase 9: Experience & Scaling (10% Complete)
 - [x] Hybrid penalties/bonuses (Refactored zone/exp.cpp)
-- [ ] Level Cap / Exp Cap logic (Check strict class level limits)
-- [ ] Item class mask checks union-of-classes
-- [ ] Merchant item filtering uses union-of-classes
-- [ ] Equip validation for class-restricted items
-- [ ] Character select shows all classes
-- [ ] /who displays multiclass abbreviations
-- [ ] #mystats shows multiclass info
-- [ ] Class change auto-unmemorizes invalid spells
+- [x] Level Cap / Exp Cap logic (Restored THJ-style `MaxExpLevel` clamp so client max level no longer overrides the server exp cap; verify with X-04)
+- [x] Guild roster sync on class mutation / level update (`AddExtraClass`, `RemoveExtraClass`, and the level-up guild refresh now publish `GetClassesBits()` when multiclassing is enabled, and guild member updates now force a members-list refresh; verify with G-01)
+- [x] Item class mask checks union-of-classes in runtime equip/click paths
+- [x] Merchant item filtering uses union-of-classes
+- [x] Equip validation for class-restricted items
+- [x] Character select multiclass display path is implemented via world + DLL shaping (Needs runtime validation)
+- [x] /who multiclass abbreviations are implemented via world + DLL class-name overrides (Needs runtime validation)
+- [x] #mystats shows multiclass info
+- [x] Class change auto-unmemorizes invalid spells while preserving scribed spells
 - [ ] Free AA reset on class removal (entitlement)
 
 ---
@@ -376,8 +377,8 @@ INSERT INTO data_buckets (`key`, `value`, `character_id`) VALUES
 **Status:** Under investigation
 
 ### Issue: /who shows only base class
-**Cause:** World.exe not rebuilt / using stale binary
-**Solution:** Rebuild world.exe, restart after rebuild
+**Cause:** Usually stale `world.exe` or DLL build, not missing server logic
+**Solution:** Rebuild `world.exe` and refresh the client DLL so the world packet shaping and class-name detours are in sync
 **Status:** Implemented, verify with fresh build
 
 ---

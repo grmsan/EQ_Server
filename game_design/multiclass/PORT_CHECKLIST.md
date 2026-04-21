@@ -1,6 +1,6 @@
 # THJServer Multiclass Port Checklist
 
-**Last Updated:** 2026-02-27
+**Last Updated:** 2026-04-20
 **Master Technical Document:** [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
 **Test Tracker:** [TEST_TRACKER.md](TEST_TRACKER.md)
 
@@ -51,6 +51,30 @@ Files that control item class restrictions.
 
 - Referenced files: `112`
 - Parity with THJServer: `36` same, `66` differ, `10` THJ-only
+
+## Recent Port Activity (2026-04-20)
+
+- Verified the following multiclass behaviors are already present in current code and should be treated as validation-first, not broad porting work:
+  - `zone/client.cpp`: class-add/remove refresh path recalculates mana, sends `SendManaUpdate()`, and resends EdgeStatLabel stats.
+  - `extras/eq-core-dll-main/src/eqgame.cpp`: mana gauge and `Max_Mana` client detours already consume server-reported mana values for multiclass presentation.
+  - `zone/client_process.cpp`: merchant class filtering already uses owned-class bitmasks.
+  - `zone/client_packet.cpp` and `zone/spells.cpp`: class-locked item click/equip-cast checks already use `GetClassesBits()`.
+- Added class-removal spell-gem cleanup:
+  - `zone/client.cpp`: `RemoveExtraClass()` now interrupts invalid in-progress casts and clears memorized gems for spells no longer usable by the remaining owned classes.
+  - `zone/spells.cpp` / `zone/client.h`: shared spell-eligibility helpers now drive both memorize-time validation and class-removal cleanup, including level entitlement checks, so the rules stay consistent.
+- Removed the last base-class-only restriction from class mutation:
+  - `zone/client.cpp`: `GetClassesBits()` / `SetClassesBits()` now treat persisted `GestaltClasses` as authoritative multiclass state instead of silently OR-ing the legacy base class back into the owned mask.
+  - `zone/client.cpp` / `zone/gm_commands/removeclass.cpp`: starting/base class removal now follows the same rules as any other owned class, with the only remaining guard being that the character must retain at least one class.
+- Cleaned up the remaining compatibility-class leakage:
+  - `zone/client.cpp` / `common/repositories/character_data_repository.h`: the legacy `character_data.class` field is now synced to a deterministic owned compatibility class whenever the owned multiclass bitmask changes.
+  - `zone/client_packet.cpp`: login hydration now reuses the shared persisted multiclass-bucket fallback logic and no longer seeds the runtime cache by OR-ing the legacy class bit back into `m_pp.classes`.
+  - `world/worlddb.cpp`: char-select shaping now uses `GestaltClasses` as-is and picks the deterministic bitmask-derived compatibility class for the single-class compatibility slot instead of reintroducing or randomly selecting a removed starting class.
+- Cleaned up the pre-testing review findings:
+  - `zone/client_process.cpp`: memorize-time spell checks now reuse the shared multiclass spell helper instead of keeping a second inline implementation.
+  - `extras/eq-core-dll-main/src/WaypointPOCWnd.cpp`: GM dashboard actions now execute direct client commands instead of routing through the waypoint `/say` bridge, and the tool-window commands now reliably show the requested window instead of toggling it closed.
+  - `zone/bonuses.cpp`: passive AA bonuses are gated directly by `CanUseAlternateAdvancementRank(rank)` in the bonus path.
+  - `zone/client.cpp` / `zone/exp.cpp` / `zone/guild_mgr.cpp`: guild member refreshes now publish owned-class bitmasks after class mutation and level-up, and they force a guild-members-list reload so roster projection stays aligned with current multiclass ownership.
+- Practical implication: remaining multiclass item work should focus on augment/edge-case validation instead of assuming inventory support is largely unported.
 
 ## Recent Port Activity (2026-02-26)
 
@@ -197,13 +221,13 @@ Legend:
 - [ ] `zone/mob.cpp` (refs: 45, parity: partial - base Mob GetClassesBits/HasClass + caster/melee archetype checks ported 2026-02-26)
 - [x] `zone/spell_effects.cpp` (refs: 39, parity: implemented Bard Pulse/Infinite Buffs)
 - [ ] `zone/attack.cpp` (refs: 34, parity: partial - THJ proc/crit/archery/combat scaling parity pass ported 2026-02-26; smart-target helper + residual diffs remain)
-- [ ] `zone/aa.cpp` (refs: 27, parity: partial - Mnemonic Retention + Fury of Magic multiclass gates ported 2026-02-26)
+- [ ] `zone/aa.cpp` (refs: 27, parity: partial - Mnemonic Retention + Fury of Magic multiclass gates ported 2026-02-26; passive AA ownership now enforced through the shared entitlement checks used by the bonus path)
 - [x] `zone/spells.cpp` (refs: 27, parity: implemented dynamic AA timers)
 - [ ] `zone/client_mods.cpp` (refs: 26, parity: partial - CalcBaseMana/CalcBaseEndurance now best-of-owned-classes 2026-02-26)
 - [ ] `zone/client_process.cpp` (refs: 24, parity: partial - multiclass trainer open/end gating + trainer-class skill caps ported 2026-02-21)
 - [ ] `zone/special_attacks.cpp` (refs: 23, parity: diff)
 - [ ] `zone/effects.cpp` (refs: 17, parity: diff)
-- [ ] `zone/bonuses.cpp` (refs: 16, parity: diff)
+- [ ] `zone/bonuses.cpp` (refs: 16, parity: partial - passive AA ownership gating aligned with multiclass enablement 2026-04-20)
 - [ ] `zone/entity.cpp` (refs: 16, parity: diff)
 - [ ] `zone/client.h` (refs: 7, parity: diff)
 - [ ] `zone/inventory.cpp` (refs: 4, parity: diff)

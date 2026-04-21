@@ -3,7 +3,7 @@
 **Status**: Active Testing
 **Tracker Area**: QoL
 **Tracker State**: Active
-**Last Updated**: 2026-03-11
+**Last Updated**: 2026-03-13
 
 ## Purpose
 
@@ -54,17 +54,32 @@ Tracks quality-of-life systems that are not tightly scoped to one feature domain
 **Status**: [ ] Pass  [ ] Fail
 **Notes**: ______________________________
 
-### [QOL-03] Waypoint SIDL POC Window (`/waypointpoc`)
+### [QOL-03] Generic SIDL Tool Window - Waypoints (`/waypointpoc`, `/toolwnd`)
 
-**Goal**: Verify SIDL-based waypoint window displays server data and can trigger travel action.
+**Goal**: Verify the generic SIDL tool host can switch into waypoint mode, display server data, and trigger travel action.
 **Steps**:
 
 1. In game, run `#wppoc list` once (or use window refresh).
-2. Run `/waypointpoc` to open window.
-3. Click `Refresh` and verify list populates with waypoint rows.
-4. Select one row and click `Travel`.
-5. Optionally run `/waypointpoc travel` after selecting a row.
-**Expected**: Window renders list and selected waypoint travel triggers server-side teleport (`#wppoc travel <id>` path).
+2. Run `/toolwnd` and verify the shared tool window opens.
+3. Click `Waypoints` or run `/waypointpoc`.
+4. Click `Refresh` and verify list populates with waypoint rows.
+5. Select one row and click `Travel`.
+6. Optionally run `/waypointpoc travel` after selecting a row.
+**Expected**: Shared window renders waypoint list and selected waypoint travel triggers server-side teleport (`#wppoc travel <id>` path).
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [QOL-03A] Generic SIDL Tool Window - GM Dashboard (`/gmdashboard`, `/toolwnd`)
+
+**Goal**: Verify the same SIDL host can switch into GM/dev dashboard mode and run command-button style actions.
+**Steps**:
+
+1. Run `/gmdashboard` or open `/toolwnd` and click `GM Dash`.
+2. Verify the list shows dashboard rows such as `Print Location`, `Reload Quests`, and `Repop Zone`.
+3. Select a runnable row and click `Run`.
+4. Select a template/manual row and click `Details`.
+5. Verify the info text updates for the selected row.
+**Expected**: Same shared window hosts non-waypoint functionality, runnable rows execute commands, and manual rows show guidance without issuing commands.
 **Status**: [ ] Pass  [ ] Fail
 **Notes**: ______________________________
 
@@ -83,14 +98,14 @@ Tracks quality-of-life systems that are not tightly scoped to one feature domain
 
 ### [QOL-05] Waypoint Lua/ImGui Runtime POC (`/waypointimgui`)
 
-**Goal**: Verify embedded Lua + Dear ImGui runtime path renders interactive waypoint UI and executes refresh/travel actions.
+**Goal**: Verify Lua + Dear ImGui runtime path renders interactive waypoint UI and executes refresh/travel actions.
 **Steps**:
 
 1. Run `/waypointimgui toggle`.
 2. Run `/waypointimgui status`.
-3. Run `/waypointimgui refresh` and verify ImGui window renders with waypoint entries.
+3. Run `/waypointimgui refresh` and verify the ImGui host window renders with waypoint entries.
 4. Select a waypoint row in the ImGui window and click `Travel`.
 5. Run `/waypointimgui reload` and verify script reload succeeds.
-**Expected**: Status reports runtime/hooks active, ImGui window is interactive, and refresh/travel work through shared waypoint server bridge.
+**Expected**: Status reports runtime/hooks active, the separate ImGui host window is interactive, and refresh/travel work through the shared waypoint server bridge.
 **Status**: [ ] Pass  [ ] Fail
 **Notes**: ______________________________

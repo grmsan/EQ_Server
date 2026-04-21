@@ -60,3 +60,18 @@ Examples:
 
 - Keep concept-heavy systems (for example `infinite_progression`, `evercraft`) out of active testing until core behavior is runnable.
 - Once runnable, add a tracker in that folder and it will appear automatically in Test Manager.
+
+## Project Dashboard
+
+For a consolidated view of all active work, progress tracking, and session logs, see the master dashboard:
+
+**[PROJECT_DASHBOARD.md](../PROJECT_DASHBOARD.md)** — Single entry point for picking up where you left off.
+
+The dashboard provides:
+- **Return After Break** quickstart (5-minute orientation)
+- **Session Log** for recording what you worked on
+- **Active Work Items** prioritized by urgency
+- **Progress Overview** by domain with status indicators
+- **Quick Links** to all trackers and implementation plans
+
+Use the dashboard as your starting point after extended breaks. Use individual trackers for detailed test execution and validation.

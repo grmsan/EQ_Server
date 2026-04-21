@@ -1,6 +1,6 @@
 # Lua + ImGui Integration in eq-core-dll
 
-Last updated: 2026-03-11
+Last updated: 2026-03-13
 
 ## Purpose
 This is a living implementation document for adding Lua-driven ImGui UI to `extras/eq-core-dll-main` without breaking legacy EQ client behavior.
@@ -12,7 +12,7 @@ This is a living implementation document for adding Lua-driven ImGui UI to `extr
 - [x] Server -> DLL structured stats packet via `OP_ServerStatsUpdate` (`0x7330` for RoF2)
 - [x] DLL-side stat/multiclass detours and UI overrides (labels/gauges/class filters)
 - [x] Custom UI proof-of-concept via SIDL (`PowerSlotWnd`)
-- [x] Waypoint travel SIDL POC (`WaypointPOCWnd`) parsing `OP_WaypointList` (`0x1402`) and issuing travel actions via server command bridge (`#wppoc`)
+- [x] Generic SIDL tool host (`WaypointPOCWnd`) parsing `OP_WaypointList` and hosting both waypoint and GM/dev dashboard modes
 - [x] Waypoint overlay POC (`WaypointOverlayPOC`) using HUD text and command-driven interaction
 - [x] Lua/ImGui waypoint runtime POC (`WaypointLuaImGuiPOC`) with:
   - D3D9 `CreateDevice` -> `Present`/`Reset` hook chain
@@ -27,11 +27,18 @@ This is a living implementation document for adding Lua-driven ImGui UI to `extr
 
 ## Waypoint POC Snapshot (Three Paths)
 
-1. SIDL window path
-- Command: `/waypointpoc`
+1. SIDL generic tool host path
+- Commands:
+  - `/waypointpoc`
+  - `/toolwnd`
+  - `/gmdashboard`
 - Files:
   - `extras/eq-core-dll-main/src/WaypointPOCWnd.cpp`
   - `extras/eq-core-dll-main/uifiles/EQUI_WaypointPOCWnd.xml`
+- Current status:
+  - one XML-backed `CCustomWnd` now hosts more than one tool
+  - `Waypoints` is the first production-ready module
+  - `GM Dashboard` proves the host is not waypoint-specific
 
 2. C++ overlay path (no SIDL, no ImGui)
 - Command: `/waypointoverlay`
@@ -45,15 +52,16 @@ This is a living implementation document for adding Lua-driven ImGui UI to `extr
   - `extras/eq-core-dll-main/scripts/waypoint_imgui_poc.lua`
 - Current status:
   - packet ingest + action callback path is wired
-  - Lua state and ImGui render loop are active
+  - Lua state and ImGui render loop are active in a standalone DX9 host window
   - script reload available via `/waypointimgui reload`
-  - fallback native ImGui window is used when script load/draw fails
+  - embedded in-client render hook remains unresolved
 
 ## Build Verification
 
 - 2026-03-10: `eq-core-dll-vs2022.vcxproj` built successfully for `Release|Win32` with all three waypoint POC modules compiled and linked.
 - 2026-03-11: Lua/ImGui runtime implementation landed in `WaypointLuaImGuiPOC.cpp` and is now part of the active VS2022/VS2019 build targets.
-- 2026-03-11: Verified VS2022 build for Lua/ImGui runtime by compiling to `extras/eq-core-dll-main/bin/verify/dinput8.dll` (`Release|Win32`).
+- 2026-03-13: Generic SIDL tool host refactor built successfully in the active VS2022 target.
+- 2026-03-13: Lua+ImGui POC works in a dedicated host window, while embedded EQ render hooking remains incomplete.
 
 ## PowerShell Dependency Install (Lua + ImGui)
 
@@ -103,6 +111,7 @@ This is a living implementation document for adding Lua-driven ImGui UI to `extr
 2. Active Lua/ImGui runtime now lives in `WaypointLuaImGuiPOC.cpp` and is initialized from main DLL hook lifecycle.
 3. The most practical existing custom UI pattern remains `PowerSlotWnd` (SIDL + server-fed data + lifecycle hooks).
 4. The best current transport for new feature data remains existing custom packet/command bridge paths (`0x1338`, `OP_WaypointList`, and server command handlers).
+5. The most practical production UI direction is now a reusable SIDL host with tool modes, not one XML file per feature.
 
 ## Integration Strategy
 
@@ -150,11 +159,20 @@ This is a living implementation document for adding Lua-driven ImGui UI to `extr
 
 ## Feature Targets Mapped To This Plan
 - Command-to-button UX:
-  - immediate candidate for first Lua/ImGui module.
+  - already served well by the generic SIDL host / GM dashboard.
 - Custom bag UX/interception:
   - feasible, but requires validated container open/use hooks before full replacement.
 - Waypoint/fast travel UX:
-  - server waypoint subsystem already exists; ImGui can provide richer interaction layer without replacing transport logic.
+  - server waypoint subsystem already exists; SIDL is already viable and ImGui can still provide a richer future interaction layer.
+
+## Practical Architecture Direction
+
+For the current codebase, the strongest path is:
+
+1. Use SIDL as the native in-client rendering shell.
+2. Reuse a small number of generic window templates instead of creating one-off XML for every feature.
+3. Keep feature behavior/data server-driven and optionally script-driven.
+4. Continue Lua+ImGui as an R&D lane until embedded render is stable in the legacy client.
 
 ## Implementation Notes To Keep Updated
 When new steps are completed, update this file with:

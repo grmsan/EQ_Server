@@ -12,17 +12,48 @@
 
 **When you come back after days/weeks away:**
 
-1. **Read the Session Log** (below) to see what you last worked on
-2. **Check Active Work Items** for highest priority tasks
-3. **Run sanity tests** if you made code changes:
+1. **Review the Executive Priority Board** in [PROJECT_WORKSTREAMS.md](PROJECT_WORKSTREAMS.md)
+2. **Check Decisions Needed** below and choose what should be unblocked
+3. **Pick or assign one work packet** from [PROJECT_WORKSTREAMS.md](PROJECT_WORKSTREAMS.md)
+4. **Read the Session Log** only if you need detailed recent history
+5. **Run sanity tests** if you made code changes:
    - Quick: `#test smoke` in-game
    - Or: `cmake --build build --target zone --config RelWithDebInfo -- /m:1 /p:BuildInParallel=false /p:TrackFileAccess=false`
-4. **Pick one item** from Active Work Items and resume
 
 **Key Commands:**
 - Start server: `python server_manager.py` → Server Control → Start All
 - Build: `cmake --build build --config RelWithDebInfo -- /m:1 /p:BuildInParallel=false /p:TrackFileAccess=false`
 - In-game tests: `#test smoke`, `#test combat`, `#test automated`
+
+---
+
+## 🧭 Management View
+
+Use this section when acting as project owner or manager.
+
+| Document | Use It For |
+|----------|------------|
+| [PROJECT_MANAGEMENT.md](PROJECT_MANAGEMENT.md) | Operating model, priority definitions, update ritual, manager review cadence |
+| [PROJECT_WORKSTREAMS.md](PROJECT_WORKSTREAMS.md) | Executive priority board, active packets, dependencies, decisions |
+| [AGENT_HANDOFF.md](AGENT_HANDOFF.md) | Instructions and templates for assigning work to agents |
+
+### Decisions Needed
+
+| Decision | Current Recommendation | Blocks |
+|----------|------------------------|--------|
+| Removed-class AA entitlement policy | Validate current behavior first with `E-02`, then choose soft-lock vs refund/reset | `MC-VAL-02`, release readiness |
+| Player-facing `/pet assist` command/UI | Keep as explicit THJ delta until pet validation proves server behavior stable | Mechanics parity closure |
+| AA level requirement removal | Defer research until multiclass validation pass completes unless AA tests fail | Future AA design work |
+| DLL visual polish scope | Defer until P1 validation work is moving | Infinite progression Step 12 |
+
+### Ready To Assign
+
+| Packet | Priority | Role | Summary |
+|--------|----------|------|---------|
+| `MC-VAL-01` | P1 | Validator | Validate latest multiclass item, augment, XP, and inventory-label fixes |
+| `MC-VAL-02` | P1 | Validator + Manager | Validate AA runtime behavior and decide removed-class AA policy |
+| `MECH-PET-01` | P1 | Validator | Validate pet/familiar parity and re-check failed `MECH-11` |
+| `TOOL-DLL-01` | P1 | Validator / Implementer | Validate DLL build/copy and probe callback reliability |
 
 ---
 
@@ -32,6 +63,7 @@
 
 | Date | Area | Accomplishments | Next Steps |
 |------|------|-----------------|------------|
+| 2026-04-25 | Project management | Added a management layer with an operating model, workstream assignment board, and agent handoff protocol so work can be assigned by packet ID instead of broad project area. Dashboard now has a manager-facing decision view and ready-to-assign packet list. | Use [PROJECT_WORKSTREAMS.md](PROJECT_WORKSTREAMS.md) for assignment, start with `MC-VAL-01`, `MC-VAL-02`, `MECH-PET-01`, or `TOOL-DLL-01`, and require agents to follow [AGENT_HANDOFF.md](AGENT_HANDOFF.md). |
 | 2026-04-20 | Pets / Mechanics validation | Resolved the latest uncommitted pet regressions from review: removed the stale legacy taunt overwrite during pet restore, tightened familiar lookup/cleanup so variant familiar spells cannot coexist or orphan each other, and limited `/pet assist` retargeting to real owner actions instead of passive target selection. Confirmed `zone` builds cleanly on the stable non-parallel CMake/MSBuild path and updated server-manager build behavior to use that same invocation. | Run `MECH-07` to `MECH-15`, with special focus on `MECH-11`, `MECH-14`, and `MECH-15`, then update the mechanics tracker from actual in-game evidence. |
 | 2026-04-21 | Pets / Mechanics validation | Addressed the uncommitted pet review findings: familiars now carry normal ownership semantics for pet-aware server paths, familiar buff fade now dismisses the matching familiar directly, and the pet taunt parity patch was narrowed back to the engaged target instead of force-peeling nearby mobs. Added dedicated mechanics cases for familiar cleanup and ownership validation. | Re-run the expanded pet mechanics pack `MECH-07` to `MECH-13`, with special attention to `MECH-11`, `MECH-12`, and `MECH-13`, then update tracker status from actual in-game results. |
 | 2026-04-21 | Pets / THJ parity | Ported the remaining server-side pet parity foundation: persisted pet command states, summon-time restore for taunt/hold/ghold/focus/spellhold, dedicated familiar spawning from active buffs, client-owned pet equipment-aware melee skill formulas, and assist-aware pet engagement hooks for melee/spell combat. `zone` now builds cleanly after the changes. | Run the new mechanics pet test cases `MECH-07` to `MECH-11`, apply the pet-command-state DB migration before persistence tests, and keep the remaining THJ delta explicit: add a player-facing `/pet assist` command/UI surface if we want full THJ UX parity. |
@@ -201,6 +233,9 @@ Legend: 🟢 Stable/Complete | 🟡 Active/In Progress | 🔴 Blocked
 ### Implementation Plans & Checklists
 | Document | Purpose |
 |----------|---------|
+| [PROJECT_MANAGEMENT.md](PROJECT_MANAGEMENT.md) | Project operating model and manager review rules |
+| [PROJECT_WORKSTREAMS.md](PROJECT_WORKSTREAMS.md) | Executive priority board and assignable work packets |
+| [AGENT_HANDOFF.md](AGENT_HANDOFF.md) | Agent assignment, evidence, and closeout protocol |
 | [IMPLEMENTATION_PLAN.md](game_design/multiclass/IMPLEMENTATION_PLAN.md) | Multiclass master technical document |
 | [PORT_CHECKLIST.md](game_design/multiclass/PORT_CHECKLIST.md) | THJServer parity file-by-file |
 | [IMPLEMENTATION_CHECKLIST.md](game_design/abilities/IMPLEMENTATION_CHECKLIST.md) | Spell/Discipline/AA implementation guide |
@@ -287,11 +322,12 @@ python stop_server.py
 
 *Use this space for persistent notes that don't fit elsewhere:*
 
--
+- Assign work by packet ID from [PROJECT_WORKSTREAMS.md](PROJECT_WORKSTREAMS.md), not by broad area name.
+- Agents should follow [AGENT_HANDOFF.md](AGENT_HANDOFF.md) and update tracker evidence before closing work.
 -
 -
 
 ---
 
-*Last dashboard update: 2026-04-21*
+*Last dashboard update: 2026-04-25*
 *Dashboard created to consolidate 28 scattered tracking documents into one entry point.*

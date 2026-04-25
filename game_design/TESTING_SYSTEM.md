@@ -75,3 +75,13 @@ The dashboard provides:
 - **Quick Links** to all trackers and implementation plans
 
 Use the dashboard as your starting point after extended breaks. Use individual trackers for detailed test execution and validation.
+
+## Management Layer
+
+Use the management docs when work needs to be assigned to another agent or reviewed at a high level:
+
+- **[PROJECT_MANAGEMENT.md](../PROJECT_MANAGEMENT.md)** — operating model, priority definitions, and manager review cadence.
+- **[PROJECT_WORKSTREAMS.md](../PROJECT_WORKSTREAMS.md)** — executive priority board and active work packets.
+- **[AGENT_HANDOFF.md](../AGENT_HANDOFF.md)** — required agent instructions, evidence template, and closeout template.
+
+Trackers remain the validation source of truth. Work packets point agents at the right tracker cases and define the scope, done criteria, and update requirements.

@@ -151,3 +151,21 @@ Tracks developer tooling UX and workflow surfaces (Server Manager, logs, operato
 **Expected**: Persisted sources agree and DLL callback class mask matches the same value.
 **Status**: [ ] Pass  [ ] Fail
 **Notes**: ______________________________
+
+### [TOOL-11] Build+Copy DLL + UI Asset Deployment
+
+**Goal**: Verify Server Manager `Build+Copy DLL` deploys the required DLL and UI assets to the client install.
+**Steps**:
+
+1. Open `server_manager.py`, set `EQ Folder`, and click `Build+Copy DLL`.
+2. Confirm client has `<EQ>/dinput8.dll` with recent timestamp.
+3. Confirm client has:
+   - `<EQ>/uifiles/default/EQUI_WaypointPOCWnd.xml`
+   - `<EQ>/uifiles/default/EQUI_PowerSlotWnd.xml`
+   - `<EQ>/scripts/waypoint_imgui_poc.lua`
+4. Confirm client UI manifest (`EQUI.xml` or `default.xml`) includes:
+   - `<Include>EQUI_WaypointPOCWnd.xml</Include>`
+   - `<Include>EQUI_PowerSlotWnd.xml</Include>`
+**Expected**: DLL, XML, and script assets are deployed correctly in one operator action. This validates deployment only, not the runtime behavior of the QoL waypoint hosts.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________

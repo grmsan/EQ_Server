@@ -1099,6 +1099,10 @@ public:
 	Mob* GetPetByID(uint16 id);
 	void ConfigurePetWindow(Mob* focused_pet);
 	bool IsPetAllowed(uint16 spell_id);
+	NPC* GetFamiliar(uint16 spell_id);
+	bool CheckFamiliarConflict(uint16 spell_id);
+	void DismissFamiliar(uint16 spell_id);
+	void MakeFamiliar(uint16 spell_id);
 	bool IsMyPet(Mob* mob) const;
 	virtual Mob* GetOwner();
 	virtual Mob* GetOwnerOrSelf();
@@ -1248,6 +1252,8 @@ public:
 	inline const bool IsPetStop() const { return pet_stop; }
 	inline void SetPetRegroup(bool nState) { pet_regroup = nState; }
 	inline const bool IsPetRegroup() const { return pet_regroup; }
+	inline void SetPetAssisting(bool nState) { pet_assisting = nState; }
+	inline const bool IsPetAssisting() const { return pet_assisting; }
 	inline const bool IsRoamer() const { return roamer; }
 	inline const int GetWanderType() const { return wandertype; }
 	inline const bool IsRooted() const { return rooted || permarooted; }
@@ -1671,6 +1677,7 @@ protected:
 	bool focused;
 	bool pet_stop;
 	bool pet_regroup;
+	bool pet_assisting;
 	bool spawned;
 	void CalcSpellBonuses(StatBonuses* newbon);
 	virtual void CalcBonuses();

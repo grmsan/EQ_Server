@@ -2567,19 +2567,9 @@ class ServerManagerApp(tk.Tk):
             self.ui_call(self._set_build_controls_enabled, False)
             self.ui_call(self._set_build_status, f"Building {target}...")
 
-            cmd = ["cmake", "--build", "build", "--target", target, "--config", "RelWithDebInfo", "--parallel"]
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            rc, _ = self._run_streamed_command(self._make_cmake_build_cmd(target))
 
-            while True:
-                line = proc.stdout.readline()
-                if not line:
-                    break
-                line = line.strip()
-                if line:
-                    self.log(line)
-            proc.wait()
-
-            if proc.returncode == 0:
+            if rc == 0:
                 self.log(f"Build {target} complete.")
                 self.ui_call(self._set_build_status, "Build Complete")
                 self.bin_dir = self.find_bin_dir()
@@ -2611,19 +2601,9 @@ class ServerManagerApp(tk.Tk):
             self.ui_call(self._set_build_controls_enabled, False)
             self.ui_call(self._set_build_status, "Building zone...")
 
-            cmd = ["cmake", "--build", "build", "--target", "zone", "--config", "RelWithDebInfo", "--parallel"]
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            rc, _ = self._run_streamed_command(self._make_cmake_build_cmd("zone"))
 
-            while True:
-                line = proc.stdout.readline()
-                if not line:
-                    break
-                line = line.strip()
-                if line:
-                    self.log(line)
-            proc.wait()
-
-            if proc.returncode != 0:
+            if rc != 0:
                 self.log("Build failed, aborting restart.")
                 self.ui_call(self._set_build_status, "Build Failed")
                 self.ui_call(self._set_build_controls_enabled, True)
@@ -3005,17 +2985,23 @@ class ServerManagerApp(tk.Tk):
         proc.wait()
         return proc.returncode, lines
 
-    def _build_cmake_target_once(self, build_target):
+    def _make_cmake_build_cmd(self, build_target):
         cmd_build = ["cmake", "--build", "build"]
         if build_target and build_target != "all":
             cmd_build += ["--target", build_target]
         cmd_build += ["--config", "RelWithDebInfo"]
 
-        # Pass MSBuild-specific anti-lock flags via the native tool switch
+        # On this Windows toolchain, `cmake --build ... --parallel` can return a
+        # generic failure even when the underlying VS project builds cleanly.
+        # Prefer a stable single-build invocation and pass native MSBuild flags
+        # to reduce file-lock churn from parallel tracking.
         if os.name == "nt":
-            cmd_build += ["--", "/p:BuildInParallel=false", "/p:TrackFileAccess=false"]
+            cmd_build += ["--", "/m:1", "/p:BuildInParallel=false", "/p:TrackFileAccess=false"]
 
-        return self._run_streamed_command(cmd_build)
+        return cmd_build
+
+    def _build_cmake_target_once(self, build_target):
+        return self._run_streamed_command(self._make_cmake_build_cmd(build_target))
 
     def _attempt_lock_recovery(self):
         self.log("Build lock recovery: stopping all server processes (managed + external)...")

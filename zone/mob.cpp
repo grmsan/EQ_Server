@@ -449,6 +449,7 @@ Mob::Mob(
 	focused           = false;
 	pet_stop          = false;
 	pet_regroup       = false;
+	pet_assisting     = false;
 	_IsTempPet        = false;
 	pet_owner_bot     = false;
 	pet_owner_client  = false;

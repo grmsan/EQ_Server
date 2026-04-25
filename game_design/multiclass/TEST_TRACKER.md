@@ -3,7 +3,7 @@
 **Status**: Active Testing
 **Tracker Area**: Multiclass
 **Tracker State**: Active
-**Last Updated**: 2026-04-20
+**Last Updated**: 2026-04-21
 **Technical Plan**: [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
 
 ## Purpose
@@ -25,27 +25,27 @@ Use this when it has been days/weeks since last test session.
 4. Pick one known-good sanity test (`C-01` or `P-01`) and confirm expected output still matches prior behavior.
 5. Start full testing only after the sanity pass is stable.
 
-## Current Execution Order (2026-04-20)
+## Current Execution Order (2026-04-21)
 
 Use this sequence if the goal is to knock out the remaining multiclass backlog in one focused session.
 
-1. **AA parity first**
-   - Implement/verify `zone/aa.cpp`.
-   - Run `A-01`, `A-02`, `A-03`, `A-04`.
-2. **Caster UI + skill exposure next**
-   - Verify mana bar/secondary-caster presentation and skill-window visibility.
-   - Run `C-03` and `K-05`.
-3. **Class-removal spell cleanup**
-   - Verify removed-class spells stay scribed but invalid gems are cleared immediately.
-   - Run `E-01`.
-4. **Item/equip rules after AA is stable**
-   - Verify existing `zone/inventory.cpp` and related item-class gating before patching any edge cases.
-   - Run `I-01`, `I-02`, `I-03`, `I-04`, `I-05`, `I-06`.
-5. **World/presentation parity last**
-   - Verify `/who`, titles, and guild/class projection.
-   - Run `B-08`, `G-01`, and any `/who` spot checks.
-6. **Finish with multiclass regression**
-   - Run `#test smoke`, then re-check `C-06`, `S-06`, and any cases touched by code changes.
+1. **Fresh build and baseline sanity**
+   - Build `zone`; build `world` and the DLL before presentation checks.
+   - Run `#test smoke`, `#test combat`, and the DLL probe suite `#test 16-20`.
+2. **Recently closed gameplay gaps**
+   - Validate item, augment, XP-cap, and inventory-label changes first.
+   - Run `I-01` to `I-07`, `X-04`, and `D-04`.
+3. **AA validation and policy**
+   - Verify live AA window, purchase, activation, passive ownership, and special AA gates.
+   - Run `A-01` to `A-05`, then record current behavior for `E-02`.
+4. **Caster, spell, skill, and discipline checks**
+   - Verify secondary-caster UI, spell soft-lock cleanup, skills window exposure, and discipline timers.
+   - Run `C-03`, `E-01`, `K-01` to `K-05`, and `S-01` to `S-07`.
+5. **World/presentation parity**
+   - Verify character select, `/who`, `#mystats`, titles, and guild/class projection.
+   - Run `D-01`, `D-02`, `D-03`, `B-08`, and `G-01`.
+6. **Finish with tracker sync**
+   - Re-run any failed category after fixes, then update statuses only where there is objective in-game or log evidence.
 
 ## End-To-End Workflow
 
@@ -140,29 +140,30 @@ Legend:
 - `Partial`: `#test` validates invariants/preconditions, but in-game behavior still needs manual play.
 - `Manual`: Not meaningfully covered by current `#test` harness.
 
-### Auto (2/39)
+### Auto (2/51)
 
 | Tracker ID | Coverage | `#test` IDs | Notes |
 |---|---|---|---|
 | `C-06` | Auto | `5, 8` | Validates `GestaltClasses`/`PlayerProfile.classes` hydration consistency on live character state. |
-| `S-06` | Auto | `9, 10` | Validates multiclass spell timer and target transforms are active in loaded spell data. |
+| `S-06` | Auto | `9, 10` | Validates multiclass spell target transforms are active in loaded spell data. |
 
-### Partial (8/39)
+### Partial (9/51)
 
 | Tracker ID | Coverage | `#test` IDs | Notes |
 |---|---|---|---|
 | `C-01` | Partial | `3, 4` | Confirms class bit integrity and max-class enforcement; does not execute add/remove flow by itself. |
 | `C-02` | Partial | `5, 8` | Confirms persistence state is internally consistent after login/zone; relog flow is still manual. |
 | `S-05` | Partial | `10` | Confirms spell target transform; actual group propagation cast remains manual. |
-| `A-04` | Partial | `12, 15` | Covers Mnemonic Retention override and Fury rank 6+ pure-caster gate policy check. |
+| `A-04` | Partial | `12` | Covers the Mnemonic Retention multiclass override precheck; live AA window behavior remains manual. |
+| `A-05` | Partial | `15` | Covers the Fury of Magic pure-caster gate precheck; live AA progression and window behavior remain manual. |
 | `P-11` | Partial | `14` | Confirms pet bag rule + DB + merchant wiring; live summon/sync behavior remains manual. |
 | `P-13` | Partial | `6` | Confirms `HasClass` parity with bitmask; combat gate behavior remains manual. |
 | `B-08` | Partial | `6` | Confirms class ownership API consistency; title unlock UI/eligibility remains manual. |
 | `G-01` | Partial | `11` | Validates guild query projection shape plus live class-mutation/level-update refreshes and forced guild-members-list reloads; roster presentation validation remains manual. |
 
-### Manual (29/39)
+### Manual (40/51)
 
-`C-03, C-04, C-05, S-01, S-02, S-03, S-04, P-01, P-02, P-03, P-04, P-12, K-01, K-02, K-03, K-04, I-01, I-02, I-03, I-04, I-05, X-01, X-02, X-03, A-01, A-02, A-03, B-04, B-05`
+`C-03, C-04, C-05, S-01, S-02, S-03, S-04, S-07, P-01, P-02, P-03, P-04, P-12, K-01, K-02, K-03, K-04, K-05, I-01, I-02, I-03, I-04, I-05, I-06, I-07, X-01, X-02, X-03, X-04, A-01, A-02, A-03, B-04, B-05, D-01, D-02, D-03, D-04, E-01, E-02`
 
 ### Fast Automation Commands
 
@@ -184,7 +185,7 @@ Legend:
 3. New guild projection join/query shape (`character_data` + `guild_members` + `data_buckets.GestaltClasses`) executes successfully.
 - Notes:
 1. This snapshot validates server health and multiclass plumbing, not player-input combat execution.
-2. `#test` now covers server-side assertions for `C-06` and `S-06`, and partial prechecks for `A-04` and `P-11`; manual in-game behavior validation is still required.
+2. `#test` now covers server-side assertions for `C-06` and `S-06`, and partial prechecks for `A-04`, `A-05`, and `P-11`; split manual validation is still required for discipline timer behavior (`S-07`) and live AA window behavior.
 
 ---
 
@@ -234,13 +235,13 @@ Tooling/Server Manager UI validation was moved to:
 
 ### [C-03] Client Sync (Mana Bar)
 
-**Goal**: Verify multiclass client state sync.
+**Goal**: Verify the client-facing mana bar becomes visible and stays visible for a newly owned caster class.
 **Steps**:
 
 1. Base Warrior.
 2. `#addclass 12`
 3. Check Player Window immediately and after relog.
-**Expected**: Mana bar is visible and behaves correctly.
+**Expected**: The mana bar becomes visible immediately after adding the caster class and is still visible after relog. This case validates user-facing mana UI only; callback/value parity is covered separately by tooling.
 **Status**: [x] Pass  [ ] Fail
 **Notes**: ______________________________
 
@@ -683,37 +684,63 @@ Bazaar waypoint/map/quest API smoke tests moved to:
 
 ### [C-06] Zone-Load GestaltClasses Hydration
 
-**Goal**: Verify `PlayerProfile.classes` is loaded from `data_buckets.GestaltClasses` on zone entry.
+**Goal**: Verify login and first-zone hydration rebuild runtime class state from persisted `GestaltClasses` without requiring a new class mutation.
 **Steps**:
 
 1. Log out with a multi-class character.
 2. Log back in and run `#multiclassdiag` immediately after entering world.
 3. Zone once and run `#multiclassdiag` again.
-**Expected**: Class bitmask is correct immediately at login and remains stable after zoning.
+4. Do not add or remove any class bits during this test.
+**Expected**: Runtime and profile class state are already correct immediately at login, and remain unchanged after the first zone hop. This case validates hydration, not long-term persistence after editing class ownership.
 **Status**: [ ] Pass  [ ] Fail
 **Notes**: ______________________________
 
-### [S-06] Multiclass Spell Timer/Target Transform
+### [S-06] Multiclass Spell Target Transform
 
-**Goal**: Verify multiclass spell-load transforms in `shareddb` are active.
+**Goal**: Verify multiclass spell-load target transforms in `shareddb` are active.
 **Steps**:
 
-1. Cast a spell with `ST_GroupClientAndPet` target behavior from a multiclass character and validate targeting behavior.
-2. Use two disciplines from different owned classes that normally share timer families.
-3. Re-use each discipline and observe lockout behavior.
-**Expected**: Group+pet target transforms to direct target under multiclass rules; discipline timers are deconflicted by class.
+1. Cast a spell with `ST_GroupClientAndPet` target behavior from a multiclass character.
+2. Observe the resulting targeting behavior on the valid target set.
+3. Repeat once after a relog or fresh zone load.
+**Expected**: Group+pet target behavior transforms to the intended multiclass target behavior consistently on live cast. This case validates spell target transform only.
 **Status**: [ ] Pass  [ ] Fail
 **Notes**: ______________________________
 
-### [A-04] AA Multiclass Special Gates (Mnemonic/Fury)
+### [S-07] Discipline Timer Family Deconfliction
 
-**Goal**: Verify THJ-style AA special handling in multiclass mode.
+**Goal**: Verify disciplines from different owned classes do not incorrectly share lockout timers.
 **Steps**:
 
-1. On a multiclass character, check visibility/usability of Mnemonic Retention.
-2. On a non-pure caster multiclass, attempt Fury of Magic rank 6+ progression.
-3. Repeat Fury of Magic rank 6+ on a pure caster multiclass.
-**Expected**: Mnemonic Retention is allowed; Fury rank 6+ is blocked for non-pure casters and allowed for pure casters.
+1. Use two disciplines from different owned classes that would conflict under legacy single-class timer handling.
+2. Activate the first discipline.
+3. Attempt to activate the second discipline on the same character.
+4. Re-use each discipline after its own recast window.
+**Expected**: Each discipline respects its intended multiclass timer handling, and one discipline does not incorrectly lock out the other.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [A-04] Mnemonic Retention Multiclass Override
+
+**Goal**: Verify Mnemonic Retention remains available/usable under the multiclass-specific AA override.
+**Steps**:
+
+1. Use a multiclass character that should qualify for Mnemonic Retention under the intended rules.
+2. Open the AA window and locate Mnemonic Retention.
+3. Purchase or validate usability if not already owned.
+**Expected**: Mnemonic Retention follows the intended multiclass override policy and is not hidden or blocked by legacy class-only gating.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
+### [A-05] Fury of Magic Pure-Caster Gate
+
+**Goal**: Verify Fury of Magic rank 6+ follows the intended pure-caster multiclass gate.
+**Steps**:
+
+1. On a non-pure-caster multiclass, attempt Fury of Magic rank 6+ progression.
+2. Record whether purchase/visibility is blocked.
+3. Repeat the same progression on a pure-caster multiclass.
+**Expected**: Fury rank 6+ is blocked for non-pure casters and allowed for pure casters.
 **Status**: [ ] Pass  [ ] Fail
 **Notes**: ______________________________
 
@@ -743,13 +770,14 @@ Bazaar waypoint/map/quest API smoke tests moved to:
 
 ### [G-01] Guild Member Multiclass Projection
 
-**Goal**: Verify guild roster payload includes `GestaltClasses` projection behavior.
+**Goal**: Verify guild roster presentation uses the multiclass projection after a roster refresh event.
 **Steps**:
 
 1. Put a known multiclass character in a guild.
-2. Open guild member list (or inspect guild roster API output).
-3. Compare class/level presentation to expected multiclass representation.
-**Expected**: Guild member info reflects multiclass projection from `data_buckets.GestaltClasses`.
+2. Trigger a guild-roster refresh path (fresh login, level update, or class mutation).
+3. Open guild member list (or inspect guild roster API output).
+4. Compare class/level presentation to expected multiclass representation.
+**Expected**: Guild member info reflects the multiclass projection after refresh and does not fall back to stale single-class presentation.
 **Status**: [ ] Pass  [ ] Fail
 **Notes**: ______________________________
 
@@ -804,6 +832,19 @@ Bazaar waypoint/map/quest API smoke tests moved to:
 **Expected**: Diagnostic output includes accurate multiclass ownership information.
 **Status**: [ ] Pass  [ ] Fail
 **Notes**: ______________________________
+
+### [D-04] Inventory Window Multiclass Display
+
+**Goal**: Verify the inventory window shows multiclass labels instead of the single compatibility/base class.
+**Steps**:
+
+1. Log in with a known multiclass character.
+2. Open the inventory window.
+3. Observe the class text shown in the inventory UI, including the abbreviated class label if the active XML exposes it.
+4. Add or remove a class, then reopen or refresh the inventory window.
+**Expected**: Inventory class labels reflect the current multiclass presentation policy and update from the owned multiclass mask rather than leaking the legacy compatibility/base class.
+**Status**: [ ] Pass  [ ] Fail
+**Notes**: DLL path now rewrites `IW_Class` / `IW_ClassAbbr`; validate against both default and THJ inventory XML when available. ______________________________
 
 ### [E-01] Class Removal Unmemorizes Invalid Spells
 

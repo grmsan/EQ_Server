@@ -2771,6 +2771,91 @@ static void BuildMulticlassAbbrevList(uint16_t mask, char* out, size_t out_size)
 	}
 }
 
+static uint8_t GetLocalDisplayedClassId()
+{
+	PCHARINFO2 ci2 = nullptr;
+	__try {
+		ci2 = GetCharInfo2();
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		ci2 = nullptr;
+	}
+
+	if (ci2 && ci2->Class >= 1 && ci2->Class <= 16) {
+		return static_cast<uint8_t>(ci2->Class);
+	}
+
+	if (pLocalPlayer && pLocalPlayer->Data.Class >= 1 && pLocalPlayer->Data.Class <= 16) {
+		return static_cast<uint8_t>(pLocalPlayer->Data.Class);
+	}
+
+	return 0;
+}
+
+static void SetWindowTextIfChanged(CXWnd* wnd, const char* text)
+{
+	if (!wnd || !text) {
+		return;
+	}
+
+	CXStr current = wnd->GetWindowTextA();
+	char current_text[MAX_STRING] = { 0 };
+	if (current.Ptr && GetCXStr(current.Ptr, current_text, MAX_STRING) && strcmp(current_text, text) == 0) {
+		return;
+	}
+
+	CXStr desired(text);
+	wnd->SetWindowTextA(desired);
+}
+
+void UpdateInventoryMulticlassLabels()
+{
+	if (!isMulticlassClassNameOverrideEnabled || !ppInventoryWnd || !pInventoryWnd) {
+		return;
+	}
+
+	auto* inventory_wnd = reinterpret_cast<CXWnd*>(pInventoryWnd);
+	if (!inventory_wnd || !inventory_wnd->IsReallyVisible()) {
+		return;
+	}
+
+	const uint16_t mask = static_cast<uint16_t>(GetEffectiveUsableClassesMask() & 0xFFFFu);
+	if (mask == 0) {
+		return;
+	}
+
+	char class_text[64] = { 0 };
+	char class_abbr[64] = { 0 };
+	char inventory_abbr[64] = { 0 };
+	const int class_count = CountBits16(mask);
+
+	if (class_count > 1) {
+		BuildMulticlassAbbrevList(mask, class_abbr, sizeof(class_abbr));
+		memcpy(class_text, class_abbr, sizeof(class_text) - 1);
+	} else {
+		const uint8_t class_id = GetLocalDisplayedClassId();
+		if (!class_id || class_id > 16) {
+			return;
+		}
+
+		BuildMulticlassAbbrevList(static_cast<uint16_t>(1u << (class_id - 1)), class_abbr, sizeof(class_abbr));
+		memcpy(class_text, class_abbr, sizeof(class_text) - 1);
+		memcpy(inventory_abbr, class_abbr, sizeof(inventory_abbr) - 1);
+	}
+
+	if (class_text[0]) {
+		SetWindowTextIfChanged(inventory_wnd->GetChildItem("IW_Class"), class_text);
+	}
+
+	SetWindowTextIfChanged(inventory_wnd->GetChildItem("IW_ClassAbbr"), inventory_abbr);
+
+	static uint16_t s_last_logged_inventory_mask = 0;
+	if (isDebugLoggingEnabled && s_last_logged_inventory_mask != mask) {
+		s_last_logged_inventory_mask = mask;
+		LogDebug("CLIENT_UI inventory class labels updated mask=0x%04X text='%s' abbr='%s'", (unsigned)mask, class_text, inventory_abbr);
+	}
+}
+
 static bool IsReasonableClassBitmask(uint32_t mask32, uint8_t base_class_id = 0)
 {
 	if ((mask32 & 0xFFFF0000u) != 0) {

@@ -35,13 +35,14 @@ int Mob::GetBaseSkillDamage(EQ::skills::SkillType skill, Mob *target)
 {
 	int base = EQ::skills::GetBaseDamage(skill);
 	auto skill_level = GetSkill(skill);
+	const bool is_client_or_client_pet = IsClient() || (IsPetOwnerClient() && IsNPC());
 	switch (skill) {
 		case EQ::skills::SkillDragonPunch:
 		case EQ::skills::SkillEagleStrike:
 		case EQ::skills::SkillTigerClaw:
-			if (IsClient()) {
+			if (is_client_or_client_pet) {
 				// Weapon Scaling for Monk Special Attacks
-				auto primary = CastToClient()->GetInv().GetItem(EQ::invslot::slotPrimary);
+				auto primary = GetInv().GetItem(EQ::invslot::slotPrimary);
 				if (primary && primary->GetItem()) {
 					base = primary->GetItem()->Damage;
 				} else {
@@ -64,12 +65,12 @@ int Mob::GetBaseSkillDamage(EQ::skills::SkillType skill, Mob *target)
 
 			return base;
 		case EQ::skills::SkillFrenzy:
-			if (IsClient()) {
+			if (is_client_or_client_pet) {
 				// Option A: Weapon Scaling for Solo/High-Power Server
 				// If we have a weapon, use its damage as the base.
 				// This allows Frenzy to scale with the Damage Table (~3x) and Crits (~2x) naturally.
 				// A 150 DMG weapon -> 150 Base -> ~450 Hit -> ~900 Crit -> ~1800 Crippling Blow.
-				auto primary = CastToClient()->GetInv().GetItem(EQ::invslot::slotPrimary);
+				auto primary = GetInv().GetItem(EQ::invslot::slotPrimary);
 				if (primary && primary->GetItem()) {
 					// Use the weapon's damage logic (handles banes, magic, etc if we used the full function,
 					// but here we just want the raw base for the skill calc)
@@ -100,9 +101,9 @@ int Mob::GetBaseSkillDamage(EQ::skills::SkillType skill, Mob *target)
 			// Modified to scale with Weapon or H2H damage
 			float skill_bonus = skill_level / 9.0f; // Existing bonus
 
-			if (IsClient()) {
+			if (is_client_or_client_pet) {
 				// Check for weapon (Monks/Beastlords can use 1H/2H blunt/staff)
-				auto primary = CastToClient()->GetInv().GetItem(EQ::invslot::slotPrimary);
+				auto primary = GetInv().GetItem(EQ::invslot::slotPrimary);
 				if (primary && primary->GetItem()) {
 					base = primary->GetItem()->Damage;
 				} else {
@@ -114,7 +115,7 @@ int Mob::GetBaseSkillDamage(EQ::skills::SkillType skill, Mob *target)
 				base += (int)skill_bonus;
 
 				// Add Boot AC bonus (Original Logic)
-				auto inst = CastToClient()->GetInv().GetItem(EQ::invslot::slotFeet);
+				auto inst = GetInv().GetItem(EQ::invslot::slotFeet);
 				if (inst) {
 					base += (int)(inst->GetItemArmorClass(true) / 25.0f);
 				}
@@ -137,9 +138,9 @@ int Mob::GetBaseSkillDamage(EQ::skills::SkillType skill, Mob *target)
 		case EQ::skills::SkillKick:
 		case EQ::skills::SkillRoundKick: {
 			// Modified to scale with Weapon/Boots
-			if (IsClient()) {
+			if (is_client_or_client_pet) {
 				// Weapon Scaling
-				auto primary = CastToClient()->GetInv().GetItem(EQ::invslot::slotPrimary);
+				auto primary = GetInv().GetItem(EQ::invslot::slotPrimary);
 				if (primary && primary->GetItem()) {
 					base = primary->GetItem()->Damage;
 				} else {
@@ -147,7 +148,7 @@ int Mob::GetBaseSkillDamage(EQ::skills::SkillType skill, Mob *target)
 				}
 
 				// Boot AC Bonus
-				auto inst = CastToClient()->GetInv().GetItem(EQ::invslot::slotFeet);
+				auto inst = GetInv().GetItem(EQ::invslot::slotFeet);
 				if (inst) {
 					base += (int)(inst->GetItemArmorClass(true) / 10.0f);
 				}
@@ -177,19 +178,19 @@ int Mob::GetBaseSkillDamage(EQ::skills::SkillType skill, Mob *target)
 			const EQ::ItemInstance *inst       = nullptr;
 			int                    weapon_dmg  = 0;
 
-			if (IsClient()) {
+			if (is_client_or_client_pet) {
 				if (HasShieldEquipped()) {
-					inst = CastToClient()->GetInv().GetItem(EQ::invslot::slotSecondary);
+					inst = GetInv().GetItem(EQ::invslot::slotSecondary);
 				} else if (HasTwoHanderEquipped()) {
 					// 2H Bash: Use Weapon Damage instead of AC
-					auto weapon = CastToClient()->GetInv().GetItem(EQ::invslot::slotPrimary);
+					auto weapon = GetInv().GetItem(EQ::invslot::slotPrimary);
 					if (weapon && weapon->GetItem()) {
 						weapon_dmg = weapon->GetItem()->Damage;
 					}
 
 					// Fallback to shoulder AC if configured (Original Logic preserved but secondary)
 					if (RuleB(Combat, BashTwoHanderUseShoulderAC)) {
-						inst = CastToClient()->GetInv().GetItem(EQ::invslot::slotShoulders);
+						inst = GetInv().GetItem(EQ::invslot::slotShoulders);
 					}
 				}
 			}
@@ -220,8 +221,8 @@ int Mob::GetBaseSkillDamage(EQ::skills::SkillType skill, Mob *target)
 			float skill_bonus = static_cast<float>(skill_level) * 0.02f;
 			base              = 3; // There seems to be a base 3 for NPCs or some how BS w/o weapon?
 			// until we get a better inv system for NPCs they get nerfed!
-			if (IsClient()) {
-				auto *inst = CastToClient()->GetInv().GetItem(EQ::invslot::slotPrimary);
+			if (is_client_or_client_pet) {
+				auto *inst = GetInv().GetItem(EQ::invslot::slotPrimary);
 				if (inst && inst->GetItem() && inst->GetItem()->ItemType == EQ::item::ItemType1HPiercing) {
 					base = inst->GetItemBackstabDamage(true);
 					if (!inst->GetItemBackstabDamage()) {
@@ -572,7 +573,7 @@ void Client::OPCombatAbility(const CombatAbility_Struct *ca_atk, bool is_riposte
 	// Multiclass: Check HasClass() for all kick-capable classes
 	const uint32 allowed_kick_classes = RuleI(Combat, ExtraAllowedKickClassesBitmask);
 
-	const bool can_use_kick = RuleB(Custom, MulticlassingEnabled) 
+	const bool can_use_kick = RuleB(Custom, MulticlassingEnabled)
 		? (
 			HasClass(Class::Warrior) ||
 			HasClass(Class::Ranger) ||
@@ -1996,15 +1997,34 @@ void NPC::DoClassAttacks(Mob *target) {
 	if (
 		IsTaunting() &&
 		HasOwner() &&
+		target &&
 		target->IsNPC() &&
-		target->GetBodyType() != BodyType::Undead &&
 		taunt_time &&
 		type_of_pet &&
 		type_of_pet != PetType::TargetLock &&
 		DistanceSquared(GetPosition(), target->GetPosition()) <= (RuleI(Pets, PetTauntRange) * RuleI(Pets, PetTauntRange))
 	) {
-		GetOwner()->MessageString(Chat::PetResponse, PET_TAUNTING);
-		Taunt(target->CastToNPC(), false);
+		if (GetOwner() && GetOwner()->IsClient()) {
+			GetOwner()->MessageString(Chat::PetResponse, PET_TAUNTING);
+		}
+
+		Taunt(target->CastToNPC(), true);
+		target->AddToHateList(this, 250, 250);
+
+		for (const auto& ent : entity_list.GetNPCList()) {
+			auto mob = ent.second;
+			if (
+				mob &&
+				mob->IsOnHatelist(GetOwner()) &&
+				mob->GetTarget() &&
+				mob->GetTarget()->GetID() == GetOwner()->GetID() &&
+				DistanceSquared(GetPosition(), mob->GetPosition()) <=
+					(RuleI(Pets, PetTauntRange) * RuleI(Pets, PetTauntRange))
+			) {
+				Taunt(mob, true);
+				mob->AddToHateList(this, 250, 250);
+			}
+		}
 	}
 
 	if(!ca_time) {

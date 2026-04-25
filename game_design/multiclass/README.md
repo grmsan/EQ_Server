@@ -34,8 +34,8 @@ The multiclass system allows a single character to simultaneously hold multiple 
 ## How It Works
 
 ### Class Storage
-- **Primary class:** `character_data.class` (unchanged, base class ID)
-- **All classes:** `data_buckets.GestaltClasses` (16-bit bitmask)
+- **Compatibility class:** `character_data.class` (single owned class used for stock packet compatibility)
+- **All owned classes:** `data_buckets.GestaltClasses` (16-bit bitmask)
 
 ### Bitmask Format
 ```
@@ -107,17 +107,21 @@ See [TEST_TRACKER.md](TEST_TRACKER.md) for current bugs and test results.
 - GM commands (#addclass, #removeclass, #multiclassdiag)
 - EdgeStatLabel integration
 - DLL detours for equipment and spell filters
-- Spell merchant "Show usable items" filter (FIXED 2026-01-31)
-- Spell tooltips show correct class levels (FIXED 2026-01-31)
+- Spell merchant "Show usable items" filter
+- Spell tooltips show correct class levels
+- AA purchase, activation, window table, dynamic timers, and passive ownership gating
+- Skills/training server paths and DLL skill-window exposure path
+- Equip, click, merchant item filtering, and class-restricted augment gating
+- Character select, `/who`, guild projection, `#mystats`, and inventory class-label presentation paths
 
 **In Progress:**
-- AA window completeness
-- Skills window visibility
+- Runtime validation for the implemented paths above; see [TEST_TRACKER.md](TEST_TRACKER.md)
+- Final removed-class AA entitlement policy (`E-02`)
+- Optional design research for removing AA level requirements
 
 **Known Issues:**
-- Spell vendor shows base-class labels for aggregated spells
-- Some AAs missing from window
-- Skills for added classes sometimes hidden
+- Most remaining multiclass work is validation-first, not broad THJ porting.
+- Any failed validation case should become a focused code/data task with evidence in the tracker.
 
 ---
 

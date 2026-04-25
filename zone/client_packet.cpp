@@ -1897,13 +1897,10 @@ SendServerStatsUpdate();
 					pet->CalcBonuses();
 					pet->SetHP(pet_info.HP);
 					pet->SetMana(pet_info.Mana);
-
-					// Taunt persists when zoning on newer clients, overwrite default.
-					if ((m_ClientVersionBit & EQ::versions::maskUFAndLater) && !ingame) {
-						pet->SetTaunting(pet_info.taunting);
-					}
+					pet->ConfigureInitialCommands();
 
 					DoPetBagResync(pet->GetPetOriginClass());
+					ConfigurePetWindow(pet);
 				}
 
 				pet_info.SpellID = 0;
@@ -1914,6 +1911,12 @@ SendServerStatsUpdate();
 	if (GetPet(0)) {
 		focused_pet_id = petids[0];
 		ConfigurePetWindow(GetPet(0));
+	}
+
+	for (int i = 0; i < BUFF_COUNT; ++i) {
+		if (IsValidSpell(m_pp.buffs[i].spellid) && IsEffectInSpell(m_pp.buffs[i].spellid, SpellEffect::Familiar)) {
+			MakeFamiliar(m_pp.buffs[i].spellid);
+		}
 	}
 	/* Moved here so it's after where we load the pet data. */
 	if (!aabonuses.ZoneSuspendMinion && !spellbonuses.ZoneSuspendMinion && !itembonuses.ZoneSuspendMinion) {
@@ -11313,6 +11316,11 @@ void Client::Handle_OP_PetCommands(const EQApplicationPacket *app)
 	}
 
 	uint32 PetCommand = pet->command;
+	auto persist_pet_command = [&](uint8 command_id, bool state) {
+		if (mypet && mypet->IsNPC()) {
+			SetSavedPetCommand(mypet->CastToNPC()->GetPetOriginClass(), command_id, state);
+		}
+	};
 
 	// Handle Sit/Stand toggle in UF and later.
 	/*
@@ -11536,11 +11544,13 @@ void Client::Handle_OP_PetCommands(const EQApplicationPacket *app)
 			{
 				MessageString(Chat::PetResponse, PET_NO_TAUNT);
 				mypet->CastToNPC()->SetTaunting(false);
+				persist_pet_command(PET_TAUNT, false);
 			}
 			else
 			{
 				MessageString(Chat::PetResponse, PET_DO_TAUNT);
 				mypet->CastToNPC()->SetTaunting(true);
+				persist_pet_command(PET_TAUNT, true);
 			}
 		}
 		break;
@@ -11549,6 +11559,7 @@ void Client::Handle_OP_PetCommands(const EQApplicationPacket *app)
 		if ((mypet->GetPetType() == petAnimation && aabonuses.PetCommands[PetCommand]) || mypet->GetPetType() != petAnimation) {
 			MessageString(Chat::PetResponse, PET_DO_TAUNT);
 			mypet->CastToNPC()->SetTaunting(true);
+			persist_pet_command(PET_TAUNT, true);
 		}
 		break;
 	}
@@ -11556,6 +11567,7 @@ void Client::Handle_OP_PetCommands(const EQApplicationPacket *app)
 		if ((mypet->GetPetType() == petAnimation && aabonuses.PetCommands[PetCommand]) || mypet->GetPetType() != petAnimation) {
 			MessageString(Chat::PetResponse, PET_NO_TAUNT);
 			mypet->CastToNPC()->SetTaunting(false);
+			persist_pet_command(PET_TAUNT, false);
 		}
 		break;
 	}
@@ -11650,6 +11662,8 @@ void Client::Handle_OP_PetCommands(const EQApplicationPacket *app)
 				mypet->SetHeld(true);
 			}
 			mypet->SetGHeld(false);
+			persist_pet_command(PET_HOLD, mypet->IsHeld());
+			persist_pet_command(PET_GHOLD, false);
 			SetPetCommandState(PET_BUTTON_GHOLD, 0);
 		}
 		break;
@@ -11665,6 +11679,8 @@ void Client::Handle_OP_PetCommands(const EQApplicationPacket *app)
 				mypet->SayString(this, Chat::PetResponse, PET_ON_HOLD);
 			mypet->SetHeld(true);
 			mypet->SetGHeld(false);
+			persist_pet_command(PET_HOLD, true);
+			persist_pet_command(PET_GHOLD, false);
 			SetPetCommandState(PET_BUTTON_GHOLD, 0);
 		}
 		break;
@@ -11674,6 +11690,7 @@ void Client::Handle_OP_PetCommands(const EQApplicationPacket *app)
 			if (m_ClientVersionBit & EQ::versions::maskSoDAndLater)
 				MessageString(Chat::PetResponse, PET_HOLD_SET_OFF);
 			mypet->SetHeld(false);
+			persist_pet_command(PET_HOLD, false);
 		}
 		break;
 	}
@@ -11696,6 +11713,8 @@ void Client::Handle_OP_PetCommands(const EQApplicationPacket *app)
 				mypet->SetGHeld(true);
 			}
 			mypet->SetHeld(false);
+			persist_pet_command(PET_GHOLD, mypet->IsGHeld());
+			persist_pet_command(PET_HOLD, false);
 			SetPetCommandState(PET_BUTTON_HOLD, 0);
 		}
 		break;
@@ -11710,6 +11729,8 @@ void Client::Handle_OP_PetCommands(const EQApplicationPacket *app)
 			}
 			mypet->SetGHeld(true);
 			mypet->SetHeld(false);
+			persist_pet_command(PET_GHOLD, true);
+			persist_pet_command(PET_HOLD, false);
 			SetPetCommandState(PET_BUTTON_HOLD, 0);
 		}
 		break;
@@ -11719,6 +11740,7 @@ void Client::Handle_OP_PetCommands(const EQApplicationPacket *app)
 			if (m_ClientVersionBit & EQ::versions::maskUFAndLater)
 				MessageString(Chat::PetResponse, PET_OFF_GHOLD);
 			mypet->SetGHeld(false);
+			persist_pet_command(PET_GHOLD, false);
 		}
 		break;
 	}
@@ -11738,6 +11760,7 @@ void Client::Handle_OP_PetCommands(const EQApplicationPacket *app)
 					MessageString(Chat::PetResponse, PET_SPELLHOLD_SET_ON);
 				mypet->SetNoCast(true);
 			}
+			persist_pet_command(PET_SPELLHOLD, mypet->IsNoCast());
 		}
 		break;
 	}
@@ -11750,6 +11773,7 @@ void Client::Handle_OP_PetCommands(const EQApplicationPacket *app)
 				if (m_ClientVersionBit & EQ::versions::maskSoDAndLater)
 					MessageString(Chat::PetResponse, PET_SPELLHOLD_SET_ON);
 				mypet->SetNoCast(true);
+				persist_pet_command(PET_SPELLHOLD, true);
 			}
 		}
 		break;
@@ -11763,6 +11787,7 @@ void Client::Handle_OP_PetCommands(const EQApplicationPacket *app)
 				if (m_ClientVersionBit & EQ::versions::maskSoDAndLater)
 					MessageString(Chat::PetResponse, PET_SPELLHOLD_SET_OFF);
 				mypet->SetNoCast(false);
+				persist_pet_command(PET_SPELLHOLD, false);
 			}
 		}
 		break;
@@ -11783,6 +11808,7 @@ void Client::Handle_OP_PetCommands(const EQApplicationPacket *app)
 					MessageString(Chat::PetResponse, PET_FOCUS_SET_ON);
 				mypet->SetFocused(true);
 			}
+			persist_pet_command(PET_FOCUS, mypet->IsFocused());
 		}
 		break;
 	}
@@ -11795,6 +11821,7 @@ void Client::Handle_OP_PetCommands(const EQApplicationPacket *app)
 				if (m_ClientVersionBit & EQ::versions::maskSoDAndLater)
 					MessageString(Chat::PetResponse, PET_FOCUS_SET_ON);
 				mypet->SetFocused(true);
+				persist_pet_command(PET_FOCUS, true);
 			}
 		}
 		break;
@@ -11808,7 +11835,26 @@ void Client::Handle_OP_PetCommands(const EQApplicationPacket *app)
 				if (m_ClientVersionBit & EQ::versions::maskSoDAndLater)
 					MessageString(Chat::PetResponse, PET_FOCUS_SET_OFF);
 				mypet->SetFocused(false);
+				persist_pet_command(PET_FOCUS, false);
 			}
+		}
+		break;
+	}
+	case CUSTOM_PET_ASSIST: {
+		if (mypet->IsNPC()) {
+			mypet->CastToNPC()->DoPetCommandAssist(!mypet->IsPetAssisting());
+		}
+		break;
+	}
+	case CUSTOM_PET_ASSIST_ON: {
+		if (mypet->IsNPC()) {
+			mypet->CastToNPC()->DoPetCommandAssist(true);
+		}
+		break;
+	}
+	case CUSTOM_PET_ASSIST_OFF: {
+		if (mypet->IsNPC()) {
+			mypet->CastToNPC()->DoPetCommandAssist(false);
 		}
 		break;
 	}

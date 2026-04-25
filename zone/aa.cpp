@@ -241,6 +241,7 @@ void Mob::TemporaryPets(uint16 spell_id, Mob *targ, const char *name_override, u
 			swarm_pet_npc->GiveNPCTypeData(npc_dup);
 
 		entity_list.AddNPC(swarm_pet_npc, true, true);
+		swarm_pet_npc->ConfigureInitialCommands();
 		summon_count--;
 	}
 
@@ -346,6 +347,7 @@ void Mob::TypesTemporaryPets(uint32 typesid, Mob *targ, const char *name_overrid
 			swarm_pet_npc->GiveNPCTypeData(npc_dup);
 
 		entity_list.AddNPC(swarm_pet_npc, true, true);
+		swarm_pet_npc->ConfigureInitialCommands();
 		summon_count--;
 	}
 
@@ -567,6 +569,7 @@ void Mob::WakeTheDead(uint16 spell_id, Corpse *corpse_to_use, Mob *tar, uint32 d
 			swarm_pet_npc->GiveNPCTypeData(npc_dup);
 
 		entity_list.AddNPC(swarm_pet_npc, true, true);
+		swarm_pet_npc->ConfigureInitialCommands();
 		summon_count--;
 	}
 

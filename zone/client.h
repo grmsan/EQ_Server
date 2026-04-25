@@ -74,6 +74,7 @@ namespace EQ
 #include "../common/guild_base.h"
 #include "../common/repositories/buyer_buy_lines_repository.h"
 #include "../common/repositories/character_evolving_items_repository.h"
+#include "../common/repositories/character_pet_command_states_repository.h"
 #include "../common/repositories/player_titlesets_repository.h"
 
 #include "bot_structs.h"
@@ -91,6 +92,7 @@ namespace EQ
 #include <memory>
 #include <deque>
 #include <ctime>
+#include <unordered_map>
 
 
 #define CLIENT_LD_TIMEOUT 30000 // length of time client stays in zone after LDing
@@ -571,6 +573,9 @@ public:
 	void ReloadExpansionProfileSetting();
 
 	void SetPetCommandState(uint8 button, uint8 state);
+	bool GetSavedPetCommand(uint8 class_id, uint8 command_id);
+	bool HasSavedPetCommand(uint8 class_id, uint8 command_id);
+	void SetSavedPetCommand(uint8 class_id, uint8 command_id, bool new_state);
 
 	bool AutoAttackEnabled() const { return auto_attack; }
 	bool AutoFireEnabled() const { return auto_fire; }
@@ -2519,6 +2524,7 @@ private:
 	uint32 bot_assistee;
 	std::vector<BotSpellSettings> m_bot_spell_settings;
 	bool _illusion_block;
+	std::unordered_map<uint8, CharacterPetCommandStatesRepository::PetCommandStates> m_pet_command_cache;
 
 	bool CanTradeFVNoDropItem();
 	void SendMobPositions();

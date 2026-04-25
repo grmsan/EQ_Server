@@ -15,6 +15,24 @@ CREATE TABLE `new_table`  (
 )",
 		.content_schema_update = false,
 	},
+	ManifestEntry{
+		.version = 2,
+		.description = "2026_04_21_character_pet_command_states_table",
+		.check = "SHOW TABLES LIKE 'character_pet_command_states'",
+		.condition = "empty",
+		.match = "",
+		.sql = R"(
+CREATE TABLE `character_pet_command_states` (
+  `character_id` int(10) NOT NULL,
+  `pet_class` tinyint(4) NOT NULL,
+  `command_id` tinyint(4) NOT NULL,
+  `command_state` tinyint(4) NOT NULL,
+  PRIMARY KEY (`character_id`,`pet_class`,`command_id`),
+  KEY `idx_char_petclass` (`character_id`,`pet_class`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+)",
+		.content_schema_update = false,
+	},
 // Used for testing
 //	ManifestEntry{
 //		.version = 9229,

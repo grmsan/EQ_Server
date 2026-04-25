@@ -26,6 +26,7 @@ GNU General Public License for more details.
 
 // External logging function from eqgame.cpp
 extern void LogDebug(const char* format, ...);
+extern void UpdateInventoryMulticlassLabels();
 
 BOOL TurnNotDone=FALSE;
 
@@ -290,6 +291,7 @@ void Heartbeat()
     PowerSlotWnd_Pulse();
     WaypointPOCWnd_Pulse();
     WaypointLuaImGuiPOC_Pulse();
+    UpdateInventoryMulticlassLabels();
     UpdateMQ2SpawnSort();
 }
 

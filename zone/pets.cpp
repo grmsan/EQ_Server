@@ -27,6 +27,7 @@
 #include "entity.h"
 #include "client.h"
 #include "mob.h"
+#include "npc.h"
 
 #include "pets.h"
 #include "zonedb.h"
@@ -40,6 +41,19 @@
 #include <stdlib.h>
 #include "../common/unix.h"
 #endif
+
+namespace {
+	uint8 GetClassForFamiliar(uint16 spell_id)
+	{
+		for (uint8 class_id = Class::Warrior; class_id <= Class::Berserker; ++class_id) {
+			if (GetSpellLevel(spell_id, class_id) != UINT8_MAX) {
+				return class_id;
+			}
+		}
+
+		return Class::None;
+	}
+}
 
 
 // need to pass in a char array of 64 chars
@@ -86,6 +100,133 @@ void Mob::MakePet(uint16 spell_id, const char* pettype, const char *petname) {
 	MakePoweredPet(spell_id, pettype, -1, petname);
 }
 
+NPC* Mob::GetFamiliar(uint16 spell_id)
+{
+	if (!IsClient() || !IsValidSpell(spell_id) || !IsEffectInSpell(spell_id, SpellEffect::Familiar)) {
+		return nullptr;
+	}
+
+	const uint8 familiar_class_id = GetClassForFamiliar(spell_id);
+	for (const auto& entry : entity_list.GetNPCList()) {
+		auto* npc = entry.second;
+		if (!npc || !npc->IsFamiliar()) {
+			continue;
+		}
+
+		const bool same_owner =
+			(npc->GetOwnerID() == GetID()) ||
+			(npc->GetSwarmInfo() && npc->GetSwarmInfo()->owner_id == GetID());
+		if (!same_owner) {
+			continue;
+		}
+
+		if (familiar_class_id != Class::None) {
+			if (GetClassForFamiliar(npc->GetPetSpellID()) == familiar_class_id) {
+				return npc;
+			}
+		} else if (npc->GetPetSpellID() == spell_id) {
+			return npc;
+		}
+	}
+
+	return nullptr;
+}
+
+bool Mob::CheckFamiliarConflict(uint16 spell_id)
+{
+	return GetFamiliar(spell_id) != nullptr;
+}
+
+void Mob::DismissFamiliar(uint16 spell_id)
+{
+	auto* familiar = GetFamiliar(spell_id);
+	if (familiar) {
+		familiar->Depop();
+	}
+}
+
+void Mob::MakeFamiliar(uint16 spell_id)
+{
+	if (!IsClient() || CheckFamiliarConflict(spell_id)) {
+		return;
+	}
+
+	PetRecord record;
+	if (!content_db.GetPoweredPetEntry(spells[spell_id].teleport_zone, 0, &record)) {
+		LogError("Unknown familiar pet spell id: [{}], check pets table", spell_id);
+		Message(Chat::Red, "Unable to find data for pet %s", spells[spell_id].teleport_zone);
+		return;
+	}
+
+	const auto* npc_type = content_db.LoadNPCTypesData(record.npc_type);
+	if (!npc_type) {
+		LogError("Unknown npc type for familiar pet spell id: [{}]", spell_id);
+		return;
+	}
+
+	static const glm::vec2 familiar_locations[MAX_SWARM_PETS] = {
+		glm::vec2(5, 5), glm::vec2(-5, 5), glm::vec2(5, -5), glm::vec2(-5, -5),
+		glm::vec2(10, 10), glm::vec2(-10, 10), glm::vec2(10, -10), glm::vec2(-10, -10),
+		glm::vec2(8, 8), glm::vec2(-8, 8), glm::vec2(8, -8), glm::vec2(-8, -8)
+	};
+
+	auto* familiar = new NPC(
+		npc_type,
+		0,
+		GetPosition() + glm::vec4(familiar_locations[0], 0.0f, 0.0f),
+		GravityBehavior::Ground
+	);
+
+	std::string familiar_name = std::string(GetCleanName()) + "`s_Familiar";
+	strn0cpy(familiar->name, familiar_name.c_str(), sizeof(familiar->name));
+	entity_list.MakeNameUnique(familiar->name);
+
+	// Familiars are not added to the owner's controllable pet list, but they still
+	// need normal ownership semantics for pet-aware systems.
+	familiar->SetOwnerID(GetID());
+	familiar->SetFollowID(GetID());
+	familiar->SetPetType(PetType::Familiar);
+	familiar->SetPetSpellID(spell_id);
+
+	if (!familiar->GetSwarmInfo()) {
+		auto* swarm_info = new SwarmPet;
+		familiar->SetSwarmInfo(swarm_info);
+		familiar->GetSwarmInfo()->duration = new Timer(INT32_MAX);
+	} else {
+		familiar->GetSwarmInfo()->duration->Start(INT32_MAX);
+	}
+
+	familiar->StartSwarmTimer(INT32_MAX);
+	familiar->GetSwarmInfo()->owner_id = GetUltimateOwner()->GetID();
+
+	familiar->SetSpecialAbility(SpecialAbility::SlowImmunity, 1);
+	familiar->SetSpecialAbility(SpecialAbility::CharmImmunity, 1);
+	familiar->SetSpecialAbility(SpecialAbility::SnareImmunity, 1);
+	familiar->SetSpecialAbility(SpecialAbility::DispellImmunity, 1);
+	familiar->SetSpecialAbility(SpecialAbility::MeleeImmunity, 1);
+	familiar->SetSpecialAbility(SpecialAbility::MagicImmunity, 1);
+	familiar->SetSpecialAbility(SpecialAbility::FleeingImmunity, 1);
+	familiar->SetSpecialAbility(SpecialAbility::MeleeImmunityExceptBane, 1);
+	familiar->SetSpecialAbility(SpecialAbility::MeleeImmunityExceptMagical, 1);
+	familiar->SetSpecialAbility(SpecialAbility::AggroImmunity, 1);
+	familiar->SetSpecialAbility(SpecialAbility::BeingAggroImmunity, 1);
+	familiar->SetSpecialAbility(SpecialAbility::CastingFromRangeImmunity, 1);
+	familiar->SetSpecialAbility(SpecialAbility::HarmFromClientImmunity, 1);
+	familiar->SetSpecialAbility(SpecialAbility::RangedAttackImmunity, 1);
+	familiar->SetSpecialAbility(SpecialAbility::ClientDamageImmunity, 1);
+	familiar->SetSpecialAbility(SpecialAbility::NPCDamageImmunity, 1);
+	familiar->SetSpecialAbility(SpecialAbility::ClientAggroImmunity, 1);
+	familiar->SetSpecialAbility(SpecialAbility::NPCAggroImmunity, 1);
+	familiar->SetSpecialAbility(SpecialAbility::MemoryFadeImmunity, 1);
+	familiar->SetSpecialAbility(SpecialAbility::OpenImmunity, 1);
+	familiar->SetSpecialAbility(SpecialAbility::AssassinateImmunity, 1);
+	familiar->SetSpecialAbility(SpecialAbility::HeadshotImmunity, 1);
+	familiar->SetSpecialAbility(SpecialAbility::BotAggroImmunity, 1);
+	familiar->SetSpecialAbility(SpecialAbility::BotDamageImmunity, 1);
+
+	entity_list.AddNPC(familiar, true, true);
+}
+
 // Split from the basic MakePet to allow backward compatiblity with existing code while also
 // making it possible for petpower to be retained without the focus item having to
 // stay equipped when the character zones. petpower of -1 means that the currently equipped petfocus
@@ -93,7 +234,8 @@ void Mob::MakePet(uint16 spell_id, const char* pettype, const char *petname) {
 void Mob::MakePoweredPet(uint16 spell_id, const char* pettype, int16 petpower,
 		const char *petname, float in_size) {
 	// Sanity and early out checking first.
-	if(HasPet() || pettype == nullptr)
+	ValidatePetList();
+	if (pettype == nullptr || petids.size() >= RuleI(Custom, AbsolutePetLimit))
 		return;
 
 	int16 act_power = 0; // The actual pet power we'll use.
@@ -294,6 +436,10 @@ void Mob::MakePoweredPet(uint16 spell_id, const char* pettype, int16 petpower,
 
 	entity_list.AddNPC(npc, true, true);
 	SetPetID(npc->GetID());
+	npc->ConfigureInitialCommands();
+	if (IsClient()) {
+		ConfigurePetWindow(npc);
+	}
 	// We need to handle PetType 5 (petHatelist), add the current target to the hatelist of the pet
 
 	if (record.petcontrol == PetType::TargetLock)

@@ -1,6 +1,7 @@
 #include "client.h"
 #include "object.h"
 #include "command.h"
+#include <charconv>
 #include <map>
 #include <string>
 #include <tuple>
@@ -173,9 +174,12 @@ int find_skill_id(const std::string& skill_name_input,
                  const std::map<std::string, int>& skill_lookup_map,
                  const std::map<int, std::string>& id_to_name_map)
 {
-    // Try to parse as integer first
-    if (Strings::IsNumber(skill_name_input)) {
-        int skill_id = std::stoi(skill_name_input);
+    // Parse numeric IDs without exceptions so malformed inputs cannot crash zone.
+    int skill_id = 0;
+    const char* begin = skill_name_input.data();
+    const char* end = begin + skill_name_input.size();
+    auto parse_result = std::from_chars(begin, end, skill_id);
+    if (parse_result.ec == std::errc() && parse_result.ptr == end) {
         if (id_to_name_map.count(skill_id)) {
             return skill_id;
         }

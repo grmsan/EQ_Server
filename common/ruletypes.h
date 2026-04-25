@@ -1281,6 +1281,7 @@ RULE_INT(Custom, ProcReflectPercentage, 50, "The percentage of damage to be deal
 RULE_BOOL(Custom, UseHasteForMeleeSkills, true, "Use haste for activated melee skills.")
 RULE_BOOL(Custom, AdditiveBackstabDamage, true, "Backstab damage functions as extra damage rather than replacing normal damage.")
 RULE_BOOL(Custom, DisablePetGroupSpells, false, "Force group spells cast by pets to resolve as self-only.")
+RULE_BOOL(Custom, TauntTogglesPetTanking, true, "Enable to let pets hold aggro while taunt is on")
 RULE_INT(Custom, PetAssistRateLimit, 1000, "Minimum time in milliseconds between pet assist commands.")
 RULE_INT(Custom, PetProcRateCap, 100, "Maximum item (weapon and aug) proc rate bonus available to pets, 0 to disable.")
 RULE_BOOL(Custom, MulticlassDebug, false, "Enable multiclass debug logging in zone/world.")

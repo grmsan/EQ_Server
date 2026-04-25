@@ -44,7 +44,7 @@ Run all tests in this document.
 
 1. Zone into `bazaar`.
 2. Click the magic map object/disc at the Bazaar hub.
-**Expected**: Waypoint list UI opens (no quest/script errors).
+**Expected**: The server-side hook fires with no quest/script errors and the waypoint list request is accepted. This test validates the Bazaar object trigger, not the detailed behavior of each waypoint UI host.
 **Status**: [ ] Pass  [ ] Fail
 **Notes**: ______________________________
 
@@ -63,7 +63,7 @@ Run all tests in this document.
 
 ### [QST-03] Waypoint Discovery Trigger
 
-**Goal**: Verify `#TPTriggerN` discovery unlock flow.
+**Goal**: Verify `#TPTriggerN` discovery unlock flow updates waypoint unlock state.
 **Legacy ID**: `B-03`
 **Setup**:
 
@@ -73,7 +73,7 @@ Run all tests in this document.
 1. Enter a zone with `#TPTriggerN` proximity trigger.
 2. Observe discovery message.
 3. Re-open map UI and confirm zone appears unlocked.
-**Expected**: First pass unlocks waypoint; repeat pass shows already-known messaging.
+**Expected**: First pass unlocks the waypoint state and repeat pass shows already-known messaging. This test validates unlock-state changes, not the rendering details of individual waypoint UI hosts.
 **Status**: [ ] Pass  [ ] Fail
 **Notes**: ______________________________
 

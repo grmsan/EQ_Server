@@ -479,26 +479,6 @@ bool Client::Process() {
 				}
 			}
 
-			if (GetTarget() && IsAttackAllowed(GetTarget())) {
-				for (auto pet : GetAllPets()) {
-					if (
-						pet &&
-						pet->IsNPC() &&
-						!pet->GetTarget() &&
-						pet->GetPetOrder() != SPO_Sit &&
-						!pet->IsHeld() &&
-						!pet->IsPetStop()
-					) {
-						pet->AddToHateList(GetTarget(), 1, 0, true, false, false, SPELL_UNKNOWN, true);
-					}
-				}
-
-				for (auto swarm_member : GetAllSwarmPets()) {
-					if (swarm_member && swarm_member->IsNPC() && !swarm_member->GetTarget()) {
-						swarm_member->AddToHateList(GetTarget(), 1, 0, true, false, false, SPELL_UNKNOWN, true);
-					}
-				}
-			}
 		}
 
 		Mob *auto_attack_target = GetTarget();
@@ -562,9 +542,13 @@ bool Client::Process() {
 
 			if (auto_attack_target && IsAttackAllowed(auto_attack_target)) {
 				for (auto pet : GetAllPets()) {
-					if (
-						pet &&
-						pet->IsNPC() &&
+					if (!pet || !pet->IsNPC()) {
+						continue;
+					}
+
+					if (pet->IsPetAssisting()) {
+						pet->CastToNPC()->DoPetCommandAssistOnTarget(auto_attack_target);
+					} else if (
 						!pet->GetTarget() &&
 						pet->GetPetOrder() != SPO_Sit &&
 						!pet->IsHeld() &&
@@ -575,7 +559,13 @@ bool Client::Process() {
 				}
 
 				for (auto swarm_member : GetAllSwarmPets()) {
-					if (swarm_member && swarm_member->IsNPC() && !swarm_member->GetTarget()) {
+					if (!swarm_member || !swarm_member->IsNPC()) {
+						continue;
+					}
+
+					if (swarm_member->IsPetAssisting()) {
+						swarm_member->CastToNPC()->DoPetCommandAssistOnTarget(auto_attack_target);
+					} else if (!swarm_member->GetTarget()) {
 						swarm_member->AddToHateList(auto_attack_target, 1, 0, true, false, false, SPELL_UNKNOWN, true);
 					}
 				}
@@ -1360,6 +1350,9 @@ void Client::OPMemorizeSpell(const EQApplicationPacket* app)
 	}
 
 	const auto* m = (MemorizeSpell_Struct*) app->pBuffer;
+	const bool is_spellbar_memorize_request =
+		m->scribing == memSpellMemorize ||
+		m->scribing == memSpellSpellbar;
 
 	// If the server rejects a memorize request without responding, RoF2 can leave the client-side
 	// "memorizing" progress bar stuck. When denying memSpellMemorize, send the current gem state
@@ -1385,7 +1378,7 @@ void Client::OPMemorizeSpell(const EQApplicationPacket* app)
 				m->spell_id
 			).c_str()
 		);
-		if (m->scribing == memSpellMemorize) {
+		if (is_spellbar_memorize_request) {
 			cancel_memorize_ui(m->slot);
 		}
 		return;
@@ -1399,7 +1392,7 @@ void Client::OPMemorizeSpell(const EQApplicationPacket* app)
 				uint8 best_req_level = 255;
 				if (!GetSpellClassRequirementForCurrentClasses(m->spell_id, best_req_level)) {
 					Message(Chat::Red, "Your classes cannot use this spell.");
-					if (m->scribing == memSpellMemorize) {
+					if (is_spellbar_memorize_request) {
 						cancel_memorize_ui(m->slot);
 					}
 					return true;
@@ -1412,7 +1405,7 @@ void Client::OPMemorizeSpell(const EQApplicationPacket* app)
 						std::to_string(best_req_level).c_str(),
 						spells[m->spell_id].name
 					);
-					if (m->scribing == memSpellMemorize) {
+					if (is_spellbar_memorize_request) {
 						cancel_memorize_ui(m->slot);
 					}
 					return true;
@@ -1469,7 +1462,9 @@ void Client::OPMemorizeSpell(const EQApplicationPacket* app)
 				std::string message = fmt::format("OP_MemorizeSpell [{}] but we don't have this spell scribed", m->spell_id);
 				RecordPlayerEventLog(PlayerEvent::POSSIBLE_HACK, PlayerEvent::PossibleHackEvent{.message = message});
 				Message(Chat::Red, "You don't have that spell scribed.");
-				cancel_memorize_ui(m->slot);
+				if (is_spellbar_memorize_request) {
+					cancel_memorize_ui(m->slot);
+				}
 			}
 			break;
 		}

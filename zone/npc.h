@@ -280,6 +280,9 @@ public:
 	void	DepopSwarmPets();
 	void	TryDepopTargetLockedPets(Mob* current_target);
 	void	PetOnSpawn(NewSpawn_Struct* ns);
+	void	ConfigureInitialCommands();
+	void	DoPetCommandAssist(bool enabled);
+	void	DoPetCommandAssistOnTarget(Mob* target);
 
 	void	SignalNPC(int _signal_id);
 	void	SendPayload(int payload_id, std::string payload_value = std::string());
@@ -740,6 +743,9 @@ protected:
 	uint16	pet_spell_id;
 	bool	taunting;
 	Timer	taunt_timer;		//for pet taunting
+	Timer	pet_assist_timer;
+	uint32	last_assist_target_id = 0;
+	uint32	last_attack_target_id = 0;
 
 	bool npc_aggro;
 

@@ -89,28 +89,28 @@ Run all entries.
 
 ### [B-01] Staged NPC Count Discovery
 
-**Goal**: Determine current backlog of staged Bazaar NPCs.
+**Goal**: Determine current backlog of staged Bazaar NPCs before any placement work begins.
 **Steps**:
 
 1. In Bazaar, run `#bazaarpull status`.
-**Expected**: Command returns staged/unplaced count.
+**Expected**: Command returns one measurable staged/unplaced count that can be recorded in session notes.
 **Status**: [ ] Pass  [ ] Fail
 **Notes**: ______________________________
 
 ### [B-02] Pull Single NPC
 
-**Goal**: Pull one staged NPC to operator for deterministic placement.
+**Goal**: Pull exactly one staged NPC into the placement workflow.
 **Steps**:
 
 1. Run `#bazaarpull`.
 2. Confirm one NPC appears near operator.
-**Expected**: Exactly one staged NPC is pulled and identified.
+**Expected**: Exactly one staged NPC is pulled and identified; no extra NPCs are pulled in the same operation.
 **Status**: [ ] Pass  [ ] Fail
 **Notes**: ______________________________
 
 ### [B-03] Persist Placement With Spawnfix
 
-**Goal**: Save target NPC location to database.
+**Goal**: Save one staged NPC placement to the database and verify persistence after refresh.
 **Steps**:
 
 1. Move targeted NPC to desired spot.
@@ -171,24 +171,25 @@ Run all entries.
 
 ### [C-01] `#bazaarpull` Usage Modes
 
-**Goal**: Validate `status`, default pull, and bounded count behavior.
+**Goal**: Validate bounded-count `#bazaarpull <n>` behavior without re-testing the single-pull workflow.
 **Steps**:
 
-1. Run `#bazaarpull status`.
-2. Run `#bazaarpull`.
-3. Run `#bazaarpull 5`.
-**Expected**: Status reports count, default pulls one, count pulls bounded batch.
+1. Record current staged count from `B-01`.
+2. Run `#bazaarpull 5`.
+3. Confirm no more than five staged NPCs are pulled.
+4. Re-run `#bazaarpull status`.
+**Expected**: Count-mode pulls a bounded batch only, and staged count decreases by the exact number of NPCs actually pulled.
 **Status**: [ ] Pass  [ ] Fail
 **Notes**: ______________________________
 
 ### [C-02] `#spawnfix` Target Validation
 
-**Goal**: Confirm `#spawnfix` updates only valid targeted NPC spawns.
+**Goal**: Confirm `#spawnfix` rejects invalid or missing targets cleanly.
 **Steps**:
 
-1. Target a valid spawned NPC and run `#spawnfix`.
-2. Try with invalid/no target to confirm safe failure messaging.
-**Expected**: Valid target updates DB; invalid target returns clear error.
+1. Clear target and run `#spawnfix`.
+2. Target an invalid/non-persistable entity and run `#spawnfix` again.
+**Expected**: Invalid target paths return clear safe-failure messaging and do not modify DB state.
 **Status**: [ ] Pass  [ ] Fail
 **Notes**: ______________________________
 

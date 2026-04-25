@@ -7377,6 +7377,7 @@ void Client::Doppelganger(uint16 spell_id, Mob *target, const char *name_overrid
 		swarm_pet_npc->GiveNPCTypeData(npc_type_copy);
 
 		entity_list.AddNPC(swarm_pet_npc);
+		swarm_pet_npc->ConfigureInitialCommands();
 		summon_count--;
 	}
 
@@ -7594,6 +7595,77 @@ void Client::OpenLFGuildWindow()
 	outapp->WriteUInt32(6);
 
 	FastQueuePacket(&outapp);
+}
+
+bool Client::GetSavedPetCommand(uint8 class_id, uint8 command_id)
+{
+	auto it = m_pet_command_cache.find(class_id);
+	if (it == m_pet_command_cache.end()) {
+		auto states = CharacterPetCommandStatesRepository::GetAllCommandStates(database, CharacterID(), class_id);
+		m_pet_command_cache[class_id] = states;
+		it = m_pet_command_cache.find(class_id);
+	}
+
+	const auto& states = it->second;
+	switch (command_id) {
+		case CUSTOM_PET_ASSIST: return states.assist;
+		case PET_HOLD: return states.hold;
+		case PET_GHOLD: return states.ghold;
+		case PET_FOCUS: return states.focus;
+		case PET_SPELLHOLD: return states.spellhold;
+		case PET_TAUNT: return states.taunt;
+		default: return false;
+	}
+}
+
+bool Client::HasSavedPetCommand(uint8 class_id, uint8 command_id)
+{
+	auto it = m_pet_command_cache.find(class_id);
+	if (it == m_pet_command_cache.end()) {
+		auto states = CharacterPetCommandStatesRepository::GetAllCommandStates(database, CharacterID(), class_id);
+		m_pet_command_cache[class_id] = states;
+		it = m_pet_command_cache.find(class_id);
+	}
+
+	const auto& states = it->second;
+	switch (command_id) {
+		case CUSTOM_PET_ASSIST: return states.has_assist;
+		case PET_HOLD: return states.has_hold;
+		case PET_GHOLD: return states.has_ghold;
+		case PET_FOCUS: return states.has_focus;
+		case PET_SPELLHOLD: return states.has_spellhold;
+		case PET_TAUNT: return states.has_taunt;
+		default: return false;
+	}
+}
+
+void Client::SetSavedPetCommand(uint8 class_id, uint8 command_id, bool new_state)
+{
+	auto it = m_pet_command_cache.find(class_id);
+	if (it == m_pet_command_cache.end()) {
+		auto states = CharacterPetCommandStatesRepository::GetAllCommandStates(database, CharacterID(), class_id);
+		m_pet_command_cache[class_id] = states;
+		it = m_pet_command_cache.find(class_id);
+	}
+
+	auto& states = it->second;
+	switch (command_id) {
+		case CUSTOM_PET_ASSIST: states.assist = new_state; states.has_assist = true; break;
+		case PET_HOLD: states.hold = new_state; states.has_hold = true; break;
+		case PET_GHOLD: states.ghold = new_state; states.has_ghold = true; break;
+		case PET_FOCUS: states.focus = new_state; states.has_focus = true; break;
+		case PET_SPELLHOLD: states.spellhold = new_state; states.has_spellhold = true; break;
+		case PET_TAUNT: states.taunt = new_state; states.has_taunt = true; break;
+		default: return;
+	}
+
+	CharacterPetCommandStatesRepository::SetCommandState(
+		database,
+		CharacterID(),
+		class_id,
+		command_id,
+		new_state ? 1 : 0
+	);
 }
 
 bool Client::IsXTarget(const Mob *m) const

@@ -1,6 +1,6 @@
 # THJServer Multiclass Port Checklist
 
-**Last Updated:** 2026-04-20
+**Last Updated:** 2026-04-21
 **Master Technical Document:** [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
 **Test Tracker:** [TEST_TRACKER.md](TEST_TRACKER.md)
 
@@ -166,23 +166,23 @@ Files that control item class restrictions.
     - seeds spell, db_str text, `aa_ability`, and `aa_ranks` entries for `Bazaar and Back`.
 
 ## Work Order (recommended)
-1. **Persistence + load path**
-   - Ensure `GestaltClasses` is written on character creation and on class add/remove, and is loaded consistently by zone/world.
-2. **Core APIs (server authoritative "what classes do I have?")**
-   - Align on one canonical "classes bitmask" getter/setter used everywhere (THJ's `GetClassesBits()` + `HasClass()` patterns).
-3. **Spells / casting / stacking**
-   - Port THJ's multiclass logic in `zone/spells.cpp` and related spell/cast codepaths.
-4. **AA visibility + timers**
-   - Port THJ's AA filtering logic and `UseDynamicAATimers` behaviors.
-5. **Items + "show usable" filtering**
-   - Port THJ's equip/use gating to union-of-classes (vendor "usable" filters, item class masks).
-6. **Skills / caps / UI exposure**
-   - Port THJ's skill limit logic (server-side caps) and ensure add/remove class flows expose skills.
-7. **Bots, misc subsystems, and docs**
-   - Sweep remaining diffs; port THJ-only files (waypoints, docs) as needed.
+The core multiclass port is now validation-first. Do not start broad file-by-file porting unless a tracker case fails or a specific THJ delta is chosen intentionally.
 
-## Key Design Notes (THJServer assumptions)
-- Primary class remains in `character_data.class`, but *gestalt membership* is persisted in `data_buckets` under `key='GestaltClasses'`.
+1. **Latest-gap validation**
+   - Build `zone`, then validate `I-01` to `I-07` and `X-04`.
+2. **Presentation validation**
+   - Build `world` and the DLL, then validate `D-01` to `D-04`, `B-08`, and `G-01`.
+3. **AA validation and policy**
+   - Validate `A-01` to `A-05`, then decide `E-02` removed-class AA entitlement behavior.
+4. **Caster, skills, and discipline validation**
+   - Validate `C-03`, `E-01`, `K-01` to `K-05`, and `S-07`.
+5. **Focused THJ diff review**
+   - Use the checklist below only for failed cases or explicit design deltas, then patch the smallest affected code path.
+6. **Automation follow-up**
+   - Convert stable manual repros into `#test` coverage where practical.
+
+## Key Design Notes (Current Assumptions)
+- `character_data.class` is a single owned compatibility class for stock packet/client paths; authoritative membership is persisted in `data_buckets` under `key='GestaltClasses'`.
 - THJServer uses `Client::GetClassesBits()` (uint32) extensively; most checks become "union-of-classes".
 - THJServer uses rules for enabling and for special handling:
   - `Custom:MulticlassingEnabled`

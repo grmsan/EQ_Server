@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-04-20 19:26:49",
+  "updated_at": "2026-04-20 22:08:05",
   "tests": {
     "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\multiclass\\test_tracker.md::P-01": {
       "status": "Pass",
@@ -60,6 +60,11 @@
       "status": "Pass",
       "notes": "",
       "updated_at": "2026-04-20 19:26:49"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\mechanics\\test_tracker.md::MECH-11": {
+      "status": "Fail",
+      "notes": "",
+      "updated_at": "2026-04-20 21:19:23"
     }
   }
 }

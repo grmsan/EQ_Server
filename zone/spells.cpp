@@ -4731,6 +4731,20 @@ bool Mob::SpellOnTarget(
 		}
 	}
 
+	if (IsClient() && IsDetrimentalSpell(spell_id) && !IsMesmerizeSpell(spell_id) && !IsHarmonySpell(spell_id) && !IsCharmSpell(spell_id) && !IsAllianceSpell(spell_id)) {
+		for (auto pet : GetAllPets()) {
+			if (pet && pet->IsNPC() && pet->IsPetAssisting()) {
+				pet->CastToNPC()->DoPetCommandAssistOnTarget(spelltar);
+			}
+		}
+
+		for (auto swarm_member : GetAllSwarmPets()) {
+			if (swarm_member && swarm_member->IsNPC() && swarm_member->IsPetAssisting()) {
+				swarm_member->CastToNPC()->DoPetCommandAssistOnTarget(spelltar);
+			}
+		}
+	}
+
 	// resist check - every spell can be resisted, beneficial or not
 	// add: ok this isn't true, eqlive's spell data is fucked up, buffs are
 	// not all unresistable, so changing this to only check certain spells

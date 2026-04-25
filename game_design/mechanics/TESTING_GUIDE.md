@@ -10,6 +10,7 @@ How to test and verify combat system changes.
 4. [Test Scenarios](#test-scenarios)
 5. [Validation Checklists](#validation-checklists)
 6. [Debugging Combat Issues](#debugging-combat-issues)
+7. [Pet Parity Runbook](#pet-parity-runbook)
 
 ---
 
@@ -100,6 +101,15 @@ VALUES (999003, 'Test_Sword_100dmg', 0, 100, 20, 0);
 | `#showstats` | Display your combat stats |
 | `#showbonuses` | Display item/spell bonuses |
 | `#peqzone <zone>` | Teleport to test zone |
+
+### Pet Test Commands
+
+| Command | Description | Example |
+|---------|-------------|---------|
+| `#summonitem <id>` | Create pet focus or weapon test items | `#summonitem 999001` |
+| `#zone <shortname>` | Force a quick zone for persistence tests | `#zone poknowledge` |
+| `#repop` | Reset local test NPCs after aggro tests | `#repop` |
+| `#rules get <category> <rule>` | Confirm pet-rule expectations | `#rules get Custom PetAssistRateLimit` |
 
 ---
 
@@ -218,6 +228,48 @@ Example output:
 2. Max flying kick: `#setskill 30 300`
 
 **Test Matrix:**
+
+---
+
+## Pet Parity Runbook
+
+Use this when validating the THJ pet parity work in-game. The authoritative checklist lives in [TEST_TRACKER.md](TEST_TRACKER.md); this section is the practical setup guide.
+
+### Preflight
+
+1. Build `zone` after code changes: `cmake --build build --target zone --config RelWithDebInfo -- /m:1 /p:BuildInParallel=false /p:TrackFileAccess=false`
+2. Apply the custom DB migration that creates `character_pet_command_states` before testing persistence.
+3. Confirm `Custom:PetAssistRateLimit` and any pet-related rules are set as expected.
+4. Use a UF-or-later client if you need visible pet button state confirmation.
+
+### Recommended In-Game Pack
+
+Run these mechanics cases in order:
+
+1. `MECH-07` for pet command persistence across zoning/relog.
+2. `MECH-08` for familiar respawn/despawn behavior from the active buff.
+3. `MECH-09` for melee-driven pet assist acquisition.
+4. `MECH-10` for detrimental-spell-driven pet assist acquisition.
+5. `MECH-11` for pet taunt and owner-melee aggro hold.
+6. `MECH-12` for familiar fade/replacement cleanup.
+7. `MECH-13` for familiar ownership semantics without controllable-pet regressions.
+8. `MECH-14` for restored pet command precedence after zone/login.
+9. `MECH-15` for assist-only retargeting on real owner actions.
+
+### Evidence To Capture
+
+For each pet test, record:
+
+1. The exact command and client state before the test.
+2. Any visible pet button state after zoning or retargeting.
+3. Chat/system text that confirms taunt, hold, or assist behavior.
+4. Whether the NPC target swapped to the owner or stayed on the pet.
+5. Whether the test was run before or after the migration was applied.
+6. For familiar tests, whether the familiar was duplicated, orphaned, or replaced cleanly.
+
+### Current Known Open Delta
+
+The live tree now has server-side assist behavior and persistence, but it does not yet expose a player-facing `/pet assist` command or equivalent UI path. Treat that as an explicit TODO until we either port the command surface or decide not to mirror THJ's UX exactly. Also keep familiar validation explicit after any pet-ownership refactor: login respawn, buff-fade cleanup, and replacement behavior should all be rechecked together.
 
 | Boot AC | Skill | Expected Base | Notes |
 |---------|-------|---------------|-------|

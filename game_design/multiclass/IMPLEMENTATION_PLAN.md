@@ -1,7 +1,7 @@
 # Multiclass (Gestalt) System - Master Implementation Plan
 
 **Version:** 1.1
-**Last Updated:** 2026-01-31
+**Last Updated:** 2026-04-21
 **Status:** Active Development
 
 This document serves as the authoritative technical design and implementation guide for the multiclass (gestalt) system. It consolidates requirements, architecture decisions, and work priorities into a single reference.
@@ -146,29 +146,27 @@ RULE_CATEGORY_END()
 | Spells | zone/spells.cpp | Memorize, Cast, Level requirements | Complete |
 | Bard Pulse | zone/spell_effects.cpp | Custom `ApplyBardPulse()` hook in `DoBuffTic` | Complete |
 | Infinite Buffs | zone/spell_effects.cpp | Bypass tick decrement for non-detrimental spells | Complete |
-| AAs | zone/aa.cpp | Purchase, Activate, Display | Partial |
-| Skills | zone/client_mods.cpp | MaxSkill(), GetRawSkillCap() | Partial |
-| Items | zone/inventory.cpp | CanEquip(), Class mask | Partial |
-| Disciplines | zone/effects.cpp | UseDiscipline() | TODO |
-| Merchants | zone/client_packet.cpp | Spell vendor filtering | TODO |
-| Trainers | zone/client_packet.cpp | Skill trainers | TODO |
-| Pets | zone/pets.cpp | Pet class restrictions | TODO |
+| AAs | zone/aa.cpp | Purchase, Activate, Display, Passive bonuses | Implemented; needs manual validation and class-removal entitlement decision |
+| Skills | zone/client_mods.cpp, DLL | MaxSkill(), GetRawSkillCap(), Skills window exposure | Implemented; validate K-05 |
+| Items | zone/inventory.cpp | CanEquip(), Class mask, Augment insert | Implemented; validate I-01 to I-07 |
+| Disciplines | zone/effects.cpp | UseDiscipline(), timer families | Implemented; validate K-03 and S-07 |
+| Merchants | zone/client_packet.cpp, zone/client_process.cpp | Spell/item vendor filtering | Implemented; validate I-06 and spell vendor smoke |
+| Trainers | zone/client_packet.cpp, zone/client_process.cpp | Skill trainers | Implemented; validate K-02 |
+| Pets | zone/pets.cpp and mechanics tracker | Pet command/persistence parity | Tracked under mechanics; validate MECH-07 to MECH-15 after pet changes |
 
-### THJServer Check Patterns to Port
+### Canonical Check Patterns
 ```cpp
-// AA eligibility (zone/aa.cpp)
-// THJServer pattern:
+// AA eligibility (zone/aa.cpp): current code should gate on owned classes.
 if ((ability->classes >> 1) & GetClassesBits() || (ability->classes & (1 << GetClass()))) {
     // Character can use this AA
 }
 
-// Item class check
-// Replace: if (item->Classes & (1 << (GetClass() - 1)))
-// With: if (item->Classes & GetClassesBits())
+// Item class check: use owned-class bitmask, not only compatibility class.
+if (item->Classes & GetClassesBits()) {
+    // Character can equip/use the item if other restrictions pass
+}
 
-// Spell level check
-// Replace: GetSpellLevelNeeded(GetClass())
-// With: loop through owned classes, find minimum required level
+// Spell level check: loop through owned classes and use the best qualifying level.
 ```
 
 ---
@@ -224,8 +222,8 @@ g_serverUsableClassesMask = static_cast<uint32_t>(g_edgeStatValue[kClassesBitmas
 
 **character_data** (existing table)
 ```sql
--- Primary class stored here (unchanged)
-`class` TINYINT UNSIGNED NOT NULL DEFAULT 0  -- Base class ID (1-16)
+-- Single owned class used for stock packet/client compatibility
+`class` TINYINT UNSIGNED NOT NULL DEFAULT 0  -- Compatibility class ID (1-16)
 ```
 
 **data_buckets** (existing table)
@@ -236,11 +234,12 @@ INSERT INTO data_buckets (`key`, `value`, `character_id`) VALUES
 ```
 
 ### Character Load Flow
-1. `zone/client_packet.cpp` loads character
-2. `character_data.class` → `m_pp.class_` (base class)
-3. Query `data_buckets` for `GestaltClasses` key
-4. Parse value → `m_classes_bits_cache` (cached bitmask)
-5. `GetClassesBits()` returns `m_classes_bits_cache | GetPlayerClassBit(GetClass())`
+1. `zone/client_packet.cpp` loads character.
+2. `character_data.class` hydrates the legacy compatibility class slot.
+3. Query `data_buckets` for `GestaltClasses` key.
+4. Parse value into the authoritative owned-class bitmask cache and profile class mask.
+5. `GetClassesBits()` returns the persisted owned-class bitmask; it no longer silently ORs the legacy starting class back in.
+6. If a compatibility class is needed for stock packets, pick a deterministic class from the owned bitmask.
 
 ### Character Save Flow
 1. `SetClassesBits()` updates `m_classes_bits_cache`
@@ -251,7 +250,7 @@ INSERT INTO data_buckets (`key`, `value`, `character_id`) VALUES
 
 ## Implementation Phases
 
-### Phase 1: Foundation (CURRENT - ~80% Complete)
+### Phase 1: Foundation & Persistence (Implemented; Validate)
 - [x] Rules in common/ruletypes.h
 - [x] GetClassesBits() / SetClassesBits() / HasClass() API
 - [x] AddExtraClass() / RemoveExtraClass()
@@ -259,65 +258,68 @@ INSERT INTO data_buckets (`key`, `value`, `character_id`) VALUES
 - [x] Data bucket persistence (GestaltClasses)
 - [x] EdgeStatLabel integration (SendEdgeStats)
 - [x] Character creation seeds GestaltClasses bucket
-- [ ] Skills seeding on class add (partially working)
+- [x] Starting/base class can be removed as long as at least one owned class remains
+- [ ] Validate C-01, C-02, C-06 after fresh rebuild
 
-### Phase 2: Spell System (~90% Complete)
+### Phase 2: Spell System, Mana UI, and Class Removal (Implemented; Validate)
 - [x] Memorize spell checks union-of-classes (Verified OP_MemorizeSpell logic)
 - [x] Cast spell checks union-of-classes (Verified CheckFizzle logic)
 - [x] Spell merchant "Show Usable Items" filter (Verified classes_required check)
 - [x] Spell tooltips show correct class levels (Handled by DLL)
 - [x] Spellbook UI shows all usable spells (Handled by DLL)
 - [x] Spell scribe validates class ownership (Verified client_process.cpp logic)
-- [x] Server and DLL mana refresh path are implemented for owned caster classes (Needs runtime validation via C-03)
+- [x] Server and DLL mana refresh path are implemented for owned caster classes
+- [x] Class removal clears invalid memorized gems and interrupts invalid casts while preserving scribed spells
+- [ ] Validate C-03, S-01 to S-07, and E-01
 
-### Phase 3: AA System (~80% Complete)
+### Phase 3: AA System (Implemented; Validate + Decide Policy)
 - [x] AA purchase checks union-of-classes
 - [x] AA activation checks union-of-classes
 - [x] AA window displays AAs for all owned classes (Server side mask sending implemented)
 - [x] Dynamic AA timers (UseDynamicAATimers rule)
 - [x] Passive AA effects gated by current ownership
+- [x] Mnemonic Retention and Fury of Magic multiclass gates have automation prechecks
+- [ ] Validate A-01 to A-05 in the live AA window
+- [ ] Decide E-02: removed-class AA policy should be soft-lock or refund/reset before release
 
-### Phase 4: Skills & Training (~90% Complete)
+### Phase 4: Skills, Training, and Disciplines (Implemented; Validate)
 - [x] MaxSkill() uses best owned class cap
 - [x] Skill trainers allow training for any owned class
-- [x] Skills window exposure path is implemented through DLL skill-limit override (Needs runtime validation via K-05)
+- [x] Skills window exposure path is implemented through DLL skill-limit override
 - [x] Skill use validates class ownership at runtime (via CheckIncreaseSkill)
+- [x] Discipline tome learning and activation use multiclass-aware checks
+- [ ] Validate K-01 to K-05 and S-07
 
-### Phase 5: Items & Equipment (~75% Complete)
+### Phase 5: Items, Equipment, Merchants, and Augments (Implemented; Validate)
 - [x] Item class mask checks union-of-classes in core equip/click paths
 - [x] Merchant item filtering uses union-of-classes
 - [x] Equip validation for class-restricted items
-- [x] Augment validation for class-restricted augs (augment insert now validates augment usability against owned classes and preserves THJ wear-slot safety guard; verify with I-07)
+- [x] Item click/equip-cast restrictions use `GetClassesBits()`
+- [x] Augment validation for class-restricted augs validates owned classes and preserves THJ wear-slot safety guard
+- [ ] Validate I-01 to I-07, including deny paths and race restrictions
 
-### Phase 6: Combat & Disciplines (~95% Complete)
-- [x] Discipline tome learning (Via OP_MemorizeSpell logic)
-- [x] Discipline activation gating (Verified UseDiscipline logic)
+### Phase 6: Combat and Class Gates (Implemented; Validate)
 - [x] Combat ability class restrictions (Refactored OPCombatAbility checks)
 - [x] Damage Caps (Refactored DoDamageCaps in zone/attack.cpp)
 - [x] Bard Cast-While-Attacking (Refactored zone/attack.cpp)
+- [x] Ranger/Berserker combat class gates use `HasClass`
+- [ ] Validate P-13; broader pet/proc parity is tracked in mechanics
 
-### Phase 7: Items & Equipment (~90% Complete)
-- [x] Wearing items (Verified SwapItem/IsEquipable)
-- [x] Item Procs (Refactored spell_effects.cpp checks)
-- [x] Consumption Timers (Refactored zone/bonuses.cpp)
-- [x] Item Clicking (Verified item click/equip-cast restrictions use `GetClassesBits()`)
-
-### Phase 8: AA System (50% Complete)
-- [x] Viewing/Buying AAs (zone/aa.cpp already supports multiclass via SendAATable)
-- [ ] AA Effect stacking (Need to verify if AA bonuses stack properly across classes)
-
-### Phase 9: Experience & Scaling (10% Complete)
+### Phase 7: Experience, Scaling, and Presentation (Implemented; Validate)
 - [x] Hybrid penalties/bonuses (Refactored zone/exp.cpp)
 - [x] Level Cap / Exp Cap logic (Restored THJ-style `MaxExpLevel` clamp so client max level no longer overrides the server exp cap; verify with X-04)
 - [x] Guild roster sync on class mutation / level update (`AddExtraClass`, `RemoveExtraClass`, and the level-up guild refresh now publish `GetClassesBits()` when multiclassing is enabled, and guild member updates now force a members-list refresh; verify with G-01)
-- [x] Item class mask checks union-of-classes in runtime equip/click paths
-- [x] Merchant item filtering uses union-of-classes
-- [x] Equip validation for class-restricted items
-- [x] Character select multiclass display path is implemented via world + DLL shaping (Needs runtime validation)
-- [x] /who multiclass abbreviations are implemented via world + DLL class-name overrides (Needs runtime validation)
+- [x] Character select multiclass display path is implemented via world + DLL shaping
+- [x] `/who` multiclass abbreviations are implemented via world + DLL class-name overrides
+- [x] Inventory window rewrites `IW_Class` and `IW_ClassAbbr` from the multiclass mask
 - [x] #mystats shows multiclass info
-- [x] Class change auto-unmemorizes invalid spells while preserving scribed spells
-- [ ] Free AA reset on class removal (entitlement)
+- [ ] Validate X-04, D-01 to D-04, B-08, and G-01
+
+### Phase 8: Roadmap Decisions Before Release
+- [ ] E-02: choose removed-class AA entitlement policy.
+- [ ] Decide whether AA level requirements should be removed globally, rule-gated, or left as-is.
+- [ ] Decide whether player-facing `/pet assist` command/UI parity is required or whether internal assist behavior is sufficient.
+- [ ] Expand automation for high-value manual cases after the runtime validation pass identifies stable repro flows.
 
 ---
 
@@ -364,17 +366,17 @@ INSERT INTO data_buckets (`key`, `value`, `character_id`) VALUES
 ### Issue: AA window missing AAs for added classes
 **Cause:** AA list built at zone-in, not refreshed on class change
 **Solution:** Call `SendAlternateAdvancementTable()` after class change
-**Status:** Implemented in AddExtraClass(), needs testing
+**Status:** Implemented; validate A-01 to A-05 in the live AA window
 
 ### Issue: Skills for added classes not visible
 **Cause:** Client skill caps from base class only
 **Solution:** DLL `PcZoneClient_GetPcSkillLimit_Detour` exposes server-granted skills
-**Status:** Implemented, needs testing
+**Status:** Implemented; validate K-05
 
 ### Issue: Spell memorize hangs (progress bar stuck)
 **Cause:** Server rejects but client UI not reset
-**Solution:** Server must send clear denial; investigate OP_MemorizeSpell flow
-**Status:** Under investigation
+**Solution:** Invalid post-removal re-memorize attempts now fail immediately and reset the spellbar UI
+**Status:** Implemented; validate E-01
 
 ### Issue: /who shows only base class
 **Cause:** Usually stale `world.exe` or DLL build, not missing server logic
@@ -385,17 +387,17 @@ INSERT INTO data_buckets (`key`, `value`, `character_id`) VALUES
 
 ## File Reference
 
-### Server Files (High Priority for THJ Port)
-| File | Purpose | THJ Parity |
+### Server Files (Validation Hotspots)
+| File | Purpose | Current Focus |
 |------|---------|------------|
-| zone/client.cpp | Core multiclass API | ~80% |
-| zone/client.h | Client class declarations | ~80% |
-| zone/aa.cpp | AA filtering and activation | ~30% |
-| zone/spells.cpp | Spell casting logic | ~30% |
-| zone/client_packet.cpp | Packet handlers | ~40% |
-| zone/client_mods.cpp | Stat calculations | ~50% |
-| zone/bonuses.cpp | Bonus application | ~30% |
-| common/ruletypes.h | Rules definitions | ~90% |
+| zone/client.cpp | Core multiclass API | Validate class mutation, persistence, spell cleanup, and EdgeStat sync |
+| zone/client.h | Client class declarations | Keep helper contracts aligned with implementation |
+| zone/aa.cpp | AA filtering and activation | Validate A-01 to A-05 and E-02 behavior |
+| zone/spells.cpp | Spell casting logic | Validate S-01 to S-07 and E-01 |
+| zone/client_packet.cpp | Packet handlers | Validate profile hydration, memorize flow, merchants, and augments |
+| zone/client_mods.cpp | Stat calculations | Validate C-03 and K-05 |
+| zone/bonuses.cpp | Bonus application | Validate passive AA ownership gating |
+| common/ruletypes.h | Rules definitions | Confirm rules are set correctly before test runs |
 
 ### DLL Files
 | File | Purpose |
@@ -466,23 +468,23 @@ INSERT INTO data_buckets (`key`, `value`, `character_id`) VALUES
 
 ## Next Steps (Immediate Priorities)
 
-1. **Port THJ spell casting logic** (zone/spells.cpp)
-   - Focus on memorize/cast union-of-classes checks
+1. **Rebuild the touched runtime pieces**
+   - Build `zone`; build `world` and the DLL before presentation checks.
 
-2. **Port THJ AA filtering** (zone/aa.cpp)
-   - AA window completeness is a blocking issue
+2. **Validate newly closed gameplay gaps**
+   - Run `I-01` to `I-07`, `X-04`, and `D-04` first.
 
-3. **Fix spell merchant filter**
-   - Investigate item class mask vs spell level checks
+3. **Finish AA validation**
+   - Run `A-01` to `A-05`, then record the observed behavior for `E-02`.
 
-4. **Verify skills seeding**
-   - Ensure AddExtraClass() properly grants starting skills
+4. **Validate UI/presentation and skills**
+   - Run `C-03`, `K-05`, `D-01`, `D-02`, `D-03`, `B-08`, and `G-01`.
 
-5. **Add regression tests**
-   - Automated tests in tests/ directory
+5. **Update tracker from evidence**
+   - Mark only tests with objective in-game/log evidence as pass; convert failures into focused code tasks.
 
 ---
 
 *Document maintained by: Development Team*
-*Last Updated: 2026-01-31*
+*Last Updated: 2026-04-21*
 *See also: [TEST_TRACKER.md](TEST_TRACKER.md), [PORT_CHECKLIST.md](PORT_CHECKLIST.md), `/extras/THJServer/docs/`*

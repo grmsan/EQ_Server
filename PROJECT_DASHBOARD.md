@@ -16,12 +16,12 @@
 2. **Check Active Work Items** for highest priority tasks
 3. **Run sanity tests** if you made code changes:
    - Quick: `#test smoke` in-game
-   - Or: `cmake --build build --target zone --config RelWithDebInfo --parallel`
+   - Or: `cmake --build build --target zone --config RelWithDebInfo -- /m:1 /p:BuildInParallel=false /p:TrackFileAccess=false`
 4. **Pick one item** from Active Work Items and resume
 
 **Key Commands:**
 - Start server: `python server_manager.py` → Server Control → Start All
-- Build: `cmake --build build --config RelWithDebInfo --parallel`
+- Build: `cmake --build build --config RelWithDebInfo -- /m:1 /p:BuildInParallel=false /p:TrackFileAccess=false`
 - In-game tests: `#test smoke`, `#test combat`, `#test automated`
 
 ---
@@ -32,6 +32,10 @@
 
 | Date | Area | Accomplishments | Next Steps |
 |------|------|-----------------|------------|
+| 2026-04-20 | Pets / Mechanics validation | Resolved the latest uncommitted pet regressions from review: removed the stale legacy taunt overwrite during pet restore, tightened familiar lookup/cleanup so variant familiar spells cannot coexist or orphan each other, and limited `/pet assist` retargeting to real owner actions instead of passive target selection. Confirmed `zone` builds cleanly on the stable non-parallel CMake/MSBuild path and updated server-manager build behavior to use that same invocation. | Run `MECH-07` to `MECH-15`, with special focus on `MECH-11`, `MECH-14`, and `MECH-15`, then update the mechanics tracker from actual in-game evidence. |
+| 2026-04-21 | Pets / Mechanics validation | Addressed the uncommitted pet review findings: familiars now carry normal ownership semantics for pet-aware server paths, familiar buff fade now dismisses the matching familiar directly, and the pet taunt parity patch was narrowed back to the engaged target instead of force-peeling nearby mobs. Added dedicated mechanics cases for familiar cleanup and ownership validation. | Re-run the expanded pet mechanics pack `MECH-07` to `MECH-13`, with special attention to `MECH-11`, `MECH-12`, and `MECH-13`, then update tracker status from actual in-game results. |
+| 2026-04-21 | Pets / THJ parity | Ported the remaining server-side pet parity foundation: persisted pet command states, summon-time restore for taunt/hold/ghold/focus/spellhold, dedicated familiar spawning from active buffs, client-owned pet equipment-aware melee skill formulas, and assist-aware pet engagement hooks for melee/spell combat. `zone` now builds cleanly after the changes. | Run the new mechanics pet test cases `MECH-07` to `MECH-11`, apply the pet-command-state DB migration before persistence tests, and keep the remaining THJ delta explicit: add a player-facing `/pet assist` command/UI surface if we want full THJ UX parity. |
+| 2026-04-21 | Multiclass / DLL UI | Added a DLL-side inventory label projection so the inventory window now rewrites `IW_Class` and `IW_ClassAbbr` from the multiclass mask instead of showing only the compatibility/base class; EQ core DLL Release Win32 v143 build succeeded after the change. | Validate the new inventory presentation with `D-04`, plus a quick char-select and `/who` spot check to confirm all client-facing class displays stay aligned. |
 | 2026-04-20 | Combat / Multiclass | Patched pet taunt parity so taunting pets now force stronger hate on their main target and nearby mobs attacking the owner, and fixed invalid post-class-removal spell re-memorize attempts so they now fail immediately with an error and reset the spellbar UI instead of hanging. | Re-run the pet tanking scenario plus `E-01`; keep `C-05` deprioritized unless it starts blocking spell-targeting or combat validation. |
 | 2026-04-21 | Multiclass | Fixed the XP cap drift in `zone/exp.cpp`: server `Character:MaxExpLevel` / `MaxLevel` rules stay authoritative again, and client max level now acts only as an extra clamp instead of replacing the configured exp cap. | Rebuild `zone`, then run `X-04` plus a quick sanity pass around leveling/AA gain to confirm capped characters no longer overshoot the intended server exp limit. |
 | 2026-04-21 | Multiclass | Closed the remaining augment-gating gap in the server path: `OP_AugmentItem` now rejects class-restricted augments unless the player owns a qualifying class, and it also restores THJ's wear-slot safety guard before finalizing the augmented item. | Rebuild `zone`, then run the new `I-07` augment validation case plus the rest of `I-01` to `I-07` to confirm item and augment gating behave correctly in-game. |
@@ -60,7 +64,7 @@
 #### 1. Multiclass System (Active Development)
 - **Status**: Core APIs implemented, testing in progress
 - **THJ Parity**: 36 same / 66 differ / 10 THJ-only files
-- **Recent Work**: Waypoint + Bazaar quest compatibility (2026-02-26)
+- **Recent Work**: April multiclass cleanup closed compatibility-class leakage, class-removal spell cleanup, passive AA gating, augment gating, XP-cap drift, guild refresh projection, and inventory class-label projection.
 - **Today Goal**: Close the remaining practical multiclass gaps that block normal gameplay validation.
 - **Where We Stand**:
   - Phase 2 Spells is mostly complete; mana bar/UI sync appears to have both server and DLL support and now needs direct validation rather than broad implementation.
@@ -69,8 +73,8 @@
   - Phase 5 Items/Equipment has more implementation in place than the docs previously reflected: equip paths, merchant class filtering, and item click class checks are already multiclass-aware; remaining work is mainly verification plus any uncovered edge cases.
   - World presentation also appears implemented through the world + DLL path; `/who` and character select now look like validation items rather than net-new coding work.
   - Class removal now preserves spellbook progress while immediately clearing invalid memorized gems; the remaining class-removal gap is the AA entitlement policy decision.
-- **Next Concrete Work**: Rebuild `zone` and validate the newly closed item/XP gaps with `I-01` through `I-07` and `X-04`, then resume AA/manual runtime validation with `A-01`, `A-02`, `A-03`, and `A-04`.
-- **After That**: Validate skills-window exposure, item/equip behavior, and world presentation (`K-05`, `I-01` through `I-06`, `D-01`, `D-02`), then focus coding on any failures rather than assuming those systems still need broad porting.
+- **Next Concrete Work**: Rebuild `zone`; rebuild `world` and the DLL before presentation checks; validate `I-01` through `I-07`, `X-04`, and `D-04` first because those cover the latest closed gaps.
+- **After That**: Finish AA/manual runtime validation (`A-01` through `A-05`, then `E-02`), skills/caster checks (`C-03`, `K-05`, `E-01`), and world presentation (`D-01`, `D-02`, `D-03`, `B-08`, `G-01`).
 - **Design Decision Still Needed**: final policy for removed-class AA entitlements/refunds is now tracked explicitly and should come back to you before we lock behavior.
 - **Primary Files**:
   - `zone/aa.cpp` — AA visibility, purchase, activation, passive ownership gating
@@ -82,22 +86,22 @@
 - **Parity Tracking**: [game_design/multiclass/PORT_CHECKLIST.md](game_design/multiclass/PORT_CHECKLIST.md)
 
 ##### Multiclass Immediate Next Steps
-1. Run multiclass AA verification cases in [game_design/multiclass/test_tracker.md](game_design/multiclass/test_tracker.md): `A-01`, `A-02`, `A-03`, `A-04`.
-2. Verify mana bar/UI sync with `C-03`.
-3. Verify class-removal spell soft-lock behavior with `E-01`.
-4. Use [game_design/multiclass/PORT_CHECKLIST.md](game_design/multiclass/PORT_CHECKLIST.md) to compare `zone/inventory.cpp` against THJ.
-5. Run item/equip verification cases `I-01` to `I-07`.
-6. Research removing AA level requirements — investigate data model, AA table fields, rule flags, client-side gating, and compatibility; draft design and implementation plan.
+1. Build `zone`; build `world` and the DLL before display checks.
+2. Run the latest-gap validation set: `I-01` to `I-07`, `X-04`, and `D-04`.
+3. Run AA verification: `A-01` to `A-05`, then record the current `E-02` removed-class AA behavior.
+4. Verify caster/skill/spell cleanup: `C-03`, `K-05`, and `E-01`.
+5. Verify presentation and projection: `D-01`, `D-02`, `D-03`, `B-08`, and `G-01`.
+6. Research removing AA level requirements only after the validation pass, unless a failed AA test makes it blocking.
 
 ##### Multiclass Today Execution Order
 1. **AA Pass**
   - Target: `zone/aa.cpp`
   - Goal: validate AA visibility, purchase, activation, passive ownership gating, and special multiclass AA cases.
-  - Validate: `A-01`, `A-02`, `A-03`, `A-04`.
+  - Validate: `A-01`, `A-02`, `A-03`, `A-04`, `A-05`, and `E-02`.
 2. **Caster UI / Skills Verification**
   - Target: `zone/client_mods.cpp` plus DLL/runtime verification.
   - Goal: confirm caster secondary classes expose mana correctly and that added-class skills are visible/usable.
-  - Validate: `C-03` and `K-05`.
+  - Validate: `C-03`, `K-05`, and `E-01`.
 3. **Item and Equip Rules**
   - Target: `zone/inventory.cpp`
   - Goal: verify existing union-of-classes equip/use gating, merchant filtering, and click restrictions without breaking race restrictions; patch only uncovered edge cases.
@@ -105,7 +109,7 @@
 4. **World / Presentation Parity**
   - Target: `world/clientlist.cpp` and any linked world-side class presentation code.
   - Goal: verify `/who` and related multiclass presentation are aligned with the current server/client behavior, including post-mutation guild roster refreshes and guild-members-list reloads.
-  - Validate: `G-01`, `B-08`, plus any `/who` checks after rebuild.
+  - Validate: `D-01`, `D-02`, `D-03`, `D-04`, `G-01`, `B-08`, plus any `/who` checks after rebuild.
 5. **Regression and Tracker Sync**
   - Run `#test smoke`, targeted multiclass checks, and update tracker statuses and dashboard session log with results.
 
@@ -130,6 +134,9 @@
 #### 4. Combat Mechanics Parity
 - **Status**: THJ-aligned proc behavior ported
 - **Focus Areas**: 2H/Bow procs, Pet/NPC weapon procs
+- **Open THJ Delta TODO**: server-side pet assist behavior is now ported, but the player-facing `/pet assist` command/UI surface is still not exposed in the live tree. Either add the command path or deliberately decide to keep assist as an internal/default-only behavior.
+- **Pet Validation Pack**: run `MECH-07` to `MECH-15` after any future pet parity change; do not treat THJ pet work as done without either an implementation or an explicit TODO entry here.
+- **Current Pet Focus**: `MECH-11` is still marked failed in tracker history, and the latest uncommitted fix set added explicit familiar, restore-precedence, and passive-retarget regression coverage (`MECH-12` to `MECH-15`). Prioritize those before calling the pet pass stable.
 - **Testing**: [game_design/mechanics/TEST_TRACKER.md](game_design/mechanics/TEST_TRACKER.md)
 
 #### 5. Class-Specific Abilities
@@ -163,11 +170,11 @@
 
 | Domain | Status | Tests Passed | Last Updated |
 |--------|--------|--------------|--------------|
-| **Multiclass** | 🟡 Active Dev | Auto: 2/39, Partial: 8/39 | 2026-02-27 |
+| **Multiclass** | 🟡 Active Dev | Auto: 2/51, Partial: 9/51 | 2026-04-21 |
 | **Infinite Progression** | 🟢 Steps 1-11 Done | — | 2026-03-06 |
 | **Operations** | 🟢 Active | — | 2026-02-28 |
 | **Classes** | 🟡 Testing | CL-06 ✓ | 2026-02-27 |
-| **Mechanics** | 🟡 Testing | — | 2026-02-28 |
+| **Mechanics** | 🟡 Testing | `MECH-11` failed, `MECH-12` to `MECH-15` added | 2026-04-20 |
 | **Quests** | 🟡 Testing | — | 2026-02-28 |
 | **QoL** | 🟡 Testing | — | 2026-03-13 |
 | **Tooling** | 🟢 Stable | TOOL-01,03,04 ✓ | 2026-02-28 |
@@ -228,13 +235,13 @@ Legend: 🟢 Stable/Complete | 🟡 Active/In Progress | 🔴 Blocked
 ### Build Commands
 ```bash
 # Full build
-cmake --build build --config RelWithDebInfo --parallel
+cmake --build build --config RelWithDebInfo -- /m:1 /p:BuildInParallel=false /p:TrackFileAccess=false
 
 # Zone only (fastest for combat/quest changes)
-cmake --build build --target zone --config RelWithDebInfo --parallel
+cmake --build build --target zone --config RelWithDebInfo -- /m:1 /p:BuildInParallel=false /p:TrackFileAccess=false
 
 # World only
-cmake --build build --target world --config RelWithDebInfo --parallel
+cmake --build build --target world --config RelWithDebInfo -- /m:1 /p:BuildInParallel=false /p:TrackFileAccess=false
 ```
 
 ### Server Management
@@ -286,5 +293,5 @@ python stop_server.py
 
 ---
 
-*Last dashboard update: 2026-04-20*
+*Last dashboard update: 2026-04-21*
 *Dashboard created to consolidate 28 scattered tracking documents into one entry point.*

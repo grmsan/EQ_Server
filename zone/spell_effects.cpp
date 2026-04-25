@@ -1534,42 +1534,34 @@ bool Mob::SpellEffect(Mob* caster, uint16 spell_id, float partial, int level_ove
 			case SpellEffect::SummonBSTPet:
 			case SpellEffect::NecPet:
 			case SpellEffect::SummonPet:
-			case SpellEffect::Familiar:
 			{
 #ifdef SPELL_EFFECT_SPAM
-				snprintf(effect_desc, _EDLEN, "Summon %s: %s", (effect==SE_Familiar)?"Familiar":"Pet", spell.teleport_zone);
+				snprintf(effect_desc, _EDLEN, "Summon Pet: %s", spell.teleport_zone);
 #endif
 				if (petids.size() >= RuleI(Custom, AbsolutePetLimit) || !IsPetAllowed(spell_id)) {
 					return false;
 				}
 
 				MakePet(spell_id, spell.teleport_zone);
-				// TODO: we need to sync the states for these clients ...
-				// Will fix buttons for now
-				Mob *pet = GetActivePet();
-				if (IsClient() && pet) {
+				if (IsClient()) {
 					for (auto all_pet : GetAllPets()) {
-						if (all_pet && all_pet->IsNPC() && all_pet->CastToNPC()->GetPetSpellID() == spell_id) {
-							CastToClient()->DoPetBagResync(all_pet->CastToNPC()->GetPetOriginClass());
+						if (!all_pet || !all_pet->IsNPC() || all_pet->CastToNPC()->GetPetSpellID() != spell_id) {
+							continue;
 						}
-					}
 
-					auto c = CastToClient();
-					if (c->ClientVersionBit() & EQ::versions::maskUFAndLater) {
-						c->SetPetCommandState(PetButton::Sit, PetButtonState::Off);
-						c->SetPetCommandState(PetButton::Stop, PetButtonState::Off);
-						c->SetPetCommandState(PetButton::Regroup, PetButtonState::Off);
-						c->SetPetCommandState(PetButton::Follow, PetButtonState::On);
-						c->SetPetCommandState(PetButton::Guard, PetButtonState::Off);
-						// Creating pet from spell - taunt always false
-						// If suspended pet - that will be restore there
-						// If logging in, client will send toggle
-						c->SetPetCommandState(PetButton::Hold, PetButtonState::Off);
-						c->SetPetCommandState(PetButton::GreaterHold, PetButtonState::Off);
-						c->SetPetCommandState(PetButton::Focus, PetButtonState::Off);
-						c->SetPetCommandState(PetButton::SpellHold, PetButtonState::Off);
+						all_pet->CastToNPC()->ConfigureInitialCommands();
+						ConfigurePetWindow(all_pet);
 					}
 				}
+				break;
+			}
+
+			case SpellEffect::Familiar:
+			{
+#ifdef SPELL_EFFECT_SPAM
+				snprintf(effect_desc, _EDLEN, "Summon Familiar: %s", spell.teleport_zone);
+#endif
+				MakeFamiliar(spell_id);
 				break;
 			}
 
@@ -4754,17 +4746,7 @@ void Mob::BuffFadeBySlot(int slot, bool iRecalcBonuses)
 
 			case SpellEffect::Familiar:
 			{
-				for (auto pet : GetAllPets()) {
-					if (!pet || !pet->IsFamiliar()) {
-						continue;
-					}
-
-					if (pet->IsNPC()) {
-						pet->CastToNPC()->Depop();
-					}
-
-					RemovePet(pet);
-				}
+				DismissFamiliar(buffs[slot].spellid);
 				break;
 			}
 

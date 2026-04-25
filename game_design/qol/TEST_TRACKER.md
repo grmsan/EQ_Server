@@ -36,27 +36,10 @@ Tracks quality-of-life systems that are not tightly scoped to one feature domain
 
 ## 2) Waypoint UI POCs (Custom DLL)
 
-### [QOL-02] Build+Copy DLL + UI XML Sync
-
-**Goal**: Verify Server Manager `Build+Copy DLL` updates client `dinput8.dll` and required UI XML assets for custom waypoint UI testing.
-**Steps**:
-
-1. Open `server_manager.py`, set `EQ Folder`, and click `Build+Copy DLL`.
-2. Confirm client has `<EQ>/dinput8.dll` with recent timestamp.
-3. Confirm client has:
-   - `<EQ>/uifiles/default/EQUI_WaypointPOCWnd.xml`
-   - `<EQ>/uifiles/default/EQUI_PowerSlotWnd.xml`
-   - `<EQ>/scripts/waypoint_imgui_poc.lua`
-4. Confirm client UI manifest (`EQUI.xml` or `default.xml`) includes:
-   - `<Include>EQUI_WaypointPOCWnd.xml</Include>`
-   - `<Include>EQUI_PowerSlotWnd.xml</Include>`
-**Expected**: DLL, required XML files, and Lua/ImGui waypoint script are copied to client, with manifest includes present after one button press.
-**Status**: [ ] Pass  [ ] Fail
-**Notes**: ______________________________
-
 ### [QOL-03] Generic SIDL Tool Window - Waypoints (`/waypointpoc`, `/toolwnd`)
 
-**Goal**: Verify the generic SIDL tool host can switch into waypoint mode, display server data, and trigger travel action.
+**Goal**: Verify the generic SIDL tool host renders waypoint data and accepts waypoint-specific input once assets and backend data are already known-good.
+**Precondition**: Asset deployment is validated separately in `TOOL-11`, and the waypoint backend/list source is already known-good.
 **Steps**:
 
 1. In game, run `#wppoc list` once (or use window refresh).
@@ -65,7 +48,7 @@ Tracks quality-of-life systems that are not tightly scoped to one feature domain
 4. Click `Refresh` and verify list populates with waypoint rows.
 5. Select one row and click `Travel`.
 6. Optionally run `/waypointpoc travel` after selecting a row.
-**Expected**: Shared window renders waypoint list and selected waypoint travel triggers server-side teleport (`#wppoc travel <id>` path).
+**Expected**: The SIDL host renders the waypoint list correctly, maintains selection state, and invokes the shared travel action from the selected row.
 **Status**: [ ] Pass  [ ] Fail
 **Notes**: ______________________________
 
@@ -85,20 +68,22 @@ Tracks quality-of-life systems that are not tightly scoped to one feature domain
 
 ### [QOL-04] Waypoint Overlay POC (`/waypointoverlay`)
 
-**Goal**: Verify non-SIDL HUD overlay path can render waypoint list and travel.
+**Goal**: Verify the non-SIDL HUD overlay host renders waypoint data and accepts overlay navigation input.
+**Precondition**: Asset deployment is validated separately in `TOOL-11`, and the waypoint backend/list source is already known-good.
 **Steps**:
 
 1. Run `/waypointoverlay toggle`.
 2. Run `/waypointoverlay refresh`.
 3. Use `/waypointoverlay next` and `/waypointoverlay prev` to move selection.
 4. Run `/waypointoverlay travel`.
-**Expected**: HUD list appears, selection changes, and travel command teleports to currently selected waypoint.
+**Expected**: HUD list appears, selection changes visibly in the overlay, and the overlay invokes travel for the currently selected waypoint.
 **Status**: [ ] Pass  [ ] Fail
 **Notes**: ______________________________
 
 ### [QOL-05] Waypoint Lua/ImGui Runtime POC (`/waypointimgui`)
 
-**Goal**: Verify Lua + Dear ImGui runtime path renders interactive waypoint UI and executes refresh/travel actions.
+**Goal**: Verify the Lua + Dear ImGui host renders waypoint data and accepts interactive refresh/travel input.
+**Precondition**: Asset deployment is validated separately in `TOOL-11`, and the waypoint backend/list source is already known-good.
 **Steps**:
 
 1. Run `/waypointimgui toggle`.
@@ -106,6 +91,6 @@ Tracks quality-of-life systems that are not tightly scoped to one feature domain
 3. Run `/waypointimgui refresh` and verify the ImGui host window renders with waypoint entries.
 4. Select a waypoint row in the ImGui window and click `Travel`.
 5. Run `/waypointimgui reload` and verify script reload succeeds.
-**Expected**: Status reports runtime/hooks active, the separate ImGui host window is interactive, and refresh/travel work through the shared waypoint server bridge.
+**Expected**: Status reports runtime/hooks active, the ImGui host window is interactive, and the host successfully invokes the shared waypoint refresh/travel bridge.
 **Status**: [ ] Pass  [ ] Fail
 **Notes**: ______________________________

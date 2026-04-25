@@ -2716,6 +2716,149 @@ void NPC::SetSwarmTarget(int target_id)
 	}
 }
 
+void NPC::ConfigureInitialCommands()
+{
+	Client* owner = nullptr;
+	int class_id = GetPetOriginClass();
+
+	if (GetOwner() && GetOwner()->IsClient()) {
+		owner = GetOwner()->CastToClient();
+	} else if (GetSwarmOwner()) {
+		owner = entity_list.GetClientByID(GetSwarmOwner());
+		class_id = Class::None;
+	}
+
+	if (!owner) {
+		return;
+	}
+
+	if (owner->HasSavedPetCommand(class_id, CUSTOM_PET_ASSIST)) {
+		SetPetAssisting(owner->GetSavedPetCommand(class_id, CUSTOM_PET_ASSIST));
+	}
+
+	if (owner->HasSavedPetCommand(class_id, PET_TAUNT)) {
+		SetTaunting(owner->GetSavedPetCommand(class_id, PET_TAUNT));
+	}
+
+	if (owner->HasSavedPetCommand(class_id, PET_HOLD)) {
+		SetHeld(owner->GetSavedPetCommand(class_id, PET_HOLD));
+	}
+
+	if (owner->HasSavedPetCommand(class_id, PET_GHOLD)) {
+		SetGHeld(owner->GetSavedPetCommand(class_id, PET_GHOLD));
+	}
+
+	if (owner->HasSavedPetCommand(class_id, PET_FOCUS)) {
+		SetFocused(owner->GetSavedPetCommand(class_id, PET_FOCUS));
+	}
+
+	if (owner->HasSavedPetCommand(class_id, PET_SPELLHOLD)) {
+		SetNoCast(owner->GetSavedPetCommand(class_id, PET_SPELLHOLD));
+	}
+
+	auto* active_pet = owner->GetActivePet();
+	if (active_pet && active_pet->GetID() == GetID()) {
+		owner->ConfigurePetWindow(this);
+	}
+}
+
+void NPC::DoPetCommandAssist(bool enabled)
+{
+	Client* owner = nullptr;
+	int class_id = GetPetOriginClass();
+
+	if (GetOwner() && GetOwner()->IsClient()) {
+		owner = GetOwner()->CastToClient();
+	} else if (GetSwarmOwner()) {
+		owner = entity_list.GetClientByID(GetSwarmOwner());
+		class_id = Class::None;
+	}
+
+	if (!owner || IsFamiliar()) {
+		return;
+	}
+
+	owner->SetSavedPetCommand(class_id, CUSTOM_PET_ASSIST, enabled);
+	SetPetAssisting(enabled);
+
+	if (enabled) {
+		owner->Message(Chat::PetResponse, fmt::format("{} tells you, 'As you command, Master. I will assist you in battle.'", GetCleanName()).c_str());
+	} else {
+		owner->Message(Chat::PetResponse, fmt::format("{} tells you, 'As you command, Master. I will no longer assist you in battle.'", GetCleanName()).c_str());
+	}
+}
+
+void NPC::DoPetCommandAssistOnTarget(Mob* target)
+{
+	if (!target || IsFamiliar() || IsFeared() || target->GetOwnerOrSelf()->IsClient()) {
+		return;
+	}
+
+	Client* owner = nullptr;
+	if (GetOwner() && GetOwner()->IsClient()) {
+		owner = GetOwner()->CastToClient();
+	} else if (GetSwarmOwner()) {
+		owner = entity_list.GetClientByID(GetSwarmOwner());
+	}
+
+	if (!owner) {
+		return;
+	}
+
+	if (GetTarget() && GetTarget()->GetID() == target->GetID()) {
+		return;
+	}
+
+	if (RuleB(Pets, PetsRequireLoS) && !DoLosChecks(target)) {
+		return;
+	}
+
+	if (!IsAttackAllowed(target) || target->IsMezzed()) {
+		return;
+	}
+
+	if (pet_assist_timer.Enabled() && !pet_assist_timer.Check()) {
+		zone->AddAggroMob();
+		AddToHateList(target, 1, 1, true, false, false, SPELL_UNKNOWN, true);
+		return;
+	}
+
+	SetFeigned(false);
+	SetPetStop(false);
+	SetPetRegroup(false);
+
+	auto* active_pet = owner->GetActivePet();
+	if (active_pet && active_pet->GetID() == GetID()) {
+		owner->SetPetCommandState(PET_BUTTON_SIT, 0);
+	}
+
+	if (GetPetOrder() == SPO_Sit || GetPetOrder() == SPO_FeignDeath) {
+		SetPetOrder(GetPreviousPetOrder());
+		SetAppearance(eaStanding);
+	}
+
+	zone->AddAggroMob();
+	int hate = 1;
+	if (IsEngaged()) {
+		auto top = GetHateMost();
+		if (top && top != target) {
+			hate += GetHateAmount(top) - GetHateAmount(target) + 1000;
+		}
+	}
+
+	AddToHateList(target, hate, hate, true, false, false, SPELL_UNKNOWN, true);
+	if (last_assist_target_id != target->GetID()) {
+		owner->Message(Chat::PetResponse, fmt::format("{} tells you, 'Assisting you with {}, Master.'", GetCleanName(), target->GetCleanName()).c_str());
+		last_assist_target_id = target->GetID();
+		if (last_attack_target_id != target->GetID()) {
+			last_attack_target_id = 0;
+		}
+	}
+
+	SetTarget(target);
+	pet_assist_timer.Start(RuleI(Custom, PetAssistRateLimit));
+}
+
 int64 NPC::CalcMaxMana()
 {
 	if (npc_mana == 0) {
@@ -3906,6 +4049,18 @@ void NPC::SetTaunting(bool is_taunting) {
 
 	if (IsPet() && IsPetOwnerClient()) {
 		GetOwner()->CastToClient()->SetPetCommandState(PetButton::Taunt, is_taunting);
+	}
+
+	if (IsPet() || GetSwarmInfo()) {
+		if (RuleB(Custom, TauntTogglesPetTanking)) {
+			SetSpecialAbility(SpecialAbility::AllowedToTank, is_taunting);
+			SetSpecialAbility(SpecialAbility::BeingAggroImmunity, !is_taunting);
+			if (!is_taunting) {
+				for (auto npc : entity_list.GetNPCList()) {
+					npc.second->RemoveFromHateList(this);
+				}
+			}
+		}
 	}
 }
 

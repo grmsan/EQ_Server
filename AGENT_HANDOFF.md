@@ -78,8 +78,8 @@ Commands: <commands or in-game steps>
 Observed: <actual result>
 Expected: <expected result>
 Evidence: <chat/log/output snippet>
-Status: Pass | Fail
-Next: <follow-up code/data/doc target if failed>
+Status: Not Run | In Progress | Blocked | Pass | Fail
+Next: <follow-up code/data/doc target if blocked or failed>
 ```
 
 ---
@@ -120,4 +120,3 @@ Use this before accepting an agent handoff:
 - Did they avoid unrelated cleanup?
 - Are blockers phrased as decisions or concrete follow-up packets?
 - Is the next packet obvious?
-

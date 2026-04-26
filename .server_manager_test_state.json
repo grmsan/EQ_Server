@@ -1,70 +1,80 @@
 {
-  "updated_at": "2026-04-20 22:08:05",
+  "updated_at": "2026-04-26 11:32:21",
   "tests": {
-    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\multiclass\\test_tracker.md::P-01": {
-      "status": "Pass",
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\mechanics\\test_tracker.md::MECH-01": {
+      "status": "Not Run",
       "notes": "",
-      "updated_at": "2026-02-27 11:41:03"
+      "updated_at": "2026-04-26 11:32:21"
     },
-    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\multiclass\\test_tracker.md::P-02": {
-      "status": "Pass",
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\mechanics\\test_tracker.md::MECH-02": {
+      "status": "Not Run",
       "notes": "",
-      "updated_at": "2026-02-27 11:41:03"
+      "updated_at": "2026-04-26 11:32:21"
     },
-    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\tooling\\test_tracker.md::TOOL-01": {
-      "status": "Pass",
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\mechanics\\test_tracker.md::MECH-03": {
+      "status": "Not Run",
       "notes": "",
-      "updated_at": "2026-02-27 11:42:50"
+      "updated_at": "2026-04-26 11:32:21"
     },
-    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\tooling\\test_tracker.md::TOOL-03": {
-      "status": "Pass",
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\mechanics\\test_tracker.md::MECH-04": {
+      "status": "Not Run",
       "notes": "",
-      "updated_at": "2026-02-27 11:43:23"
+      "updated_at": "2026-04-26 11:32:21"
     },
-    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\tooling\\test_tracker.md::TOOL-04": {
-      "status": "Pass",
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\mechanics\\test_tracker.md::MECH-05": {
+      "status": "Not Run",
       "notes": "",
-      "updated_at": "2026-02-27 11:43:43"
+      "updated_at": "2026-04-26 11:32:21"
     },
-    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\classes\\test_tracker.md::CL-06": {
-      "status": "Pass",
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\mechanics\\test_tracker.md::MECH-06": {
+      "status": "Not Run",
       "notes": "",
-      "updated_at": "2026-02-27 12:13:10"
+      "updated_at": "2026-04-26 11:32:21"
     },
-    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\multiclass\\test_tracker.md::C-02": {
-      "status": "Pass",
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\mechanics\\test_tracker.md::MECH-07": {
+      "status": "Not Run",
       "notes": "",
-      "updated_at": "2026-02-27 22:25:19"
+      "updated_at": "2026-04-26 11:32:21"
     },
-    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\multiclass\\test_tracker.md::C-04": {
-      "status": "Pass",
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\mechanics\\test_tracker.md::MECH-08": {
+      "status": "Not Run",
       "notes": "",
-      "updated_at": "2026-02-27 22:25:24"
+      "updated_at": "2026-04-26 11:32:21"
     },
-    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\multiclass\\test_tracker.md::A-01": {
-      "status": "Pass",
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\mechanics\\test_tracker.md::MECH-09": {
+      "status": "Not Run",
       "notes": "",
-      "updated_at": "2026-04-20 17:32:52"
+      "updated_at": "2026-04-26 11:32:21"
     },
-    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\multiclass\\test_tracker.md::A-02": {
-      "status": "Pass",
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\mechanics\\test_tracker.md::MECH-10": {
+      "status": "Not Run",
       "notes": "",
-      "updated_at": "2026-04-20 17:32:56"
-    },
-    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\multiclass\\test_tracker.md::C-01": {
-      "status": "Pass",
-      "notes": "",
-      "updated_at": "2026-04-20 19:25:45"
-    },
-    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\multiclass\\test_tracker.md::C-03": {
-      "status": "Pass",
-      "notes": "",
-      "updated_at": "2026-04-20 19:26:49"
+      "updated_at": "2026-04-26 11:32:21"
     },
     "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\mechanics\\test_tracker.md::MECH-11": {
       "status": "Fail",
       "notes": "",
-      "updated_at": "2026-04-20 21:19:23"
+      "updated_at": "2026-04-26 11:32:21"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\mechanics\\test_tracker.md::MECH-12": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-04-26 11:32:21"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\mechanics\\test_tracker.md::MECH-13": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-04-26 11:32:21"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\mechanics\\test_tracker.md::MECH-14": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-04-26 11:32:21"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\mechanics\\test_tracker.md::MECH-15": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-04-26 11:32:21"
     }
   }
 }

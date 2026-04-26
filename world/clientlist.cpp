@@ -96,7 +96,6 @@ static uint16 GetMulticlassBitsOrBase(uint32 character_id, uint8 base_class_id)
 	}
 
 	uint16 bits = static_cast<uint16>(Strings::ToUnsignedInt(raw, base_bit) & 0xFFFF);
-	bits |= base_bit;
 	return bits;
 }
 

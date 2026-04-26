@@ -856,7 +856,7 @@ class ServerManagerApp(tk.Tk):
             textvariable=self.test_filter_var,
             state="readonly",
             width=12,
-            values=["All", "Not Run", "In Progress", "Pass", "Fail"],
+            values=["All"] + self._test_status_values(),
         )
         self.test_filter_combo.grid(row=0, column=1, padx=(5, 10), sticky="w")
         self.test_filter_combo.bind("<<ComboboxSelected>>", lambda _e: self._refresh_test_list())
@@ -881,6 +881,7 @@ class ServerManagerApp(tk.Tk):
         ttk.Button(jump_row, text="Go", command=self.jump_to_test_id).pack(side="left", padx=2)
         ttk.Button(jump_row, text="Next Unrun", command=self.select_next_unrun_test).pack(side="left", padx=8)
         ttk.Button(jump_row, text="Next Fail", command=self.select_next_failed_test).pack(side="left", padx=2)
+        ttk.Button(jump_row, text="Next Blocked", command=self.select_next_blocked_test).pack(side="left", padx=2)
 
         ttk.Label(left, textvariable=self.test_progress_var).grid(row=2, column=0, sticky="w", padx=5, pady=(0, 2))
         ttk.Label(left, text="Tip: drag the divider between Tests and Test Details to resize both panes.").grid(
@@ -914,6 +915,7 @@ class ServerManagerApp(tk.Tk):
         actions.grid(row=1, column=0, sticky="ew", padx=6, pady=(0, 6))
         ttk.Button(actions, text="Mark Not Run", command=lambda: self.set_selected_test_status("Not Run")).pack(side="left", padx=(0, 4))
         ttk.Button(actions, text="Mark In Progress", command=lambda: self.set_selected_test_status("In Progress")).pack(side="left", padx=4)
+        ttk.Button(actions, text="Mark Blocked", command=lambda: self.set_selected_test_status("Blocked")).pack(side="left", padx=4)
         ttk.Button(actions, text="Mark Pass", command=lambda: self.set_selected_test_status("Pass")).pack(side="left", padx=4)
         ttk.Button(actions, text="Mark Fail", command=lambda: self.set_selected_test_status("Fail")).pack(side="left", padx=4)
 
@@ -930,6 +932,7 @@ class ServerManagerApp(tk.Tk):
         note_actions.grid(row=1, column=0, sticky="e", padx=5, pady=(0, 5))
         ttk.Button(note_actions, text="Save Note", command=self.save_selected_test_notes).pack(side="left", padx=3)
         ttk.Button(note_actions, text="Copy Feedback", command=self.copy_selected_test_feedback).pack(side="left", padx=3)
+        ttk.Button(note_actions, text="Copy Agent Digest", command=self.copy_test_agent_digest).pack(side="left", padx=3)
 
         content.add(left, weight=2)
         content.add(right, weight=4)
@@ -1035,6 +1038,9 @@ class ServerManagerApp(tk.Tk):
         return 0.40
 
     # ==================== Test Manager ====================
+
+    def _test_status_values(self):
+        return ["Not Run", "In Progress", "Blocked", "Pass", "Fail"]
 
     def _load_test_manager_state(self):
         try:
@@ -1275,12 +1281,64 @@ class ServerManagerApp(tk.Tk):
             messagebox.showerror("Error", f"Failed to open tracker file: {e}")
 
     def _status_from_markdown_section(self, text):
-        lowered = text.lower()
+        status_line = ""
+        for line in text.splitlines():
+            if line.strip().lower().startswith("**status**:"):
+                status_line = line
+                break
+        if not status_line:
+            return None
+
+        for status in self._test_status_values():
+            pattern = r"\[[xX]\]\s*" + re.escape(status)
+            if re.search(pattern, status_line, re.IGNORECASE):
+                return status
+
+        # Backward compatibility with the old Pass/Fail-only checkbox line.
+        lowered = status_line.lower()
         if "[x] pass" in lowered:
             return "Pass"
         if "[x] fail" in lowered:
             return "Fail"
         return None
+
+    def _notes_from_markdown_section(self, text):
+        start_marker = "<!-- TEST_MANAGER_NOTES_START -->"
+        end_marker = "<!-- TEST_MANAGER_NOTES_END -->"
+        if start_marker in text and end_marker in text:
+            start = text.find(start_marker) + len(start_marker)
+            end = text.find(end_marker, start)
+            block = text[start:end].strip()
+            if block.startswith("```"):
+                lines = block.splitlines()
+                if lines and lines[0].startswith("```"):
+                    lines = lines[1:]
+                if lines and lines[-1].strip() == "```":
+                    lines = lines[:-1]
+                block = "\n".join(lines).strip()
+            return block
+
+        lines = text.splitlines()
+        notes_idx = next((i for i, line in enumerate(lines) if line.strip().lower().startswith("**notes**:")), -1)
+        if notes_idx < 0:
+            return ""
+
+        note_line = lines[notes_idx].strip()
+        note_text = re.sub(r"^\*\*Notes\*\*:\s*", "", note_line, flags=re.IGNORECASE).strip()
+        if set(note_text) == {"_"}:
+            note_text = ""
+        remainder = []
+        for line in lines[notes_idx + 1:]:
+            stripped = line.strip()
+            if stripped == "---" or stripped.startswith("## "):
+                break
+            if stripped:
+                remainder.append(line.rstrip())
+        parts = []
+        if note_text and "________________" not in note_text:
+            parts.append(note_text)
+        parts.extend(remainder)
+        return "\n".join(parts).strip()
 
     def _parse_tests_from_markdown(self, text):
         tests = []
@@ -1318,12 +1376,12 @@ class ServerManagerApp(tk.Tk):
                 "category_code": category_code,
                 "category_display": category_display,
                 "md_status": self._status_from_markdown_section(section_display),
+                "md_notes": self._notes_from_markdown_section(section_display),
             })
         return tests
 
     def _normalize_test_status(self, status):
-        allowed = {"Not Run", "In Progress", "Pass", "Fail"}
-        return status if status in allowed else "Not Run"
+        return status if status in set(self._test_status_values()) else "Not Run"
 
     def _get_test_outcome(self, test_id):
         entry = self.test_outcomes.get(self._make_test_outcome_key(test_id))
@@ -1366,17 +1424,18 @@ class ServerManagerApp(tk.Tk):
             self.test_tracker_summary_var.set("Tracker: (none)")
             return
 
-        counts = {"Not Run": 0, "In Progress": 0, "Pass": 0, "Fail": 0}
+        counts = {status: 0 for status in self._test_status_values()}
         for record in self.test_records:
             status = self._get_test_outcome(record["id"])["status"]
             counts[status] = counts.get(status, 0) + 1
 
         next_unrun = next((r["id"] for r in self.test_records if self._get_test_outcome(r["id"])["status"] == "Not Run"), "-")
         next_fail = next((r["id"] for r in self.test_records if self._get_test_outcome(r["id"])["status"] == "Fail"), "-")
+        next_blocked = next((r["id"] for r in self.test_records if self._get_test_outcome(r["id"])["status"] == "Blocked"), "-")
 
         state = self.current_tracker_metadata.get("state", "active").upper()
         self.test_tracker_summary_var.set(
-            f"Tracker: {self._display_path(tracker_path)} [{state}]  |  Total: {len(self.test_records)}  Pass: {counts['Pass']}  Fail: {counts['Fail']}  In Progress: {counts['In Progress']}  Not Run: {counts['Not Run']}  |  Next Unrun: {next_unrun}  Next Fail: {next_fail}"
+            f"Tracker: {self._display_path(tracker_path)} [{state}]  |  Total: {len(self.test_records)}  Pass: {counts['Pass']}  Fail: {counts['Fail']}  Blocked: {counts['Blocked']}  In Progress: {counts['In Progress']}  Not Run: {counts['Not Run']}  |  Next Unrun: {next_unrun}  Next Fail: {next_fail}  Next Blocked: {next_blocked}"
         )
 
     def reload_tests_from_tracker(self, selected_test_id=None, quiet=False):
@@ -1397,13 +1456,11 @@ class ServerManagerApp(tk.Tk):
             self.test_records = self._parse_tests_from_markdown(content)
             self._migrate_legacy_outcomes_for_tracker()
             for record in self.test_records:
-                outcome_key = self._make_test_outcome_key(record["id"])
-                if record.get("md_status") and outcome_key not in self.test_outcomes:
-                    self.test_outcomes[outcome_key] = {
-                        "status": record["md_status"],
-                        "notes": "",
-                        "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    }
+                self.test_outcomes[self._make_test_outcome_key(record["id"])] = {
+                    "status": self._normalize_test_status(record.get("md_status") or "Not Run"),
+                    "notes": record.get("md_notes", ""),
+                    "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                }
             self._save_test_manager_state()
             self._refresh_category_filter_options()
             self._refresh_test_list()
@@ -1451,19 +1508,20 @@ class ServerManagerApp(tk.Tk):
         marker = {
             "Not Run": "  ",
             "In Progress": "~ ",
+            "Blocked": "B ",
             "Pass": "P ",
             "Fail": "F ",
         }.get(status, "  ")
         return f"{marker}[{record['id']}] {record['title']} ({record.get('category_code', '?')})"
 
     def _refresh_test_progress(self):
-        counts = {"Not Run": 0, "In Progress": 0, "Pass": 0, "Fail": 0}
+        counts = {status: 0 for status in self._test_status_values()}
         for record in self.test_records:
             status = self._get_test_outcome(record["id"])["status"]
             counts[status] = counts.get(status, 0) + 1
         total = len(self.test_records)
         self.test_progress_var.set(
-            f"Total: {total}  |  Pass: {counts['Pass']}  Fail: {counts['Fail']}  In Progress: {counts['In Progress']}  Not Run: {counts['Not Run']}"
+            f"Total: {total}  |  Pass: {counts['Pass']}  Fail: {counts['Fail']}  Blocked: {counts['Blocked']}  In Progress: {counts['In Progress']}  Not Run: {counts['Not Run']}"
         )
         self._refresh_tracker_summary()
 
@@ -1550,9 +1608,11 @@ class ServerManagerApp(tk.Tk):
 
     def _format_status_checkbox_line(self, status):
         normalized = self._normalize_test_status(status)
-        pass_checked = "x" if normalized == "Pass" else " "
-        fail_checked = "x" if normalized == "Fail" else " "
-        return f"**Status**: [{pass_checked}] Pass  [{fail_checked}] Fail"
+        parts = []
+        for option in self._test_status_values():
+            checked = "x" if normalized == option else " "
+            parts.append(f"[{checked}] {option}")
+        return "**Status**: " + "  ".join(parts)
 
     def _apply_outcome_to_section(self, section_raw, status, notes):
         newline = "\r\n" if "\r\n" in section_raw else "\n"
@@ -1633,7 +1693,15 @@ class ServerManagerApp(tk.Tk):
             return
         normalized = self._normalize_test_status(status)
         outcome = self._get_test_outcome(record["id"])
+        current_notes = self.test_notes_text.get("1.0", "end").strip() if hasattr(self, "test_notes_text") else outcome.get("notes", "")
+        if normalized in {"Pass", "Fail", "Blocked"} and not current_notes:
+            if not messagebox.askyesno(
+                "Missing Test Evidence",
+                f"{record['id']} has no notes/evidence.\n\nContinue marking it {normalized} anyway?",
+            ):
+                return
         outcome["status"] = normalized
+        outcome["notes"] = current_notes
         outcome["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self._set_test_outcome(record["id"], outcome)
         self._save_test_manager_state()
@@ -1675,6 +1743,51 @@ class ServerManagerApp(tk.Tk):
         self.update_idletasks()
         self.log(f"Copied feedback for {record['id']} to clipboard")
 
+    def copy_test_agent_digest(self):
+        tracker_rel = self._display_path(self.test_tracker_path_var.get())
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        counts = {status: 0 for status in self._test_status_values()}
+        buckets = {status: [] for status in self._test_status_values()}
+        evidence_gaps = []
+
+        for record in self.test_records:
+            outcome = self._get_test_outcome(record["id"])
+            status = outcome["status"]
+            counts[status] = counts.get(status, 0) + 1
+            row = f"- `{record['id']}` {record['title']}"
+            notes = (outcome.get("notes") or "").strip()
+            if notes:
+                first_note = notes.splitlines()[0].strip()
+                row += f" -- {first_note}"
+            elif status in {"Pass", "Fail", "Blocked"}:
+                evidence_gaps.append(f"- `{record['id']}` {record['title']} ({status})")
+            buckets.setdefault(status, []).append(row)
+
+        def section(title, rows, limit=10):
+            shown = rows[:limit]
+            if len(rows) > limit:
+                shown.append(f"- ... {len(rows) - limit} more")
+            return [title] + (shown if shown else ["- None"])
+
+        digest = [
+            f"Test Agent Digest - {timestamp}",
+            f"Tracker: {tracker_rel}",
+            f"Counts: Pass {counts['Pass']} | Fail {counts['Fail']} | Blocked {counts['Blocked']} | In Progress {counts['In Progress']} | Not Run {counts['Not Run']}",
+            "",
+        ]
+        digest.extend(section("Failures needing fix/retest:", buckets.get("Fail", [])))
+        digest.append("")
+        digest.extend(section("Blocked validation:", buckets.get("Blocked", [])))
+        digest.append("")
+        digest.extend(section("Ready next:", buckets.get("Not Run", [])))
+        digest.append("")
+        digest.extend(section("Evidence gaps:", evidence_gaps))
+
+        self.clipboard_clear()
+        self.clipboard_append("\n".join(digest))
+        self.update_idletasks()
+        self.log("Copied test agent digest to clipboard")
+
     def select_next_unrun_test(self):
         if not self.test_records:
             return
@@ -1702,6 +1815,20 @@ class ServerManagerApp(tk.Tk):
                 self.test_listbox.see(display_idx)
                 return
         messagebox.showinfo("Next Fail", "No 'Fail' tests in the current filter.")
+
+    def select_next_blocked_test(self):
+        if not self.test_records:
+            return
+        for display_idx, src_idx in enumerate(self._filtered_test_indexes):
+            record = self.test_records[src_idx]
+            if self._get_test_outcome(record["id"])["status"] == "Blocked":
+                self.test_listbox.selection_clear(0, "end")
+                self.test_listbox.selection_set(display_idx)
+                self.test_listbox.activate(display_idx)
+                self.on_test_selected()
+                self.test_listbox.see(display_idx)
+                return
+        messagebox.showinfo("Next Blocked", "No 'Blocked' tests in the current filter.")
 
     # ==================== Database Methods ====================
 

@@ -41,6 +41,7 @@ Use this section when acting as project owner or manager.
 
 | Decision | Current Recommendation | Blocks |
 |----------|------------------------|--------|
+| Which THJ gaps are must-port | Run `THJ-GAP-00` to establish method, then `THJ-GAP-01` to `THJ-GAP-04` by subsystem | Implementation priority, release scope |
 | Removed-class AA entitlement policy | Validate current behavior first with `E-02`, then choose soft-lock vs refund/reset | `MC-VAL-02`, release readiness |
 | Player-facing `/pet assist` command/UI | Keep as explicit THJ delta until pet validation proves server behavior stable | Mechanics parity closure |
 | AA level requirement removal | Defer research until multiclass validation pass completes unless AA tests fail | Future AA design work |
@@ -50,10 +51,11 @@ Use this section when acting as project owner or manager.
 
 | Packet | Priority | Role | Summary |
 |--------|----------|------|---------|
-| `MC-VAL-01` | P1 | Validator | Validate latest multiclass item, augment, XP, and inventory-label fixes |
-| `MC-VAL-02` | P1 | Validator + Manager | Validate AA runtime behavior and decide removed-class AA policy |
-| `MECH-PET-01` | P1 | Validator | Validate pet/familiar parity and re-check failed `MECH-11` |
-| `TOOL-DLL-01` | P1 | Validator / Implementer | Validate DLL build/copy and probe callback reliability |
+| `THJ-GAP-00` | P1 | Explorer / Doc Steward | Establish current THJ comparison inputs and gap triage method |
+| `THJ-GAP-01` | P1 | Explorer | Identify meaningful multiclass core gaps from THJ |
+| `THJ-GAP-02` | P1 | Explorer | Identify combat, pet, familiar, proc, and taunt gaps from THJ |
+| `THJ-GAP-03` | P1 | Explorer | Identify Bazaar, quest, waypoint, and script API gaps from THJ |
+| `THJ-GAP-04` | P1 | Explorer | Identify DB, rules, opcode, schema, and infrastructure gaps from THJ |
 
 ---
 
@@ -63,6 +65,8 @@ Use this section when acting as project owner or manager.
 
 | Date | Area | Accomplishments | Next Steps |
 |------|------|-----------------|------------|
+| 2026-04-25 | THJ gap discovery | Reprioritized the project board so source-level THJ gap identification is now the top priority. Added [THJ_GAP_REGISTER.md](THJ_GAP_REGISTER.md) and new `THJ-GAP-*` explorer packets to classify missing THJ behavior before assigning more implementation. | Assign `THJ-GAP-00` first if the comparison inputs need review, otherwise assign `THJ-GAP-01` for multiclass core gap triage. Runtime validation packets remain parked until client access is available or gap triage says they are needed. |
+| 2026-04-25 | Multiclass validation | Ran packet `MC-VAL-01` through the assigned prep work: `zone`, `world`, and EQ core DLL all built cleanly on the current branch, and the multiclass tracker was updated for `I-01` to `I-07`, `X-04`, and `D-04`. Validation could not proceed past build evidence because there is no active RoF2 client process and no built headless client binary in this environment. | Unblock a live RoF2 client session or provide a controllable headless-client path, then rerun `MC-VAL-01` before opening new multiclass implementation work. |
 | 2026-04-25 | Project management | Added a management layer with an operating model, workstream assignment board, and agent handoff protocol so work can be assigned by packet ID instead of broad project area. Dashboard now has a manager-facing decision view and ready-to-assign packet list. | Use [PROJECT_WORKSTREAMS.md](PROJECT_WORKSTREAMS.md) for assignment, start with `MC-VAL-01`, `MC-VAL-02`, `MECH-PET-01`, or `TOOL-DLL-01`, and require agents to follow [AGENT_HANDOFF.md](AGENT_HANDOFF.md). |
 | 2026-04-20 | Pets / Mechanics validation | Resolved the latest uncommitted pet regressions from review: removed the stale legacy taunt overwrite during pet restore, tightened familiar lookup/cleanup so variant familiar spells cannot coexist or orphan each other, and limited `/pet assist` retargeting to real owner actions instead of passive target selection. Confirmed `zone` builds cleanly on the stable non-parallel CMake/MSBuild path and updated server-manager build behavior to use that same invocation. | Run `MECH-07` to `MECH-15`, with special focus on `MECH-11`, `MECH-14`, and `MECH-15`, then update the mechanics tracker from actual in-game evidence. |
 | 2026-04-21 | Pets / Mechanics validation | Addressed the uncommitted pet review findings: familiars now carry normal ownership semantics for pet-aware server paths, familiar buff fade now dismisses the matching familiar directly, and the pet taunt parity patch was narrowed back to the engaged target instead of force-peeling nearby mobs. Added dedicated mechanics cases for familiar cleanup and ownership validation. | Re-run the expanded pet mechanics pack `MECH-07` to `MECH-13`, with special attention to `MECH-11`, `MECH-12`, and `MECH-13`, then update tracker status from actual in-game results. |
@@ -93,12 +97,42 @@ Use this section when acting as project owner or manager.
 
 ### HIGH PRIORITY
 
-#### 1. Multiclass System (Active Development)
-- **Status**: Core APIs implemented, testing in progress
-- **THJ Parity**: 36 same / 66 differ / 10 THJ-only files
-- **Recent Work**: April multiclass cleanup closed compatibility-class leakage, class-removal spell cleanup, passive AA gating, augment gating, XP-cap drift, guild refresh projection, and inventory class-label projection.
-- **Today Goal**: Close the remaining practical multiclass gaps that block normal gameplay validation.
+#### 1. THJ Gap Discovery (Active Priority)
+- **Status**: Gap triage now top priority
+- **THJ Parity Baseline**: Multiclass reference report currently shows 36 same / 66 differ / 10 THJ-only files; this is an input, not a final gap list.
+- **Recent Work**: Added [THJ_GAP_REGISTER.md](THJ_GAP_REGISTER.md) and `THJ-GAP-*` work packets so agents can classify missing THJ behavior by subsystem.
+- **Today Goal**: Identify which THJ deltas are must-port, validate-first, design decisions, intentional divergences, or ignorable.
 - **Where We Stand**:
+  - Runtime validation is partially blocked by lack of live RoF2/headless client access.
+  - Source-level THJ comparison can proceed now using `extras/THJServer/`, `tools/output/multiclass_references.csv`, and [game_design/multiclass/PORT_CHECKLIST.md](game_design/multiclass/PORT_CHECKLIST.md).
+  - Existing validation packets stay useful, but they should be driven by gap triage instead of broad assumptions.
+- **Next Concrete Work**: Assign `THJ-GAP-00` to verify comparison inputs and method, then `THJ-GAP-01` for multiclass core gap triage.
+- **After That**: Assign `THJ-GAP-02`, `THJ-GAP-03`, and `THJ-GAP-04`; convert meaningful gaps into implementation, validation, or design-decision packets.
+- **Design Decision Still Needed**: what level of THJ parity we actually want for each gap class; not every diff should be ported.
+- **Primary Files / Inputs**:
+  - `extras/THJServer/` — reference implementation
+  - `tools/output/multiclass_references.csv` — reference hit report
+  - [THJ_GAP_REGISTER.md](THJ_GAP_REGISTER.md) — gap register and classifications
+  - [game_design/multiclass/PORT_CHECKLIST.md](game_design/multiclass/PORT_CHECKLIST.md) — current parity checklist
+- **Details**: [PROJECT_WORKSTREAMS.md](PROJECT_WORKSTREAMS.md)
+- **Gap Register**: [THJ_GAP_REGISTER.md](THJ_GAP_REGISTER.md)
+
+##### THJ Gap Immediate Next Steps
+1. Run `THJ-GAP-00` to confirm the reference inputs and seed the first high-value gap candidates.
+2. Run `THJ-GAP-01` for multiclass core: client class state, AA, spells, skills, item gates, world presentation.
+3. Run `THJ-GAP-02` for mechanics and pets: assist, familiar, command persistence, proc/taunt behavior.
+4. Run `THJ-GAP-03` for Bazaar, quests, waypoint, and script API gaps.
+5. Run `THJ-GAP-04` for DB, rules, opcode, and infrastructure gaps.
+6. Convert only meaningful gaps into implementation or validation packets.
+
+#### 2. Multiclass System (Parked Validation Queue)
+- **Status**: Core APIs implemented; runtime validation partially blocked by client access
+- **THJ Parity**: Pending gap triage from `THJ-GAP-01`
+- **Recent Work**: April multiclass cleanup closed compatibility-class leakage, class-removal spell cleanup, passive AA gating, augment gating, XP-cap drift, guild refresh projection, and inventory class-label projection.
+- **Today Goal**: Preserve validation queue and use it after gap triage or client access unblocks runtime checks.
+- **Where We Stand**:
+  - Fresh `zone`, `world`, and DLL builds have succeeded.
+  - Runtime multiclass validation cannot be completed objectively without live RoF2 or headless client access.
   - Phase 2 Spells is mostly complete; mana bar/UI sync appears to have both server and DLL support and now needs direct validation rather than broad implementation.
   - Phase 3 AA now has purchase, activation, window visibility, dynamic timers, and passive ownership gating implemented in code; the next step is manual validation.
   - Phase 4 Skills is mostly complete but still needs skills-window visibility verification.
@@ -145,7 +179,7 @@ Use this section when acting as project owner or manager.
 5. **Regression and Tracker Sync**
   - Run `#test smoke`, targeted multiclass checks, and update tracker statuses and dashboard session log with results.
 
-#### 2. DEX Migration Follow-Ups
+#### 3. DEX Migration Follow-Ups
 - **Status**: New DEX precision system active (`Combat:UseNewDexFormulas`)
 - **Blocked Items**:
   - Slay Undead (paladin AA) — bypassed in new path
@@ -155,7 +189,7 @@ Use this section when acting as project owner or manager.
 - **Next**: Playtest DEX crit/proc/twincast divisors, decide on `ENABLE_DEX_DOT_TWINCAST`
 - **Details**: [TODO_DEX_MIGRATION.md](TODO_DEX_MIGRATION.md)
 
-#### 3. Infinite Item Progression
+#### 4. Infinite Item Progression
 - **Status**: Steps 1-11 complete (iLevel, Tiers, Power Slot XP, Essence/Salvage, Consume AAs, Ghost Copy, Drop Tiers, Vendors, Aug Merge, Zone/Boss Augs, Infusion)
 - **Next**: Step 12 - DLL Visual Polish
 - **Details**: [game_design/infinite_progression/IMPLEMENTATION_STEPS.md](game_design/infinite_progression/IMPLEMENTATION_STEPS.md)
@@ -163,7 +197,7 @@ Use this section when acting as project owner or manager.
 
 ### MEDIUM PRIORITY
 
-#### 4. Combat Mechanics Parity
+#### 5. Combat Mechanics Parity
 - **Status**: THJ-aligned proc behavior ported
 - **Focus Areas**: 2H/Bow procs, Pet/NPC weapon procs
 - **Open THJ Delta TODO**: server-side pet assist behavior is now ported, but the player-facing `/pet assist` command/UI surface is still not exposed in the live tree. Either add the command path or deliberately decide to keep assist as an internal/default-only behavior.
@@ -171,21 +205,21 @@ Use this section when acting as project owner or manager.
 - **Current Pet Focus**: `MECH-11` is still marked failed in tracker history, and the latest uncommitted fix set added explicit familiar, restore-precedence, and passive-retarget regression coverage (`MECH-12` to `MECH-15`). Prioritize those before calling the pet pass stable.
 - **Testing**: [game_design/mechanics/TEST_TRACKER.md](game_design/mechanics/TEST_TRACKER.md)
 
-#### 5. Class-Specific Abilities
+#### 6. Class-Specific Abilities
 - **Status**: Custom warrior AAs (Heroic Throw, Colossal Smash) implemented
 - **Testing**: [game_design/classes/TEST_TRACKER.md](game_design/classes/TEST_TRACKER.md)
 
-#### 6. Quest/Waypoint System
+#### 7. Quest/Waypoint System
 - **Status**: THJ Bazaar + waypoint foundation complete
 - **Testing**: [game_design/quests/TEST_TRACKER.md](game_design/quests/TEST_TRACKER.md)
 
 ### LOWER PRIORITY
 
-#### 7. QoL Features
+#### 8. QoL Features
 - **Items**: Bazaar and Back AA, Waypoint UI POCs, SIDL tool windows
 - **Testing**: [game_design/qol/TEST_TRACKER.md](game_design/qol/TEST_TRACKER.md)
 
-#### 8. Stat Implementation Plans
+#### 9. Stat Implementation Plans
 - **Status**: DEX active, others in design
 - **Details**:
   - [game_design/stats/DEX_IMPLEMENTATION_PLAN.md](game_design/stats/DEX_IMPLEMENTATION_PLAN.md)
@@ -202,6 +236,7 @@ Use this section when acting as project owner or manager.
 
 | Domain | Status | Tests Passed | Last Updated |
 |--------|--------|--------------|--------------|
+| **THJ Gap Discovery** | 🟡 Active | Gap register started; `THJ-GAP-*` packets ready | 2026-04-25 |
 | **Multiclass** | 🟡 Active Dev | Auto: 2/51, Partial: 9/51 | 2026-04-21 |
 | **Infinite Progression** | 🟢 Steps 1-11 Done | — | 2026-03-06 |
 | **Operations** | 🟢 Active | — | 2026-02-28 |
@@ -236,6 +271,7 @@ Legend: 🟢 Stable/Complete | 🟡 Active/In Progress | 🔴 Blocked
 | [PROJECT_MANAGEMENT.md](PROJECT_MANAGEMENT.md) | Project operating model and manager review rules |
 | [PROJECT_WORKSTREAMS.md](PROJECT_WORKSTREAMS.md) | Executive priority board and assignable work packets |
 | [AGENT_HANDOFF.md](AGENT_HANDOFF.md) | Agent assignment, evidence, and closeout protocol |
+| [THJ_GAP_REGISTER.md](THJ_GAP_REGISTER.md) | THJ gap classification register and triage workflow |
 | [IMPLEMENTATION_PLAN.md](game_design/multiclass/IMPLEMENTATION_PLAN.md) | Multiclass master technical document |
 | [PORT_CHECKLIST.md](game_design/multiclass/PORT_CHECKLIST.md) | THJServer parity file-by-file |
 | [IMPLEMENTATION_CHECKLIST.md](game_design/abilities/IMPLEMENTATION_CHECKLIST.md) | Spell/Discipline/AA implementation guide |

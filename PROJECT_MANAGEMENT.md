@@ -118,8 +118,8 @@ The project is not missing detailed work. It is missing assignment discipline. T
 
 Current management stance:
 
-- Multiclass is the top active workstream and should stay validation-first.
-- Pet/mechanics parity is second because it has a known failed tracker case and recent unvalidated fixes.
-- Tooling/DLL validation supports both multiclass and QoL, so it should be assigned when it unblocks those tracks.
-- Infinite progression, DEX, and broader QoL should not interrupt active multiclass/mechanics validation unless you intentionally reprioritize them.
-
+- THJ gap discovery is the top active workstream. Classify gaps before assigning more broad implementation.
+- Runtime validation remains important, but some cases are parked until live RoF2 or headless-client access is available.
+- Pet/mechanics parity stays high priority because it has a known failed tracker case and visible THJ UX delta.
+- Tooling/DLL validation supports both gap confirmation and runtime validation, so it should be assigned when it unblocks those tracks.
+- Infinite progression, DEX, and broader QoL should not interrupt THJ gap discovery unless you intentionally reprioritize them.

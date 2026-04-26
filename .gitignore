@@ -84,3 +84,4 @@ extras/eq-core-dll-main/msbuild_output.log
 /shared/
 /export/
 /__pycache__
+/.server_manager_test_state.json

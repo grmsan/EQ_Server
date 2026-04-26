@@ -39,7 +39,8 @@ For each area that is test-ready:
    - `Tracker Area`
    - `Tracker State` (`Active`, `WIP`, or `Concept`)
 3. Use stable IDs. Prefer area prefixes for non-core domains (`CL-01`, `MECH-01`, `QST-01`, `QOL-01`, `TOOL-01`, `IP-101`, etc.).
-4. Keep each case structured as:
+4. Keep cases scenario-level. One case should validate a meaningful player or operator workflow, not every tiny input variant.
+5. Keep each case structured as:
    - `Goal`
    - `Steps`
    - `Expected`
@@ -85,3 +86,15 @@ Use the management docs when work needs to be assigned to another agent or revie
 - **[AGENT_HANDOFF.md](../AGENT_HANDOFF.md)** — required agent instructions, evidence template, and closeout template.
 
 Trackers remain the validation source of truth. Work packets point agents at the right tracker cases and define the scope, done criteria, and update requirements.
+
+## Status Values
+
+Use one checked value per case:
+
+- `Not Run`: Ready but not executed in the current build.
+- `In Progress`: Currently assigned or partially validated.
+- `Blocked`: Cannot be objectively validated because of environment, data, client, or design dependency.
+- `Pass`: Expected behavior is confirmed with objective evidence.
+- `Fail`: Behavior mismatches expected results or produces a regression.
+
+Do not mark environment gaps as `Fail`. Mark them `Blocked` and include the immediate unblock step in `Notes`.

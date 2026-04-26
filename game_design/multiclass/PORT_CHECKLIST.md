@@ -1,6 +1,6 @@
 # THJServer Multiclass Port Checklist
 
-**Last Updated:** 2026-04-21
+**Last Updated:** 2026-04-25
 **Master Technical Document:** [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
 **Test Tracker:** [TEST_TRACKER.md](TEST_TRACKER.md)
 
@@ -166,20 +166,20 @@ Files that control item class restrictions.
     - seeds spell, db_str text, `aa_ability`, and `aa_ranks` entries for `Bazaar and Back`.
 
 ## Work Order (recommended)
-The core multiclass port is now validation-first. Do not start broad file-by-file porting unless a tracker case fails or a specific THJ delta is chosen intentionally.
+Project priority has shifted to source-level THJ gap discovery. Use this checklist as a triage input, not a porting mandate.
 
-1. **Latest-gap validation**
-   - Build `zone`, then validate `I-01` to `I-07` and `X-04`.
-2. **Presentation validation**
-   - Build `world` and the DLL, then validate `D-01` to `D-04`, `B-08`, and `G-01`.
-3. **AA validation and policy**
-   - Validate `A-01` to `A-05`, then decide `E-02` removed-class AA entitlement behavior.
-4. **Caster, skills, and discipline validation**
-   - Validate `C-03`, `E-01`, `K-01` to `K-05`, and `S-07`.
-5. **Focused THJ diff review**
-   - Use the checklist below only for failed cases or explicit design deltas, then patch the smallest affected code path.
-6. **Automation follow-up**
-   - Convert stable manual repros into `#test` coverage where practical.
+1. **Inventory and classify gaps**
+   - Start with [THJ_GAP_REGISTER.md](../../THJ_GAP_REGISTER.md) and `THJ-GAP-00`.
+2. **Core multiclass gap pass**
+   - Run `THJ-GAP-01` over the high-priority multiclass files below.
+3. **Mechanics/pet gap pass**
+   - Run `THJ-GAP-02` over pet, familiar, combat, proc, and taunt-related diffs.
+4. **Quest/script/API gap pass**
+   - Run `THJ-GAP-03` over Bazaar, waypoint, Lua, Perl, quest, plugin, and SQL/data surfaces.
+5. **Infrastructure gap pass**
+   - Run `THJ-GAP-04` over DB manifests, schema, rules, opcodes, and tooling.
+6. **Convert only meaningful gaps**
+   - Each real gap should become one implementation, validation, or design-decision packet. Do not port a file just because it differs.
 
 ## Key Design Notes (Current Assumptions)
 - `character_data.class` is a single owned compatibility class for stock packet/client paths; authoritative membership is persisted in `data_buckets` under `key='GestaltClasses'`.

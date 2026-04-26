@@ -87,7 +87,10 @@ enum HookTag : LONG {
 	Hook_IsSpellcaster3 = 9,
 	Hook_CanStartMemming = 10,
 	Hook_GetSpellLevelNeeded = 11,
-	Hook_GetPcSkillLimit = 12
+	Hook_GetPcSkillLimit = 12,
+	Hook_HasSkill = 13,
+	Hook_SkillMgrIsAvailable = 14,
+	Hook_SkillMgrGetSkillCap = 15
 };
 
 static volatile LONG g_last_hook_tag = Hook_None;
@@ -2557,6 +2560,33 @@ static volatile LONG s_spell_level_call_count = 0;
 // Deduplication: track unique (RVA, spell_id, class, native, best) combos we've already logged
 static std::set<uint64_t> s_logged_spell_level_combos;
 
+static int GetBestSpellLevelForEffectiveClasses(PSPELL spell, uint32_t effectiveMask)
+{
+	if (!spell || effectiveMask == 0) {
+		return 255;
+	}
+
+	int bestLevel = 255;
+	__try {
+		for (int i = 0; i < 16; ++i) {
+			const uint16_t classBit = (1u << i);
+			if ((effectiveMask & classBit) == 0) {
+				continue;
+			}
+
+			const int lvl = static_cast<int>(spell->Level[i]);
+			if (lvl > 0 && lvl < 255 && lvl < bestLevel) {
+				bestLevel = lvl;
+			}
+		}
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		return 255;
+	}
+
+	return bestLevel;
+}
+
 DETOUR_TRAMPOLINE_EMPTY(int __fastcall EQSpell_GetSpellLevelNeeded_Tramp(void*, void*, int));
 int __fastcall EQSpell_GetSpellLevelNeeded_Detour(void* This, void* edx, int classId)
 {
@@ -2601,10 +2631,11 @@ int __fastcall EQSpell_GetSpellLevelNeeded_Detour(void* This, void* edx, int cla
 
 	// Calculate best level among owned classes (needed for both filtering and override decisions)
 	int bestLevel = 255;
-	if (have_levels && isMulticlassUsableClassesOverrideEnabled && g_serverUsableClassesMask != 0) {
+	const uint32_t effectiveMask = GetEffectiveUsableClassesMask();
+	if (have_levels && isMulticlassUsableClassesOverrideEnabled && effectiveMask != 0) {
 		for (int i = 0; i < 16; ++i) {
 			uint16_t classBit = (1u << i);
-			if ((g_serverUsableClassesMask & classBit) != 0) {
+			if ((effectiveMask & classBit) != 0) {
 				int lvl = static_cast<int>(levels[i]);
 				if (lvl > 0 && lvl < 255 && lvl < bestLevel) {
 					bestLevel = lvl;
@@ -2627,19 +2658,19 @@ int __fastcall EQSpell_GetSpellLevelNeeded_Detour(void* This, void* edx, int cla
 		if (s_verbose_spell_level_logging) {
 			// VERBOSE MODE: Log every call (for RVA discovery only)
 			LogDebug("[SPELL_LEVEL] RVA=0x%08X spell=%u '%s' class=%d native=%d best=%d mask=0x%04X",
-				ret_rva, spell_id, spell_name, classId, nativeVal, bestLevel, g_serverUsableClassesMask);
+				ret_rva, spell_id, spell_name, classId, nativeVal, bestLevel, effectiveMask);
 		} else {
 			// QUIET MODE: Only log first occurrence per unique (RVA, spell_id, classId, bestLevel) combo
 			uint64_t combo = ((uint64_t)ret_rva << 32) | ((uint64_t)spell_id << 16) | ((uint64_t)classId << 8) | (bestLevel & 0xFF);
 			if (s_logged_spell_level_combos.find(combo) == s_logged_spell_level_combos.end()) {
 				LogDebug("[SPELL_LEVEL] RVA=0x%08X spell=%u '%s' class=%d native=%d best=%d mask=0x%04X (first)",
-					ret_rva, spell_id, spell_name, classId, nativeVal, bestLevel, g_serverUsableClassesMask);
+					ret_rva, spell_id, spell_name, classId, nativeVal, bestLevel, effectiveMask);
 				s_logged_spell_level_combos.insert(combo);
 			}
 		}
 	}
 
-	if (!isMulticlassUsableClassesOverrideEnabled || g_serverUsableClassesMask == 0) {
+	if (!isMulticlassUsableClassesOverrideEnabled || effectiveMask == 0) {
 		return nativeVal;
 	}
 
@@ -2666,6 +2697,36 @@ int __fastcall EQSpell_GetSpellLevelNeeded_Detour(void* This, void* edx, int cla
 	}
 
 	return nativeVal;
+}
+
+static int GetLocalProfileSkillValue(int skillId)
+{
+	if (skillId < 0 || skillId >= 0x64) {
+		return 0;
+	}
+
+	PCHARINFO2 ci2 = nullptr;
+	__try {
+		ci2 = GetCharInfo2();
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		ci2 = nullptr;
+	}
+
+	if (!ci2) {
+		return 0;
+	}
+
+	return static_cast<int>(ci2->Skill[skillId]);
+}
+
+static bool ShouldExposeServerGrantedSkill(int skillId)
+{
+	if (!isMulticlassUsableClassesOverrideEnabled || GetEffectiveUsableClassesMask() == 0) {
+		return false;
+	}
+
+	return GetLocalProfileSkillValue(skillId) > 0;
 }
 
 // Override PcZoneClient::GetPcSkillLimit so the Skills window can show skills that the server has granted
@@ -2695,26 +2756,134 @@ int __fastcall PcZoneClient_GetPcSkillLimit_Detour(void* This, void* edx, int sk
 	}
 
 	// If the server has already given us a non-zero skill value, expose it with a minimal cap.
-	// This makes newly-granted skills visible/usable without needing to reverse engineer full client cap tables.
-	PCHARINFO2 ci2 = nullptr;
-	__try { ci2 = GetCharInfo2(); }
-	__except (EXCEPTION_EXECUTE_HANDLER) { ci2 = nullptr; }
-
-	if (ci2 && skillId >= 0 && skillId < 0x64) {
-		const int skillVal = static_cast<int>(ci2->Skill[skillId]);
-		if (skillVal > 0) {
-			if (isDebugLoggingEnabled) {
-				static std::set<int> s_logged_skills;
-				if (s_logged_skills.find(skillId) == s_logged_skills.end()) {
-					LogDebug("CLIENT_DETOUR stat=PcSkillLimit skill=%d native=0 used=%d mask=0x%04X (first)", skillId, skillVal, (unsigned)(g_serverUsableClassesMask & 0xFFFF));
-					s_logged_skills.insert(skillId);
-				}
+	// This makes newly-granted skills visible/usable without keeping a second class-skill table in the DLL.
+	const int skillVal = GetLocalProfileSkillValue(skillId);
+	if (skillVal > 0) {
+		if (isDebugLoggingEnabled) {
+			static std::set<int> s_logged_skills;
+			if (s_logged_skills.find(skillId) == s_logged_skills.end()) {
+				LogDebug("CLIENT_DETOUR stat=PcSkillLimit skill=%d native=0 used=%d mask=0x%04X (first)", skillId, skillVal, (unsigned)(GetEffectiveUsableClassesMask() & 0xFFFF));
+				s_logged_skills.insert(skillId);
 			}
-			return skillVal;
 		}
+		return skillVal;
 	}
 
 	return nativeCap;
+}
+
+DETOUR_TRAMPOLINE_EMPTY(bool __fastcall CharacterZoneClient_HasSkill_Tramp(void*, void*, int));
+bool __fastcall CharacterZoneClient_HasSkill_Detour(void* This, void* edx, int skillId)
+{
+	g_last_hook_tag = Hook_HasSkill;
+
+	bool nativeVal = false;
+	__try {
+		nativeVal = CharacterZoneClient_HasSkill_Tramp(This, edx, skillId);
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		if (isDebugLoggingEnabled) {
+			LogDebug("CLIENT_DETOUR stat=HasSkill native trampoline faulted; falling back");
+		}
+		nativeVal = false;
+	}
+
+	if (nativeVal || !isMulticlassUsableClassesOverrideEnabled) {
+		return nativeVal;
+	}
+
+	const int skillVal = GetLocalProfileSkillValue(skillId);
+	if (skillVal <= 0 || !ShouldExposeServerGrantedSkill(skillId)) {
+		return nativeVal;
+	}
+
+	if (isDebugLoggingEnabled) {
+		static std::set<int> s_logged_has_skill;
+		if (s_logged_has_skill.find(skillId) == s_logged_has_skill.end()) {
+			s_logged_has_skill.insert(skillId);
+			LogDebug(
+				"CLIENT_DETOUR stat=HasSkill skill=%d native=0 used=1 skill_value=%d mask=0x%04X",
+				skillId,
+				skillVal,
+				(unsigned)(GetEffectiveUsableClassesMask() & 0xFFFF)
+			);
+		}
+	}
+
+	return true;
+}
+
+DETOUR_TRAMPOLINE_EMPTY(bool __fastcall CSkillMgr_IsAvailable_Tramp(void*, void*, int));
+bool __fastcall CSkillMgr_IsAvailable_Detour(void* This, void* edx, int skillId)
+{
+	g_last_hook_tag = Hook_SkillMgrIsAvailable;
+
+	bool nativeVal = false;
+	__try {
+		nativeVal = CSkillMgr_IsAvailable_Tramp(This, edx, skillId);
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		if (isDebugLoggingEnabled) {
+			LogDebug("CLIENT_DETOUR stat=SkillMgrIsAvailable native trampoline faulted; falling back");
+		}
+		nativeVal = false;
+	}
+
+	if (nativeVal || !ShouldExposeServerGrantedSkill(skillId)) {
+		return nativeVal;
+	}
+
+	if (isDebugLoggingEnabled) {
+		static std::set<int> s_logged_available_skills;
+		if (s_logged_available_skills.find(skillId) == s_logged_available_skills.end()) {
+			s_logged_available_skills.insert(skillId);
+			LogDebug(
+				"CLIENT_DETOUR stat=SkillMgrIsAvailable skill=%d native=0 used=1 skill_value=%d mask=0x%04X",
+				skillId,
+				GetLocalProfileSkillValue(skillId),
+				(unsigned)(GetEffectiveUsableClassesMask() & 0xFFFF)
+			);
+		}
+	}
+
+	return true;
+}
+
+DETOUR_TRAMPOLINE_EMPTY(unsigned long __fastcall CSkillMgr_GetSkillCap_Tramp(void*, void*, void*, int, int, int, bool, bool, bool));
+unsigned long __fastcall CSkillMgr_GetSkillCap_Detour(void* This, void* edx, void* character, int level, int classId, int skillId, bool includeItems, bool includeAAs, bool includeBuffs)
+{
+	g_last_hook_tag = Hook_SkillMgrGetSkillCap;
+
+	unsigned long nativeCap = 0;
+	__try {
+		nativeCap = CSkillMgr_GetSkillCap_Tramp(This, edx, character, level, classId, skillId, includeItems, includeAAs, includeBuffs);
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		if (isDebugLoggingEnabled) {
+			LogDebug("CLIENT_DETOUR stat=SkillMgrGetSkillCap native trampoline faulted; falling back");
+		}
+		nativeCap = 0;
+	}
+
+	if (nativeCap > 0 || !ShouldExposeServerGrantedSkill(skillId)) {
+		return nativeCap;
+	}
+
+	const int skillVal = GetLocalProfileSkillValue(skillId);
+	if (isDebugLoggingEnabled) {
+		static std::set<int> s_logged_cap_skills;
+		if (s_logged_cap_skills.find(skillId) == s_logged_cap_skills.end()) {
+			s_logged_cap_skills.insert(skillId);
+			LogDebug(
+				"CLIENT_DETOUR stat=SkillMgrGetSkillCap skill=%d native=0 used=%d mask=0x%04X",
+				skillId,
+				skillVal,
+				(unsigned)(GetEffectiveUsableClassesMask() & 0xFFFF)
+			);
+		}
+	}
+
+	return static_cast<unsigned long>(skillVal);
 }
 
 // ---- Multiclass class name overrides (char select + /who) ----
@@ -3102,25 +3271,41 @@ int __fastcall CSpellBookWnd_CanStartMemming_Detour(void* This, void* edx, int s
 		nativeVal = 0;
 	}
 
+	const uint32_t effectiveMask = GetEffectiveUsableClassesMask();
+	if (!isMulticlassSpellUiOverrideEnabled || effectiveMask == 0) {
+		return nativeVal;
+	}
+
+	PSPELL spell = nullptr;
+	__try {
+		spell = GetSpellByID(static_cast<DWORD>(spellId));
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		spell = nullptr;
+	}
+
+	if (!spell) {
+		return nativeVal;
+	}
+
+	const int bestLevel = GetBestSpellLevelForEffectiveClasses(spell, effectiveMask);
+	const int result = (bestLevel < 255) ? 1 : 0;
+
 	if (isDebugLoggingEnabled) {
 		static std::set<int> s_logged_memming_spells;
 		if (s_logged_memming_spells.find(spellId) == s_logged_memming_spells.end()) {
-			LogDebug("[CAN_START_MEMMING] spellId=%d nativeVal=%d serverMask=0x%04X hasSpellcaster=%d (first)",
-				spellId, nativeVal, g_serverUsableClassesMask,
-				MulticlassHasSpellcastingClass(g_serverUsableClassesMask) ? 1 : 0);
+			LogDebug(
+				"[CAN_START_MEMMING] spellId=%d native=%d best=%d mask=0x%04X result=%d (first)",
+				spellId,
+				nativeVal,
+				bestLevel,
+				(unsigned)(effectiveMask & 0xFFFF),
+				result
+			);
 			s_logged_memming_spells.insert(spellId);
 		}
 	}
 
-	if (!isMulticlassSpellUiOverrideEnabled || g_serverUsableClassesMask == 0) {
-		return nativeVal;
-	}
-
-	// If multiclass has a spellcasting class, allow memorization
-	int result = MulticlassHasSpellcastingClass(g_serverUsableClassesMask) ? 1 : nativeVal;
-	if (isDebugLoggingEnabled && result != nativeVal) {
-		LogDebug("[CAN_START_MEMMING] OVERRIDE spellId=%d native=%d result=%d", spellId, nativeVal, result);
-	}
 	return result;
 }
 
@@ -3204,6 +3389,15 @@ static void InstallServerAuthoritativeStatsDetours_Now()
 		if (PcZoneClient__GetPcSkillLimit) {
 			LogDetourTargetBytes("PcZoneClient__GetPcSkillLimit", (DWORD)PcZoneClient__GetPcSkillLimit);
 		}
+		if (CharacterZoneClient__HasSkill) {
+			LogDetourTargetBytes("CharacterZoneClient__HasSkill", (DWORD)CharacterZoneClient__HasSkill);
+		}
+		if (CSkillMgr__IsAvailable) {
+			LogDetourTargetBytes("CSkillMgr__IsAvailable", (DWORD)CSkillMgr__IsAvailable);
+		}
+		if (CSkillMgr__GetSkillCap) {
+			LogDetourTargetBytes("CSkillMgr__GetSkillCap", (DWORD)CSkillMgr__GetSkillCap);
+		}
 		LogDetourTargetBytes("__GetGaugeValueFromEQ", __GetGaugeValueFromEQ);
 		LogDetourTargetBytes("__GetLabelFromEQ", __GetLabelFromEQ);
 
@@ -3235,6 +3429,15 @@ static void InstallServerAuthoritativeStatsDetours_Now()
 		}
 		if (PcZoneClient__GetPcSkillLimit && isMulticlassUsableClassesOverrideEnabled) {
 			EzDetour((DWORD)PcZoneClient__GetPcSkillLimit, PcZoneClient_GetPcSkillLimit_Detour, PcZoneClient_GetPcSkillLimit_Tramp);
+		}
+		if (CharacterZoneClient__HasSkill && isMulticlassUsableClassesOverrideEnabled) {
+			EzDetour((DWORD)CharacterZoneClient__HasSkill, CharacterZoneClient_HasSkill_Detour, CharacterZoneClient_HasSkill_Tramp);
+		}
+		if (CSkillMgr__IsAvailable && isMulticlassUsableClassesOverrideEnabled) {
+			EzDetour((DWORD)CSkillMgr__IsAvailable, CSkillMgr_IsAvailable_Detour, CSkillMgr_IsAvailable_Tramp);
+		}
+		if (CSkillMgr__GetSkillCap && isMulticlassUsableClassesOverrideEnabled) {
+			EzDetour((DWORD)CSkillMgr__GetSkillCap, CSkillMgr_GetSkillCap_Detour, CSkillMgr_GetSkillCap_Tramp);
 		}
 		InstallUiDetours();
 	}

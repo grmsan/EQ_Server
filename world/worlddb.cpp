@@ -30,6 +30,8 @@
 #include "../common/repositories/criteria/content_filter_criteria.h"
 #include "../common/zone_store.h"
 #include "../common/classes.h"
+#include "../common/skill_caps.h"
+#include "../common/skills.h"
 #include "../common/repositories/character_data_repository.h"
 #include "../common/repositories/character_bind_repository.h"
 #include "../common/repositories/character_material_repository.h"
@@ -182,17 +184,27 @@ void WorldDatabase::GetCharSelectInfo(uint32 account_id, EQApplicationPacket **o
 				}
 			}
 
-			if (!class_ids.empty()) {
-				cse->Class = class_ids.front();
-			}
-			else {
-				cse->Class = e.class_;
+			// Match zone compatibility-class selection for stock-client affordances.
+			// Prefer an owned class that can expose offhand weapon support at this level.
+			uint32 compatibility_class = 0;
+			for (const auto class_id : class_ids) {
+				if (SkillCaps::Instance()->GetSkillCap(
+					static_cast<uint8>(class_id),
+					EQ::skills::SkillDualWield,
+					e.level
+				).cap > 0) {
+					compatibility_class = class_id;
+					break;
+				}
 			}
 
-			// Preserve THJ monk human/iksar display preference.
-			if ((bits & GetPlayerClassBit(Class::Monk)) && (e.race == Race::Human || e.race == Race::Iksar)) {
-				cse->Class = Class::Monk;
+			if (compatibility_class == 0 && !class_ids.empty()) {
+				compatibility_class = class_ids.front();
 			}
+			else if (compatibility_class == 0) {
+				compatibility_class = e.class_;
+			}
+			cse->Class = compatibility_class;
 		}
 		else {
 			cse->Class = e.class_;

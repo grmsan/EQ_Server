@@ -558,6 +558,7 @@ void Client::CompleteConnect()
 		m_pp.classes = Strings::ToInt(GetBucket("GestaltClasses"), GetPlayerClassBit(m_pp.class_));
 		SyncCompatibilityClass(m_pp.classes);
 		m_classes_bits_cache = static_cast<uint32>(m_pp.classes) & 0xFFFF;
+		SyncAvailableMulticlassSkills();
 	}
 
 	// RoF2 + custom DLL: ensure the client gets an initial server-authoritative snapshot (including multiclass bitmask)
@@ -1791,6 +1792,7 @@ void Client::Handle_Connect_OP_ZoneEntry(const EQApplicationPacket *app)
 
 	m_inv.SetGMInventory((bool)m_pp.gm); // set to current gm state for calc
 	m_pp.classes = GetClassesBits();
+	SyncCompatibilityClass(m_pp.classes);
 	CalcBonuses();
 	if (RuleB(Zone, EnableLoggedOffReplenishments) &&
 		time(nullptr) - m_pp.lastlogin >= RuleI(Zone, MinOfflineTimeToReplenishments)) {

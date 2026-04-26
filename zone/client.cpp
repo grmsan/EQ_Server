@@ -3308,6 +3308,34 @@ uint8 Client::GetSkillTrainLevel(EQ::skills::SkillType skill_id)
 	return found ? best : 0;
 }
 
+bool Client::SyncAvailableMulticlassSkills()
+{
+	if (!RuleB(Custom, MulticlassingEnabled)) {
+		return false;
+	}
+
+	bool changed = false;
+	for (int skill = 0; skill <= EQ::skills::HIGHEST_SKILL; ++skill) {
+		auto skill_id = static_cast<EQ::skills::SkillType>(skill);
+		const uint32 raw_skill = GetRawSkill(skill_id);
+
+		if (MaxSkill(skill_id) > 0) {
+			if (raw_skill == 0) {
+				SetSkill(skill_id, 1);
+				changed = true;
+			}
+			continue;
+		}
+
+		if (raw_skill > 0 && !CanHaveSkill(skill_id)) {
+			SetSkill(skill_id, 0);
+			changed = true;
+		}
+	}
+
+	return changed;
+}
+
 uint16 Client::GetMaxSkillAfterSpecializationRules(EQ::skills::SkillType skillid, uint16 maxSkill)
 {
 	uint16 Result = maxSkill;
@@ -13808,6 +13836,19 @@ uint8 Client::ResolveCompatibilityClass(uint32 classes_bits) const
 		return static_cast<uint8>(GetClass());
 	}
 
+	// The stock client still gates some inventory affordances from the single
+	// profile class. Prefer an owned class that exposes offhand weapon affordance
+	// at this level before falling back to the deterministic lowest owned class.
+	for (uint8 class_id = Class::Warrior; class_id <= Class::Berserker; ++class_id) {
+		if ((bits & GetPlayerClassBit(class_id)) == 0) {
+			continue;
+		}
+
+		if (MaxSkill(EQ::skills::SkillDualWield, class_id, GetLevel()) > 0) {
+			return class_id;
+		}
+	}
+
 	for (uint8 class_id = Class::Warrior; class_id <= Class::Berserker; ++class_id) {
 		if (bits & GetPlayerClassBit(class_id)) {
 			return class_id;
@@ -13824,11 +13865,17 @@ void Client::SyncCompatibilityClass(uint32 classes_bits)
 	}
 
 	const uint8 compatibility_class = ResolveCompatibilityClass(classes_bits);
-	if (!EQ::ValueWithin(compatibility_class, 1, 16) || m_pp.class_ == compatibility_class) {
+	if (!EQ::ValueWithin(compatibility_class, 1, 16)) {
+		return;
+	}
+
+	if (m_pp.class_ == compatibility_class) {
+		class_ = compatibility_class;
 		return;
 	}
 
 	m_pp.class_ = compatibility_class;
+	class_ = compatibility_class;
 	if (!CharacterDataRepository::UpdateClass(database, CharacterID(), compatibility_class)) {
 		LogError(
 			"Failed to persist multiclass compatibility class [{}] for [{}] (char_id [{}])",
@@ -13989,13 +14036,7 @@ bool Client::AddExtraClass(uint8 class_id)
 	}
 
 	// Ensure skills/AA/UI are refreshed after changing classes.
-	for (int skill = 0; skill <= EQ::skills::HIGHEST_SKILL; ++skill) {
-		auto skill_id = static_cast<EQ::skills::SkillType>(skill);
-		// Grant a minimal starting value for newly-available skills so they appear and can be used/trained.
-		if (GetRawSkill(skill_id) == 0 && MaxSkill(skill_id, class_id, GetLevel()) > 0) {
-			SetSkill(skill_id, 1);
-		}
-	}
+	SyncAvailableMulticlassSkills();
 
 	CalcBonuses();
 	SendHPUpdate();
@@ -14052,6 +14093,8 @@ bool Client::RemoveExtraClass(uint8 class_id)
 	if (!SetClassesBits(bits)) {
 		return false;
 	}
+
+	SyncAvailableMulticlassSkills();
 
 	if (IsCasting() && IsValidSpell(casting_spell_id) && !IsSpellUsableByCurrentClasses(casting_spell_id, true)) {
 		InterruptSpell();

@@ -188,8 +188,9 @@ Run every active case in this tracker.
 2. Attempt one class-restricted augment before and after adding the qualifying class.
 3. Use one class-restricted click effect that should be allowed by owned class state.
 4. Open a merchant with class-filtered stock before and after class ownership changes.
-5. Confirm one invalid race or unrelated restriction still blocks correctly.
-**Expected**: Owned class state allows valid class-restricted item paths, non-owned classes remain denied, race/other restrictions still apply, and merchant filtering updates from current ownership.
+5. On a Cleric/Monk/Magician or similar mixed-class character, equip a Monk-usable no-required-level weapon into Secondary with an empty offhand.
+6. Confirm one invalid race or unrelated restriction still blocks correctly.
+**Expected**: Owned class state allows valid class-restricted item paths, Monk-owned characters can use the Secondary slot at level 1, non-owned classes remain denied, race/other restrictions still apply, and merchant filtering updates from current ownership.
 **Status**: [x] Not Run  [ ] In Progress  [ ] Blocked  [ ] Pass  [ ] Fail
 **Notes**: ______________________________
 

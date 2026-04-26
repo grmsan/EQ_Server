@@ -992,6 +992,7 @@ public:
 	bool CanHaveSkill(EQ::skills::SkillType skill_id) const;
 	void SetSkill(EQ::skills::SkillType skill_num, uint16 value);
 	void AddSkill(EQ::skills::SkillType skillid, uint16 value);
+	bool SyncAvailableMulticlassSkills();
 	void CheckSpecializeIncrease(uint16 spell_id);
 	void CheckSongSkillIncrease(uint16 spell_id);
 	bool CheckIncreaseSkill(EQ::skills::SkillType skillid, Mob *against_who, int chancemodi = 0);

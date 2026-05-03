@@ -85,6 +85,9 @@ class ServerManagerApp(tk.Tk):
         self.tooling_tracker_default_path = os.path.join(
             os.getcwd(), "game_design", "tooling", "TEST_TRACKER.md"
         )
+        self.inf_prog_tracker_default_path = os.path.join(
+            os.getcwd(), "game_design", "infinite_progression", "TEST_TRACKER.md"
+        )
         self.test_tracker_path_var = tk.StringVar(
             value=self._settings.get(
                 "test_tracker_path",
@@ -92,6 +95,7 @@ class ServerManagerApp(tk.Tk):
             )
         )
         self.test_tracker_picker_var = tk.StringVar(value="")
+        self.test_run_pack_var = tk.StringVar(value="All")
         self.test_show_concepts_var = tk.BooleanVar(value=bool(self._settings.get("test_show_concepts", False)))
         self.log_follow_var = tk.BooleanVar(value=True)
         self.selected_log_path_var = tk.StringVar(value="")
@@ -114,6 +118,7 @@ class ServerManagerApp(tk.Tk):
         self._filtered_test_indexes = []
         self.test_tracker_catalog = {}
         self.current_tracker_metadata = {}
+        self.current_tracker_run_packs = {}
         self.test_pane_sash_position = self._settings.get("test_pane_sash_position")
         self.test_pane_sash_ratio = self._settings.get("test_pane_sash_ratio")
         self._last_test_pane_width = 0
@@ -819,6 +824,7 @@ class ServerManagerApp(tk.Tk):
         ttk.Button(quick_tracker_row, text="Quests", command=self.load_quests_tracker).pack(side="left", padx=4)
         ttk.Button(quick_tracker_row, text="QoL", command=self.load_qol_tracker).pack(side="left", padx=4)
         ttk.Button(quick_tracker_row, text="Tooling", command=self.load_tooling_tracker).pack(side="left", padx=4)
+        ttk.Button(quick_tracker_row, text="Inf. Prog.", command=self.load_inf_prog_tracker).pack(side="left", padx=4)
         ttk.Label(path_frame, text="Tracker").grid(row=2, column=0, padx=5, pady=(0, 5), sticky="w")
         self.test_tracker_picker_combo = ttk.Combobox(
             path_frame,
@@ -872,6 +878,17 @@ class ServerManagerApp(tk.Tk):
         self.test_category_combo.grid(row=0, column=3, padx=(5, 0), sticky="ew")
         self.test_category_combo.bind("<<ComboboxSelected>>", lambda _e: self._refresh_test_list())
 
+        ttk.Label(filter_row, text="Run Pack").grid(row=1, column=0, padx=0, pady=(0, 3), sticky="w")
+        self.test_run_pack_combo = ttk.Combobox(
+            filter_row,
+            textvariable=self.test_run_pack_var,
+            state="readonly",
+            width=64,
+            values=["All"],
+        )
+        self.test_run_pack_combo.grid(row=1, column=1, columnspan=3, padx=(5, 0), pady=(0, 3), sticky="ew")
+        self.test_run_pack_combo.bind("<<ComboboxSelected>>", lambda _e: self._refresh_test_list())
+
         jump_row = ttk.Frame(left)
         jump_row.grid(row=1, column=0, sticky="ew", padx=5, pady=(0, 5))
         ttk.Label(jump_row, text="Jump ID").pack(side="left")
@@ -884,7 +901,7 @@ class ServerManagerApp(tk.Tk):
         ttk.Button(jump_row, text="Next Blocked", command=self.select_next_blocked_test).pack(side="left", padx=2)
 
         ttk.Label(left, textvariable=self.test_progress_var).grid(row=2, column=0, sticky="w", padx=5, pady=(0, 2))
-        ttk.Label(left, text="Tip: drag the divider between Tests and Test Details to resize both panes.").grid(
+        ttk.Label(left, text="[space]=Not Run  ~=In Progress  B=Blocked  P=Pass  F=Fail  |  Tip: drag the divider to resize panes.").grid(
             row=3, column=0, sticky="w", padx=5, pady=(0, 5)
         )
 
@@ -1101,7 +1118,7 @@ class ServerManagerApp(tk.Tk):
         return f"{self._tracker_history_key()}::{str(test_id).upper()}"
 
     def _is_valid_test_id(self, test_id):
-        return bool(re.match(r"^[A-Z][A-Z0-9_]*-\d+$", str(test_id).strip().upper()))
+        return bool(re.match(r"^[A-Z][A-Z0-9_]*-\d+[A-Z]?$", str(test_id).strip().upper()))
 
     def _normalize_tracker_state(self, raw_state):
         state = (raw_state or "").strip().lower()
@@ -1267,6 +1284,9 @@ class ServerManagerApp(tk.Tk):
     def load_tooling_tracker(self):
         self._load_tracker_path(self.tooling_tracker_default_path, "Tooling tracker")
 
+    def load_inf_prog_tracker(self):
+        self._load_tracker_path(self.inf_prog_tracker_default_path, "Infinite Progression tracker")
+
     def open_test_tracker_file(self):
         path = self._canonical_tracker_path(self.test_tracker_path_var.get())
         if not path or not os.path.exists(path):
@@ -1352,7 +1372,7 @@ class ServerManagerApp(tk.Tk):
                 last = h.group(1).strip()
             return last
 
-        pattern = re.compile(r"^###\s+\[([A-Z][A-Z0-9_]*-\d+)\]\s*(.+?)\s*$", re.MULTILINE | re.IGNORECASE)
+        pattern = re.compile(r"^###\s+\[([A-Z][A-Z0-9_]*-\d+[A-Z]?)\]\s*(.+?)\s*$", re.MULTILINE | re.IGNORECASE)
         matches = list(pattern.finditer(text))
         for i, m in enumerate(matches):
             start = m.start()
@@ -1361,6 +1381,10 @@ class ServerManagerApp(tk.Tk):
             section_display = section_raw.strip()
             test_id = m.group(1).strip().upper()
             title = m.group(2).strip()
+            # Extract type markers from title: [AUTO], [SOAK], [DLL POC]
+            is_auto = bool(re.search(r"\[AUTO\]", title, re.IGNORECASE))
+            is_soak = bool(re.search(r"\[SOAK\]", title, re.IGNORECASE))
+            is_dll_poc = bool(re.search(r"\[DLL POC\]", title, re.IGNORECASE))
             category_code = test_id.split("-")[0]
             heading = nearest_heading(start)
             heading_clean = re.sub(r"^\d+\)\s*", "", heading).strip() if heading else ""
@@ -1375,6 +1399,9 @@ class ServerManagerApp(tk.Tk):
                 "end": end,
                 "category_code": category_code,
                 "category_display": category_display,
+                "is_auto": is_auto,
+                "is_soak": is_soak,
+                "is_dll_poc": is_dll_poc,
                 "md_status": self._status_from_markdown_section(section_display),
                 "md_notes": self._notes_from_markdown_section(section_display),
             })
@@ -1434,8 +1461,10 @@ class ServerManagerApp(tk.Tk):
         next_blocked = next((r["id"] for r in self.test_records if self._get_test_outcome(r["id"])["status"] == "Blocked"), "-")
 
         state = self.current_tracker_metadata.get("state", "active").upper()
+        run_pack = self.test_run_pack_var.get() if hasattr(self, "test_run_pack_var") else "All"
+        run_pack_note = f"  |  Run Pack: {run_pack}" if run_pack and run_pack != "All" else ""
         self.test_tracker_summary_var.set(
-            f"Tracker: {self._display_path(tracker_path)} [{state}]  |  Total: {len(self.test_records)}  Pass: {counts['Pass']}  Fail: {counts['Fail']}  Blocked: {counts['Blocked']}  In Progress: {counts['In Progress']}  Not Run: {counts['Not Run']}  |  Next Unrun: {next_unrun}  Next Fail: {next_fail}  Next Blocked: {next_blocked}"
+            f"Tracker: {self._display_path(tracker_path)} [{state}]  |  Total: {len(self.test_records)}  Pass: {counts['Pass']}  Fail: {counts['Fail']}  Blocked: {counts['Blocked']}  In Progress: {counts['In Progress']}  Not Run: {counts['Not Run']}  |  Next Unrun: {next_unrun}  Next Fail: {next_fail}  Next Blocked: {next_blocked}{run_pack_note}"
         )
 
     def reload_tests_from_tracker(self, selected_test_id=None, quiet=False):
@@ -1454,6 +1483,7 @@ class ServerManagerApp(tk.Tk):
                 content = f.read()
             self.current_tracker_metadata = self._read_tracker_metadata(path)
             self.test_records = self._parse_tests_from_markdown(content)
+            self.current_tracker_run_packs = self._parse_run_packs_from_markdown(content)
             self._migrate_legacy_outcomes_for_tracker()
             for record in self.test_records:
                 self.test_outcomes[self._make_test_outcome_key(record["id"])] = {
@@ -1463,6 +1493,7 @@ class ServerManagerApp(tk.Tk):
                 }
             self._save_test_manager_state()
             self._refresh_category_filter_options()
+            self._refresh_run_pack_filter_options()
             self._refresh_test_list()
             if self.test_records:
                 if selected_test_id and not self._select_test_by_id(selected_test_id):
@@ -1502,6 +1533,39 @@ class ServerManagerApp(tk.Tk):
         if self.test_category_var.get() not in values:
             self.test_category_var.set("All")
 
+    def _parse_run_packs_from_markdown(self, text):
+        """Parse ## Run Packs section and return {pack_name: [TEST-ID, ...]}."""
+        run_packs = {}
+        m = re.search(r"^##\s+Run Packs\b", text, re.MULTILINE)
+        if not m:
+            return run_packs
+        section_start = m.end()
+        next_h2 = re.search(r"^##\s+", text[section_start:], re.MULTILINE)
+        section_text = text[section_start: section_start + next_h2.start()] if next_h2 else text[section_start:]
+        subsection_pattern = re.compile(r"^###\s+(.+?)\s*$", re.MULTILINE)
+        subsections = list(subsection_pattern.finditer(section_text))
+        for i, sub in enumerate(subsections):
+            name = sub.group(1).strip()
+            end = subsections[i + 1].start() if i + 1 < len(subsections) else len(section_text)
+            block = section_text[sub.start():end]
+            ids = []
+            for backtick_content in re.findall(r"`([^`]+)`", block):
+                for part in re.split(r"[,\s]+", backtick_content):
+                    part = part.strip().strip("`")
+                    if re.match(r"^[A-Z][A-Z0-9_]*-\d+[A-Za-z]?$", part, re.IGNORECASE):
+                        ids.append(part.upper())
+            if ids:
+                run_packs[name] = ids
+        return run_packs
+
+    def _refresh_run_pack_filter_options(self):
+        if not hasattr(self, "test_run_pack_combo"):
+            return
+        values = ["All"] + list(self.current_tracker_run_packs.keys())
+        self.test_run_pack_combo.config(values=values)
+        if self.test_run_pack_var.get() not in values:
+            self.test_run_pack_var.set("All")
+
     def _format_test_row(self, record):
         outcome = self._get_test_outcome(record["id"])
         status = outcome["status"]
@@ -1512,7 +1576,16 @@ class ServerManagerApp(tk.Tk):
             "Pass": "P ",
             "Fail": "F ",
         }.get(status, "  ")
-        return f"{marker}[{record['id']}] {record['title']} ({record.get('category_code', '?')})"
+        # Strip inline type markers from title (rendered as flags below)
+        title = re.sub(r"\s*\[(AUTO|SOAK|DLL POC)\]", "", record["title"], flags=re.IGNORECASE).strip()
+        flags = ""
+        if record.get("is_auto"):
+            flags += " [AUTO]"
+        if record.get("is_soak"):
+            flags += " [SOAK]"
+        if record.get("is_dll_poc"):
+            flags += " [DLL]"
+        return f"{marker}[{record['id']}] {title}{flags} ({record.get('category_code', '?')})"
 
     def _refresh_test_progress(self):
         counts = {status: 0 for status in self._test_status_values()}
@@ -1534,12 +1607,16 @@ class ServerManagerApp(tk.Tk):
         self._filtered_test_indexes = []
         active_filter = self.test_filter_var.get().strip()
         active_category = self.test_category_var.get().strip()
+        active_run_pack = self.test_run_pack_var.get().strip()
+        run_pack_ids = self.current_tracker_run_packs.get(active_run_pack) if active_run_pack != "All" else None
         for idx, record in enumerate(self.test_records):
             status = self._get_test_outcome(record["id"])["status"]
             if active_filter != "All" and status != active_filter:
                 continue
             category_display = record.get("category_display", "")
             if active_category != "All" and category_display != active_category:
+                continue
+            if run_pack_ids is not None and record["id"] not in run_pack_ids:
                 continue
             self._filtered_test_indexes.append(idx)
             self.test_listbox.insert("end", self._format_test_row(record))
@@ -1731,8 +1808,15 @@ class ServerManagerApp(tk.Tk):
         notes = self.test_notes_text.get("1.0", "end").strip()
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         tracker_rel = self._display_path(self.test_tracker_path_var.get())
+        flags = ""
+        if record.get("is_auto"):
+            flags += " [AUTO]"
+        if record.get("is_soak"):
+            flags += " [SOAK]"
+        if record.get("is_dll_poc"):
+            flags += " [DLL]"
         feedback = (
-            f"[{timestamp}] [{record['id']}] {record['title']}\n"
+            f"[{timestamp}] [{record['id']}] {record['title']}{flags}\n"
             f"Tracker: {tracker_rel}\n"
             f"Category: {record.get('category_display', record.get('category_code', 'Unknown'))}\n"
             f"Status: {outcome['status']}\n"
@@ -1754,13 +1838,20 @@ class ServerManagerApp(tk.Tk):
             outcome = self._get_test_outcome(record["id"])
             status = outcome["status"]
             counts[status] = counts.get(status, 0) + 1
-            row = f"- `{record['id']}` {record['title']}"
+            flags = ""
+            if record.get("is_auto"):
+                flags += " [AUTO]"
+            if record.get("is_soak"):
+                flags += " [SOAK]"
+            if record.get("is_dll_poc"):
+                flags += " [DLL]"
+            row = f"- `{record['id']}` {record['title']}{flags}"
             notes = (outcome.get("notes") or "").strip()
             if notes:
                 first_note = notes.splitlines()[0].strip()
                 row += f" -- {first_note}"
             elif status in {"Pass", "Fail", "Blocked"}:
-                evidence_gaps.append(f"- `{record['id']}` {record['title']} ({status})")
+                evidence_gaps.append(f"- `{record['id']}` {record['title']}{flags} ({status})")
             buckets.setdefault(status, []).append(row)
 
         def section(title, rows, limit=10):
@@ -1772,6 +1863,7 @@ class ServerManagerApp(tk.Tk):
         digest = [
             f"Test Agent Digest - {timestamp}",
             f"Tracker: {tracker_rel}",
+            f"Run Pack: {self.test_run_pack_var.get() or 'All'}",
             f"Counts: Pass {counts['Pass']} | Fail {counts['Fail']} | Blocked {counts['Blocked']} | In Progress {counts['In Progress']} | Not Run {counts['Not Run']}",
             "",
         ]

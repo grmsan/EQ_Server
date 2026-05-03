@@ -215,6 +215,26 @@ Tests marked `[AUTO]` can be executed without sustained in-game play — they ar
 
 ---
 
+## Run Packs
+
+### Smoke Run
+
+Run: `TOOL-01, TOOL-02, TOOL-03, TOOL-04`
+
+### AUTO Probe Run (requires connected client)
+
+Run `TOOL-05, TOOL-07, TOOL-08, TOOL-09, TOOL-10` using `#test 16` through `#test 20`. All five should pass in under 2 minutes.
+
+### DLL Deployment Validation
+
+Run `TOOL-11` to confirm DLL and UI assets are deployed before running QoL DLL POC tests.
+
+### Full Regression
+
+Run all tests in this document.
+
+---
+
 ## Agent Closeout Requirement
 
 When an agent validates or changes tooling work, it must update this tracker:

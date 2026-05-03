@@ -5405,6 +5405,9 @@ int32 Mob::GetActSpellCasttime(uint16 spell_id, int32 casttime)
 	// Compress long detrimental cast times before haste so haste still benefits
 	// the caster from a compressed baseline.  Constants are tunable in
 	// combat_balance_config.h under the SPELL CAST TIME COMPRESSION section.
+	// Only spells originally above BREAK_MS are eligible for the floor clamp later;
+	// spells that were already fast (e.g. 100ms) must not be slowed down.
+	bool was_cast_compressed = false;
 	if (CombatBalance::COMPRESS_DETRIMENTAL_CAST_TIME && is_detrimental &&
 	    casttime > CombatBalance::DETRIMENTAL_CAST_BREAK_MS)
 	{
@@ -5412,6 +5415,7 @@ int32 Mob::GetActSpellCasttime(uint16 spell_id, int32 casttime)
 		constexpr int32 out_range = CombatBalance::DETRIMENTAL_CAST_BREAK_MS - CombatBalance::DETRIMENTAL_CAST_FLOOR_MS;
 		float ratio = std::min(1.0f, static_cast<float>(casttime - CombatBalance::DETRIMENTAL_CAST_BREAK_MS) / static_cast<float>(in_range));
 		casttime = CombatBalance::DETRIMENTAL_CAST_FLOOR_MS + static_cast<int32>(ratio * out_range);
+		was_cast_compressed = true;
 	}
 
 	int32 cast_reducer = GetFocusEffect(focusSpellHaste, spell_id);
@@ -5438,9 +5442,9 @@ int32 Mob::GetActSpellCasttime(uint16 spell_id, int32 casttime)
 		casttime = static_cast<int32>(std::max(new_cast, cast_floor_ms));
 	}
 
-	// After all modifiers, enforce the hard floor so extreme haste cannot push
-	// detrimental spell cast times below 1 second.
-	if (CombatBalance::COMPRESS_DETRIMENTAL_CAST_TIME && is_detrimental && casttime > 0) {
+	// After all modifiers, enforce the hard floor only on spells we compressed.
+	// Spells that were originally fast (e.g. 100ms) must not be slowed down.
+	if (was_cast_compressed && casttime > 0) {
 		casttime = std::max(casttime, CombatBalance::DETRIMENTAL_CAST_FLOOR_MS);
 	}
 

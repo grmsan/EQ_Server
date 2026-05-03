@@ -1029,6 +1029,50 @@ namespace CombatBalance {
 	 */
 	constexpr float STA_BREATH_BONUS_DIVISOR = 10.0f;
 
+	//=============================================================================
+	// SPELL CAST TIME COMPRESSION (DETRIMENTAL SPELLS)
+	//=============================================================================
+	// Detrimental spells with cast times above BREAK_MS are compressed into the
+	// range [FLOOR_MS, BREAK_MS] using a linear ratio capped at PIVOT_MS.
+	// Beneficial spells are never affected.
+	//
+	// Formula for cast_time > BREAK_MS (applied BEFORE haste):
+	//   ratio      = min(1.0, (raw_cast_time - BREAK_MS) / (PIVOT_MS - BREAK_MS))
+	//   compressed = FLOOR_MS + ratio * (BREAK_MS - FLOOR_MS)
+	//
+	// After all haste/focus modifiers a hard floor of FLOOR_MS is enforced so
+	// extreme haste cannot push cast times below 1 second.
+	//
+	// Example outputs (before haste):
+	//   3.5s  -> 1.17s    5.0s  -> 1.67s
+	//   6.0s  -> 2.00s    8.0s  -> 2.67s
+	//   9.0s  -> 3.00s   80.0s  -> 3.00s (capped)
+	//=============================================================================
+
+	/** Toggle: set to false to restore original cast times. */
+	constexpr bool COMPRESS_DETRIMENTAL_CAST_TIME = true;
+
+	/**
+	 * @brief Cast time threshold below which no compression is applied (ms).
+	 * Also the output cap — compressed spells never exceed this value.
+	 * Default: 3000 (3 seconds).
+	 */
+	constexpr int32_t DETRIMENTAL_CAST_BREAK_MS = 3000;
+
+	/**
+	 * @brief Input cast time that maps to the output cap (ms).
+	 * Any spell at or above this value is capped at BREAK_MS.
+	 * Default: 9000 (9 seconds).
+	 */
+	constexpr int32_t DETRIMENTAL_CAST_PIVOT_MS = 9000;
+
+	/**
+	 * @brief Minimum allowed cast time for detrimental spells after compression
+	 * and after all haste/focus effects are applied (ms).
+	 * Default: 1000 (1 second).
+	 */
+	constexpr int32_t DETRIMENTAL_CAST_FLOOR_MS = 1000;
+
 } // namespace CombatBalance
 
 #endif // COMBAT_BALANCE_CONFIG_H

@@ -5400,6 +5400,20 @@ uint32 Mob::GetLevelHP(uint8 tlevel)
 
 int32 Mob::GetActSpellCasttime(uint16 spell_id, int32 casttime)
 {
+	const bool is_detrimental = !spells[spell_id].good_effect;
+
+	// Compress long detrimental cast times before haste so haste still benefits
+	// the caster from a compressed baseline.  Constants are tunable in
+	// combat_balance_config.h under the SPELL CAST TIME COMPRESSION section.
+	if (CombatBalance::COMPRESS_DETRIMENTAL_CAST_TIME && is_detrimental &&
+	    casttime > CombatBalance::DETRIMENTAL_CAST_BREAK_MS)
+	{
+		constexpr int32 in_range  = CombatBalance::DETRIMENTAL_CAST_PIVOT_MS - CombatBalance::DETRIMENTAL_CAST_BREAK_MS;
+		constexpr int32 out_range = CombatBalance::DETRIMENTAL_CAST_BREAK_MS - CombatBalance::DETRIMENTAL_CAST_FLOOR_MS;
+		float ratio = std::min(1.0f, static_cast<float>(casttime - CombatBalance::DETRIMENTAL_CAST_BREAK_MS) / static_cast<float>(in_range));
+		casttime = CombatBalance::DETRIMENTAL_CAST_FLOOR_MS + static_cast<int32>(ratio * out_range);
+	}
+
 	int32 cast_reducer = GetFocusEffect(focusSpellHaste, spell_id);
 	int32 cast_reducer_amt = GetFocusEffect(focusFcCastTimeAmt, spell_id);
 	int32 cast_reducer_no_limit = GetFocusEffect(focusFcCastTimeMod2, spell_id);
@@ -5422,6 +5436,12 @@ int32 Mob::GetActSpellCasttime(uint16 spell_id, int32 casttime)
 		float cast_floor_ms = floor;
 		float new_cast = cast_floor_ms + (static_cast<float>(casttime) - cast_floor_ms) * mult;
 		casttime = static_cast<int32>(std::max(new_cast, cast_floor_ms));
+	}
+
+	// After all modifiers, enforce the hard floor so extreme haste cannot push
+	// detrimental spell cast times below 1 second.
+	if (CombatBalance::COMPRESS_DETRIMENTAL_CAST_TIME && is_detrimental && casttime > 0) {
+		casttime = std::max(casttime, CombatBalance::DETRIMENTAL_CAST_FLOOR_MS);
 	}
 
 	return std::max(casttime, 0);

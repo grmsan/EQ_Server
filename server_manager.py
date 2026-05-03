@@ -2539,7 +2539,7 @@ class ServerManagerApp(tk.Tk):
                     # Type 4 = description text. Append class label for AA descriptions.
                     if typ == 4 and sid in aa_labels and val:
                         label = aa_labels[sid]
-                        val = f"{val} {label}"
+                        val = f"{label} {val}"
                     parts = []
                     for v in (sid, typ, val):
                         parts.append("" if v is None else str(v))

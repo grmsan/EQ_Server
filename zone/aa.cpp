@@ -1101,7 +1101,7 @@ void Client::SendAlternateAdvancementRank(int aa_id, int level) {
 	aai->spell_type = rank->spell_type;
 	aai->spell_refresh = rank->recast_time;
 	// aai->classes set above
-	aai->level_req = rank->level_req;
+	aai->level_req = 1; // Level restriction removed: all AAs purchasable at any level
 	aai->current_level = level;
 	aai->max_level = ability->GetMaxLevel(this);
 	aai->prev_id = rank->prev_id;
@@ -2121,9 +2121,8 @@ bool Mob::CanPurchaseAlternateAdvancementRank(AA::Rank *rank, bool check_price, 
 		return false;
 	}
 
-	if (rank->level_req > GetLevel()) {
-		return false;
-	}
+	// Level restriction removed: AAs are purchasable at any level.
+	// The level_req field is still stored in the DB for reference but is not enforced at purchase time.
 
 	uint32       current_charges = 0;
 	const uint32 points          = GetAA(rank->id, &current_charges);

@@ -2485,11 +2485,49 @@ class ServerManagerApp(tk.Tk):
             if hasattr(self, "db_output"):
                 self.ui_call(self._append_text_widget, self.db_output, f"Spell export failed: {e}\n")
 
+    # AA class bitmask: 1 << class_id (Warrior=1<<1=2, Cleric=1<<2=4, ...)
+    _AA_CLASS_BITS = {
+        2: 'WAR', 4: 'CLR', 8: 'PAL', 16: 'RNG', 32: 'SHD',
+        64: 'DRU', 128: 'MNK', 256: 'BRD', 512: 'ROG', 1024: 'SHM',
+        2048: 'NEC', 4096: 'WIZ', 8192: 'MAG', 16384: 'ENC', 32768: 'BST', 65536: 'BER',
+    }
+    _AA_ALL_CLASSES = frozenset({65535, 131070})  # 65535 = pre-BER legacy, 131070 = all 16 classes
+
+    def _aa_class_label(self, classes):
+        """Convert an AA classes bitmask to a short display label like (WAR) or (All)."""
+        if classes in self._AA_ALL_CLASSES or classes == 0:
+            return '(All)'
+        parts = [name for bit, name in sorted(self._AA_CLASS_BITS.items()) if classes & bit]
+        return '(' + '/'.join(parts) + ')' if parts else '(All)'
+
+    def _build_aa_desc_labels(self, conn):
+        """Return a dict mapping desc_sid -> class label string for all enabled AA abilities."""
+        cur = conn.cursor()
+        # Join aa_ability to all its ranks via the shared title_sid so every rank gets labeled,
+        # not just the first rank.
+        cur.execute("""
+            SELECT DISTINCT ar.desc_sid, aa.classes
+            FROM aa_ability aa
+            JOIN aa_ranks ar
+              ON ar.title_sid = (SELECT r.title_sid FROM aa_ranks r WHERE r.id = aa.first_rank_id)
+            WHERE aa.enabled = 1
+        """)
+        labels = {}
+        for desc_sid, classes in cur.fetchall():
+            if desc_sid and desc_sid > 0:
+                labels[desc_sid] = self._aa_class_label(classes)
+        cur.close()
+        return labels
+
     def export_dbstr(self):
         dest = os.path.join(self.eq_dir_var.get(), "dbstr_us.txt")
         try:
             db_cfg = self._load_db_config()
             conn = mysql.connector.connect(**db_cfg)
+
+            # Build AA class label map (desc_sid -> "(WAR)" etc.) before the main query
+            aa_labels = self._build_aa_desc_labels(conn)
+
             cur = conn.cursor()
             cur.execute("SELECT id, type, value FROM db_str ORDER BY id, type")
 
@@ -2497,12 +2535,14 @@ class ServerManagerApp(tk.Tk):
             self._backup_existing(dest)
             with open(dest, "w", encoding="utf-8", newline="") as f:
                 for row in cur:
+                    sid, typ, val = row
+                    # Type 4 = description text. Append class label for AA descriptions.
+                    if typ == 4 and sid in aa_labels and val:
+                        label = aa_labels[sid]
+                        val = f"{val} {label}"
                     parts = []
-                    for val in row:
-                        if val is None:
-                            parts.append("")
-                        else:
-                            parts.append(str(val))
+                    for v in (sid, typ, val):
+                        parts.append("" if v is None else str(v))
                     f.write("^".join(parts) + "\n")
             cur.close()
             conn.close()

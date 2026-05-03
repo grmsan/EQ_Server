@@ -273,25 +273,43 @@ void Mob::MakePoweredPet(uint16 spell_id, const char* pettype, int16 petpower,
 	auto npc_type = new NPCType;
 	memcpy(npc_type, base, sizeof(NPCType));
 
-	// If pet power is set to -1 in the DB, use stat scaling
-	if ((IsClient() || IsBot()) && record.petpower == -1)
+	// Dynamic stat scaling: triggered when the pets table row is a sentinel (petpower == -1)
+	// meaning this pet type has no hand-tuned per-power-tier NPC rows.  Any active pet
+	// focus item (act_power > 0) then proportionally boosts the base NPC's stats.
+	//
+	// To opt a pet type into this system without explicit per-tier rows, set its pets
+	// table petpower column to -1.  The universal SQL migration does this automatically
+	// for all single-tier pet types (see utils/sql/custom/2026_04_27_universal_pet_power_scaling.sql).
+	//
+	// Pet types that DO have hand-tuned rows (e.g. SumEarthR16 at petpower 15/20/25/30/35/40/45)
+	// rely on the lookup query to select the best matching explicit row and skip this block.
+	// Manifest Elements is a hybrid: petpower=-1 base for intermediate focus values, plus
+	// an explicit petpower=35 NPC for best-in-slot focus items.
+	if ((IsClient() || IsBot()) && record.petpower == -1 && act_power > 0)
 	{
-		float scale_power = (float)act_power / 100.0f;
-		if(scale_power > 0)
-		{
-			const int level_bonus = std::min(
-				static_cast<int>(RuleR(Pets, PetPowerLevelCap)),
-				std::max(0, static_cast<int>(act_power * RuleR(Pets, PetPowerLevelScale)))
-			);
+		const float scale_power = static_cast<float>(act_power) / 100.0f;
+		const int level_bonus = std::min(
+			static_cast<int>(RuleR(Pets, PetPowerLevelCap)),
+			std::max(0, static_cast<int>(act_power * RuleR(Pets, PetPowerLevelScale)))
+		);
 
-			npc_type->max_hp *= (1 + scale_power);
-			npc_type->current_hp = npc_type->max_hp;
-			npc_type->AC *= (1 + scale_power);
-			npc_type->level += level_bonus;
-			npc_type->min_dmg = (npc_type->min_dmg * (1 + (scale_power / 2)));
-			npc_type->max_dmg = (npc_type->max_dmg * (1 + (scale_power / 2)));
-			npc_type->size = npc_type->size * (1 + (scale_power / 2)) > npc_type->size * 3 ? npc_type->size * 3 : npc_type-> size * (1 + (scale_power / 2));
-		}
+		npc_type->max_hp    = static_cast<int64>(npc_type->max_hp * (1.0f + scale_power));
+		npc_type->current_hp = npc_type->max_hp;
+		npc_type->AC        = static_cast<uint32>(npc_type->AC   * (1.0f + scale_power));
+		npc_type->level    += static_cast<uint8>(level_bonus);
+		npc_type->min_dmg   = static_cast<uint32>(npc_type->min_dmg * (1.0f + scale_power / 2.0f));
+		npc_type->max_dmg   = static_cast<uint32>(npc_type->max_dmg * (1.0f + scale_power / 2.0f));
+		const float new_size = npc_type->size * (1.0f + scale_power / 2.0f);
+		npc_type->size = std::min(new_size, npc_type->size * 3.0f);
+
+		LogInfo(
+			"[PetPower] Dynamic scaling {} (type={} base_pp={}): act_power={} -> "
+			"level=+{} hp={} AC={} dmg={}-{} size={:.2f}",
+			npc_type->name, pettype, record.petpower,
+			act_power, level_bonus,
+			npc_type->max_hp, npc_type->AC, npc_type->min_dmg, npc_type->max_dmg, npc_type->size
+		);
+
 		record.petpower = act_power;
 	}
 

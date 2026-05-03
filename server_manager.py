@@ -97,6 +97,9 @@ class ServerManagerApp(tk.Tk):
         self.test_tracker_picker_var = tk.StringVar(value="")
         self.test_run_pack_var = tk.StringVar(value="All")
         self.test_show_concepts_var = tk.BooleanVar(value=bool(self._settings.get("test_show_concepts", False)))
+        self.test_search_var = tk.StringVar(value="")
+        self.test_auto_advance_var = tk.BooleanVar(value=False)
+        self._flash_token = None
         self.log_follow_var = tk.BooleanVar(value=True)
         self.selected_log_path_var = tk.StringVar(value="")
         self.log_source_var = tk.StringVar(value="Source: none")
@@ -849,12 +852,24 @@ class ServerManagerApp(tk.Tk):
         content.grid(row=1, column=0, sticky="nsew")
         self.test_paned = content
 
+        # ── Left pane: Test List ──────────────────────────────────────────────
         left = ttk.LabelFrame(content, text="Tests")
         left.grid_columnconfigure(0, weight=1)
-        left.grid_rowconfigure(4, weight=1)
+        left.grid_rowconfigure(6, weight=1)
 
+        # Row 0: Live search bar
+        search_row = ttk.Frame(left)
+        search_row.grid(row=0, column=0, sticky="ew", padx=5, pady=(5, 2))
+        search_row.grid_columnconfigure(1, weight=1)
+        ttk.Label(search_row, text="Search:").grid(row=0, column=0, sticky="w", padx=(0, 4))
+        self.test_search_entry = ttk.Entry(search_row, textvariable=self.test_search_var)
+        self.test_search_entry.grid(row=0, column=1, sticky="ew")
+        ttk.Button(search_row, text="✕", width=3, command=lambda: self.test_search_var.set("")).grid(row=0, column=2, padx=(4, 0))
+        self.test_search_var.trace_add("write", lambda *_: self._refresh_test_list())
+
+        # Row 1: Status + Category filters
         filter_row = ttk.Frame(left)
-        filter_row.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
+        filter_row.grid(row=1, column=0, sticky="ew", padx=5, pady=2)
         filter_row.grid_columnconfigure(3, weight=1)
         ttk.Label(filter_row, text="Status").grid(row=0, column=0, sticky="w")
         self.test_filter_combo = ttk.Combobox(
@@ -866,7 +881,6 @@ class ServerManagerApp(tk.Tk):
         )
         self.test_filter_combo.grid(row=0, column=1, padx=(5, 10), sticky="w")
         self.test_filter_combo.bind("<<ComboboxSelected>>", lambda _e: self._refresh_test_list())
-
         ttk.Label(filter_row, text="Category").grid(row=0, column=2, sticky="w")
         self.test_category_combo = ttk.Combobox(
             filter_row,
@@ -878,78 +892,127 @@ class ServerManagerApp(tk.Tk):
         self.test_category_combo.grid(row=0, column=3, padx=(5, 0), sticky="ew")
         self.test_category_combo.bind("<<ComboboxSelected>>", lambda _e: self._refresh_test_list())
 
-        ttk.Label(filter_row, text="Run Pack").grid(row=1, column=0, padx=0, pady=(0, 3), sticky="w")
+        # Row 2: Run Pack filter
+        pack_row = ttk.Frame(left)
+        pack_row.grid(row=2, column=0, sticky="ew", padx=5, pady=(0, 2))
+        pack_row.grid_columnconfigure(1, weight=1)
+        ttk.Label(pack_row, text="Run Pack").grid(row=0, column=0, sticky="w")
         self.test_run_pack_combo = ttk.Combobox(
-            filter_row,
+            pack_row,
             textvariable=self.test_run_pack_var,
             state="readonly",
             width=64,
             values=["All"],
         )
-        self.test_run_pack_combo.grid(row=1, column=1, columnspan=3, padx=(5, 0), pady=(0, 3), sticky="ew")
+        self.test_run_pack_combo.grid(row=0, column=1, padx=(5, 0), sticky="ew")
         self.test_run_pack_combo.bind("<<ComboboxSelected>>", lambda _e: self._refresh_test_list())
 
+        # Row 3: Jump + Next navigation
         jump_row = ttk.Frame(left)
-        jump_row.grid(row=1, column=0, sticky="ew", padx=5, pady=(0, 5))
-        ttk.Label(jump_row, text="Jump ID").pack(side="left")
+        jump_row.grid(row=3, column=0, sticky="ew", padx=5, pady=(0, 2))
+        ttk.Label(jump_row, text="Jump:").pack(side="left")
         jump_entry = ttk.Entry(jump_row, textvariable=self.test_jump_id_var, width=12)
-        jump_entry.pack(side="left", padx=(5, 4))
+        jump_entry.pack(side="left", padx=(4, 4))
         jump_entry.bind("<Return>", lambda _e: self.jump_to_test_id())
         ttk.Button(jump_row, text="Go", command=self.jump_to_test_id).pack(side="left", padx=2)
-        ttk.Button(jump_row, text="Next Unrun", command=self.select_next_unrun_test).pack(side="left", padx=8)
-        ttk.Button(jump_row, text="Next Fail", command=self.select_next_failed_test).pack(side="left", padx=2)
-        ttk.Button(jump_row, text="Next Blocked", command=self.select_next_blocked_test).pack(side="left", padx=2)
+        ttk.Separator(jump_row, orient="vertical").pack(side="left", fill="y", padx=8)
+        ttk.Button(jump_row, text="▶ Unrun", command=self.select_next_unrun_test).pack(side="left", padx=2)
+        ttk.Button(jump_row, text="▶ Fail", command=self.select_next_failed_test).pack(side="left", padx=2)
+        ttk.Button(jump_row, text="▶ Blocked", command=self.select_next_blocked_test).pack(side="left", padx=2)
 
-        ttk.Label(left, textvariable=self.test_progress_var).grid(row=2, column=0, sticky="w", padx=5, pady=(0, 2))
-        ttk.Label(left, text="[space]=Not Run  ~=In Progress  B=Blocked  P=Pass  F=Fail  |  Tip: drag the divider to resize panes.").grid(
-            row=3, column=0, sticky="w", padx=5, pady=(0, 5)
+        # Row 4: Progress summary
+        ttk.Label(left, textvariable=self.test_progress_var, font=("Segoe UI", 9)).grid(
+            row=4, column=0, sticky="w", padx=5, pady=(0, 1)
         )
 
+        # Row 5: Keyboard shortcut legend
+        ttk.Label(
+            left,
+            text="Keys (list focused): P=Pass  F=Fail  B=Blocked  I=In Progress  N=Not Run  |  Right-click for menu",
+            font=("Segoe UI", 8),
+            foreground="#666666",
+        ).grid(row=5, column=0, sticky="w", padx=5, pady=(0, 4))
+
+        # Row 6: Test listbox
         list_container = ttk.Frame(left)
-        list_container.grid(row=4, column=0, sticky="nsew", padx=5, pady=(0, 5))
+        list_container.grid(row=6, column=0, sticky="nsew", padx=5, pady=(0, 5))
         list_container.grid_rowconfigure(0, weight=1)
         list_container.grid_columnconfigure(0, weight=1)
 
-        self.test_listbox = tk.Listbox(list_container, width=68, font=("Consolas", 9))
+        self.test_listbox = tk.Listbox(list_container, width=68, font=("Consolas", 9), activestyle="dotbox")
         self.test_listbox.grid(row=0, column=0, sticky="nsew")
         self.test_listbox.bind("<<ListboxSelect>>", self.on_test_selected)
+        self.test_listbox.bind("<KeyPress-p>", lambda _e: self.set_selected_test_status("Pass"))
+        self.test_listbox.bind("<KeyPress-f>", lambda _e: self.set_selected_test_status("Fail"))
+        self.test_listbox.bind("<KeyPress-b>", lambda _e: self.set_selected_test_status("Blocked"))
+        self.test_listbox.bind("<KeyPress-i>", lambda _e: self.set_selected_test_status("In Progress"))
+        self.test_listbox.bind("<KeyPress-n>", lambda _e: self.set_selected_test_status("Not Run"))
+        self.test_listbox.bind("<Button-3>", self._show_test_context_menu)
 
         test_scroll = ttk.Scrollbar(list_container, orient="vertical", command=self.test_listbox.yview)
         test_scroll.grid(row=0, column=1, sticky="ns")
         self.test_listbox.config(yscrollcommand=test_scroll.set)
 
+        # ── Right pane: Test Details ──────────────────────────────────────────
         right = ttk.LabelFrame(content, text="Test Details")
         right.grid_columnconfigure(0, weight=1)
         right.grid_rowconfigure(2, weight=1)
 
+        # Row 0: Header — test title and colored status badge
         header = ttk.Frame(right)
-        header.grid(row=0, column=0, sticky="ew", padx=6, pady=6)
+        header.grid(row=0, column=0, sticky="ew", padx=6, pady=(6, 4))
         header.grid_columnconfigure(0, weight=1)
-        ttk.Label(header, textvariable=self.test_selected_var, font=("Segoe UI Semibold", 11)).grid(row=0, column=0, sticky="w")
-        ttk.Label(header, textvariable=self.test_status_var).grid(row=1, column=0, sticky="w", pady=(2, 0))
+        ttk.Label(header, textvariable=self.test_selected_var, font=("Segoe UI Semibold", 11)).grid(
+            row=0, column=0, sticky="w"
+        )
+        self.test_status_label = tk.Label(
+            header, textvariable=self.test_status_var,
+            font=("Segoe UI", 10, "bold"), anchor="w", padx=6, pady=2,
+            relief="flat", bg="#ebebeb", fg="#444444",
+        )
+        self.test_status_label.grid(row=1, column=0, sticky="w", pady=(2, 0))
 
+        # Row 1: Mark action buttons with keyboard hint labels + Mark & Next
         actions = ttk.Frame(right)
         actions.grid(row=1, column=0, sticky="ew", padx=6, pady=(0, 6))
-        ttk.Button(actions, text="Mark Not Run", command=lambda: self.set_selected_test_status("Not Run")).pack(side="left", padx=(0, 4))
-        ttk.Button(actions, text="Mark In Progress", command=lambda: self.set_selected_test_status("In Progress")).pack(side="left", padx=4)
-        ttk.Button(actions, text="Mark Blocked", command=lambda: self.set_selected_test_status("Blocked")).pack(side="left", padx=4)
-        ttk.Button(actions, text="Mark Pass", command=lambda: self.set_selected_test_status("Pass")).pack(side="left", padx=4)
-        ttk.Button(actions, text="Mark Fail", command=lambda: self.set_selected_test_status("Fail")).pack(side="left", padx=4)
+        ttk.Button(actions, text="Not Run (N)", command=lambda: self.set_selected_test_status("Not Run")).pack(side="left", padx=(0, 3))
+        ttk.Button(actions, text="In Prog (I)", command=lambda: self.set_selected_test_status("In Progress")).pack(side="left", padx=3)
+        ttk.Button(actions, text="Blocked (B)", command=lambda: self.set_selected_test_status("Blocked")).pack(side="left", padx=3)
+        ttk.Button(actions, text="Pass (P)", command=lambda: self.set_selected_test_status("Pass")).pack(side="left", padx=3)
+        ttk.Button(actions, text="Fail (F)", command=lambda: self.set_selected_test_status("Fail")).pack(side="left", padx=3)
+        ttk.Separator(actions, orient="vertical").pack(side="left", fill="y", padx=8)
+        ttk.Button(actions, text="✓ Pass & Next ▶", command=self._mark_and_next).pack(side="left", padx=3)
+        ttk.Checkbutton(actions, text="Auto-next", variable=self.test_auto_advance_var).pack(side="right", padx=(8, 0))
 
-        self.test_detail_text = scrolledtext.ScrolledText(right, height=16, font=("Consolas", 9), state="disabled")
-        self.test_detail_text.grid(row=2, column=0, sticky="nsew", padx=6, pady=(0, 6))
+        # Row 2: Test detail / description (read-only)
+        self.test_detail_text = scrolledtext.ScrolledText(right, height=14, font=("Consolas", 9), state="disabled")
+        self.test_detail_text.grid(row=2, column=0, sticky="nsew", padx=6, pady=(0, 4))
 
-        notes_frame = ttk.LabelFrame(right, text="Session Notes / Evidence / Logs")
+        # Row 3: Notes / feedback section
+        notes_frame = ttk.LabelFrame(right, text="Notes / Feedback")
         notes_frame.grid(row=3, column=0, sticky="ew", padx=6, pady=(0, 6))
         notes_frame.grid_columnconfigure(0, weight=1)
-        self.test_notes_text = scrolledtext.ScrolledText(notes_frame, height=12, font=("Consolas", 9), wrap="none")
-        self.test_notes_text.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
+
+        # Quick-insert row — stamped feedback tags
+        qi_row = ttk.Frame(notes_frame)
+        qi_row.grid(row=0, column=0, sticky="w", padx=5, pady=(5, 2))
+        ttk.Label(qi_row, text="Insert tag:").pack(side="left", padx=(0, 6))
+        ttk.Button(qi_row, text="+ Bug",        command=lambda: self._insert_quick_note("BUG")).pack(side="left", padx=2)
+        ttk.Button(qi_row, text="+ Feedback",   command=lambda: self._insert_quick_note("FEEDBACK")).pack(side="left", padx=2)
+        ttk.Button(qi_row, text="+ Suggestion", command=lambda: self._insert_quick_note("SUGGESTION")).pack(side="left", padx=2)
+        ttk.Button(qi_row, text="+ Evidence",   command=lambda: self._insert_quick_note("EVIDENCE")).pack(side="left", padx=2)
+        ttk.Button(qi_row, text="+ Note",       command=lambda: self._insert_quick_note("NOTE")).pack(side="left", padx=2)
+
+        self.test_notes_text = scrolledtext.ScrolledText(notes_frame, height=8, font=("Consolas", 9), wrap="none")
+        self.test_notes_text.grid(row=1, column=0, sticky="ew", padx=5, pady=(2, 4))
 
         note_actions = ttk.Frame(notes_frame)
-        note_actions.grid(row=1, column=0, sticky="e", padx=5, pady=(0, 5))
-        ttk.Button(note_actions, text="Save Note", command=self.save_selected_test_notes).pack(side="left", padx=3)
-        ttk.Button(note_actions, text="Copy Feedback", command=self.copy_selected_test_feedback).pack(side="left", padx=3)
-        ttk.Button(note_actions, text="Copy Agent Digest", command=self.copy_test_agent_digest).pack(side="left", padx=3)
+        note_actions.grid(row=2, column=0, sticky="ew", padx=5, pady=(0, 5))
+        ttk.Button(note_actions, text="Save Note ✓",      command=self.save_selected_test_notes).pack(side="left", padx=(0, 4))
+        ttk.Button(note_actions, text="Copy Feedback",    command=self.copy_selected_test_feedback).pack(side="left", padx=4)
+        ttk.Button(note_actions, text="View Feedback Log",command=self.show_feedback_log).pack(side="left", padx=4)
+        ttk.Separator(note_actions, orient="vertical").pack(side="left", fill="y", padx=8)
+        ttk.Button(note_actions, text="Copy Agent Digest",command=self.copy_test_agent_digest).pack(side="left", padx=4)
 
         content.add(left, weight=2)
         content.add(right, weight=4)
@@ -1608,6 +1671,7 @@ class ServerManagerApp(tk.Tk):
         active_filter = self.test_filter_var.get().strip()
         active_category = self.test_category_var.get().strip()
         active_run_pack = self.test_run_pack_var.get().strip()
+        active_search = self.test_search_var.get().strip().lower() if hasattr(self, "test_search_var") else ""
         run_pack_ids = self.current_tracker_run_packs.get(active_run_pack) if active_run_pack != "All" else None
         for idx, record in enumerate(self.test_records):
             status = self._get_test_outcome(record["id"])["status"]
@@ -1618,9 +1682,14 @@ class ServerManagerApp(tk.Tk):
                 continue
             if run_pack_ids is not None and record["id"] not in run_pack_ids:
                 continue
+            if active_search:
+                haystack = f"{record['id']} {record['title']}".lower()
+                if active_search not in haystack:
+                    continue
             self._filtered_test_indexes.append(idx)
             self.test_listbox.insert("end", self._format_test_row(record))
 
+        self._apply_listbox_colors()
         self._refresh_test_progress()
 
         if selected_id:
@@ -1680,6 +1749,7 @@ class ServerManagerApp(tk.Tk):
         outcome = self._get_test_outcome(record["id"])
         self.test_selected_var.set(f"[{record['id']}] {record['title']}")
         self.test_status_var.set(f"Status: {outcome['status']}")
+        self._update_status_label_color(outcome["status"])
         self._set_text_widget(self.test_detail_text, record["section"])
         self._set_text_widget(self.test_notes_text, outcome["notes"])
 
@@ -1764,19 +1834,13 @@ class ServerManagerApp(tk.Tk):
             self.log(f"Failed to write test {test_id} back to tracker: {e}")
             return False
 
-    def set_selected_test_status(self, status):
+    def set_selected_test_status(self, status, _force_advance=False):
         record = self._get_selected_test_record()
         if not record:
             return
         normalized = self._normalize_test_status(status)
         outcome = self._get_test_outcome(record["id"])
         current_notes = self.test_notes_text.get("1.0", "end").strip() if hasattr(self, "test_notes_text") else outcome.get("notes", "")
-        if normalized in {"Pass", "Fail", "Blocked"} and not current_notes:
-            if not messagebox.askyesno(
-                "Missing Test Evidence",
-                f"{record['id']} has no notes/evidence.\n\nContinue marking it {normalized} anyway?",
-            ):
-                return
         outcome["status"] = normalized
         outcome["notes"] = current_notes
         outcome["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -1785,6 +1849,9 @@ class ServerManagerApp(tk.Tk):
         self._write_test_outcome_to_tracker(record["id"])
         self.reload_tests_from_tracker(selected_test_id=record["id"], quiet=True)
         self.log(f"Test {record['id']} marked {normalized}")
+        self._flash_status(f"✓ {normalized} — {record['id']}", normalized)
+        if _force_advance or (self.test_auto_advance_var.get() and normalized in {"Pass", "Fail", "Blocked"}):
+            self.after(120, self.select_next_unrun_test)
 
     def save_selected_test_notes(self):
         record = self._get_selected_test_record()
@@ -1799,6 +1866,7 @@ class ServerManagerApp(tk.Tk):
         self._write_test_outcome_to_tracker(record["id"])
         self.reload_tests_from_tracker(selected_test_id=record["id"], quiet=True)
         self.log(f"Saved notes for {record['id']}")
+        self._flash_status(f"✓ Notes saved — {record['id']}", self._get_test_outcome(record["id"])["status"])
 
     def copy_selected_test_feedback(self):
         record = self._get_selected_test_record()
@@ -1921,6 +1989,171 @@ class ServerManagerApp(tk.Tk):
                 self.test_listbox.see(display_idx)
                 return
         messagebox.showinfo("Next Blocked", "No 'Blocked' tests in the current filter.")
+
+    def _apply_listbox_colors(self):
+        """Color-code listbox rows by test status for at-a-glance scanning."""
+        if not hasattr(self, "test_listbox"):
+            return
+        _style = {
+            "Not Run":     ("#888888", "#f8f8f8"),
+            "In Progress": ("#795548", "#fffde7"),
+            "Blocked":     ("#e65100", "#fff3e0"),
+            "Pass":        ("#2e7d32", "#e8f5e9"),
+            "Fail":        ("#b71c1c", "#fce4ec"),
+        }
+        for display_idx, src_idx in enumerate(self._filtered_test_indexes):
+            record = self.test_records[src_idx]
+            status = self._get_test_outcome(record["id"])["status"]
+            fg, bg = _style.get(status, ("#000000", "#ffffff"))
+            self.test_listbox.itemconfigure(display_idx, foreground=fg, background=bg)
+
+    def _update_status_label_color(self, status):
+        """Update the colored status badge in the right pane."""
+        if not hasattr(self, "test_status_label"):
+            return
+        _colors = {
+            "Not Run":     ("#666666", "#ebebeb"),
+            "In Progress": ("#795548", "#fffde7"),
+            "Blocked":     ("#e65100", "#fff3e0"),
+            "Pass":        ("#1b5e20", "#e8f5e9"),
+            "Fail":        ("#b71c1c", "#fce4ec"),
+        }
+        fg, bg = _colors.get(status, ("#444444", "#f0f0f0"))
+        self.test_status_label.config(fg=fg, bg=bg)
+
+    def _flash_status(self, msg, status, duration_ms=2200):
+        """Flash a brief confirmation message in the status badge, then restore."""
+        if not hasattr(self, "test_status_var"):
+            return
+        self.test_status_var.set(msg)
+        self._update_status_label_color(status)
+        token = object()
+        self._flash_token = token
+
+        def _restore():
+            if self._flash_token is not token:
+                return
+            record = self._get_selected_test_record()
+            if record:
+                outcome = self._get_test_outcome(record["id"])
+                actual = outcome["status"]
+                self.test_status_var.set(f"Status: {actual}")
+                self._update_status_label_color(actual)
+
+        self.after(duration_ms, _restore)
+
+    def _insert_quick_note(self, tag):
+        """Insert a timestamped feedback tag at the cursor position in the notes area."""
+        from datetime import date
+        today = date.today().strftime("%Y-%m-%d")
+        prefix = f"[{tag} {today}]: "
+        try:
+            self.test_notes_text.insert("insert", prefix)
+            self.test_notes_text.focus_set()
+        except Exception:
+            pass
+
+    def _mark_and_next(self):
+        """Mark the current test Pass and always advance to the next unrun test."""
+        self.set_selected_test_status("Pass", _force_advance=True)
+
+    def _show_test_context_menu(self, event):
+        """Right-click context menu on the test listbox."""
+        idx = self.test_listbox.nearest(event.y)
+        if idx >= 0:
+            self.test_listbox.selection_clear(0, "end")
+            self.test_listbox.selection_set(idx)
+            self.test_listbox.activate(idx)
+            self.on_test_selected()
+        menu = tk.Menu(self, tearoff=0)
+        menu.add_command(label="Not Run",     command=lambda: self.set_selected_test_status("Not Run"))
+        menu.add_command(label="In Progress", command=lambda: self.set_selected_test_status("In Progress"))
+        menu.add_command(label="Blocked",     command=lambda: self.set_selected_test_status("Blocked"))
+        menu.add_command(label="Pass",        command=lambda: self.set_selected_test_status("Pass"))
+        menu.add_command(label="Fail",        command=lambda: self.set_selected_test_status("Fail"))
+        menu.add_separator()
+        menu.add_command(label="Pass & Next ▶", command=self._mark_and_next)
+        menu.add_separator()
+        menu.add_command(label="Copy Feedback",     command=self.copy_selected_test_feedback)
+        menu.add_command(label="View Feedback Log", command=self.show_feedback_log)
+        try:
+            menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            menu.grab_release()
+
+    def show_feedback_log(self):
+        """Open a window showing all tests that have notes, grouped by feedback tag."""
+        win = tk.Toplevel(self)
+        win.title("Feedback Log")
+        win.geometry("960x660")
+        win.transient(self)
+
+        top_bar = ttk.Frame(win)
+        top_bar.pack(fill="x", padx=10, pady=(10, 4))
+        ttk.Label(top_bar, text="All notes grouped by tag — Copy All to hand off to AI agent",
+                  font=("Segoe UI", 9, "italic")).pack(side="left")
+        log_text = scrolledtext.ScrolledText(win, font=("Consolas", 9), wrap="word", state="disabled")
+        ttk.Button(top_bar, text="Copy All", command=lambda: self._copy_all_text(log_text)).pack(side="right", padx=(4, 0))
+        ttk.Button(top_bar, text="Refresh",  command=lambda: self._populate_feedback_log(log_text)).pack(side="right", padx=4)
+        log_text.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+        self._populate_feedback_log(log_text)
+
+    def _populate_feedback_log(self, text_widget):
+        """Fill the feedback log window with current tracker data."""
+        TAG_ORDER  = ["BUG", "FEEDBACK", "SUGGESTION", "EVIDENCE", "NOTE"]
+        TAG_LABELS = {
+            "BUG":        "Bugs / Failures",
+            "FEEDBACK":   "Player Feedback",
+            "SUGGESTION": "Suggestions",
+            "EVIDENCE":   "Evidence / Pass Notes",
+            "NOTE":       "General Notes",
+        }
+        buckets = {tag: [] for tag in TAG_ORDER}
+        for record in self.test_records:
+            outcome = self._get_test_outcome(record["id"])
+            notes = (outcome.get("notes") or "").strip()
+            if not notes:
+                continue
+            header = f"[{record['id']}] {record['title']} — {outcome['status']}"
+            entry  = f"  {header}\n" + "\n".join(f"    {ln}" for ln in notes.splitlines()) + "\n"
+            upper_notes = notes.upper()
+            placed = False
+            for tag in TAG_ORDER:
+                if f"[{tag}" in upper_notes:
+                    buckets[tag].append(entry)
+                    placed = True
+                    break
+            if not placed:
+                buckets["BUG" if outcome["status"] == "Fail" else "NOTE"].append(entry)
+
+        tracker_rel = self._display_path(self.test_tracker_path_var.get())
+        timestamp   = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        total       = sum(len(v) for v in buckets.values())
+        lines = [
+            f"=== Feedback Log ===",
+            f"Tracker  : {tracker_rel}",
+            f"Generated: {timestamp}",
+            f"Tests with notes: {total}",
+            "",
+        ]
+        for tag in TAG_ORDER:
+            entries = buckets[tag]
+            if entries:
+                lines.append(f"─── {TAG_LABELS[tag]} ({len(entries)}) " + "─" * 40)
+                for e in entries:
+                    lines.append(e)
+        text_widget.config(state="normal")
+        text_widget.delete("1.0", "end")
+        text_widget.insert("1.0", "\n".join(lines))
+        text_widget.config(state="disabled")
+
+    def _copy_all_text(self, text_widget):
+        """Copy all text from a read-only text widget to the clipboard."""
+        content = text_widget.get("1.0", "end").strip()
+        self.clipboard_clear()
+        self.clipboard_append(content)
+        self.update_idletasks()
+        self.log("Copied feedback log to clipboard")
 
     # ==================== Database Methods ====================
 

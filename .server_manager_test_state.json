@@ -1,80 +1,395 @@
 {
-  "updated_at": "2026-04-26 11:32:21",
+  "updated_at": "2026-05-02 21:16:23",
   "tests": {
     "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\mechanics\\test_tracker.md::MECH-01": {
       "status": "Not Run",
       "notes": "",
-      "updated_at": "2026-04-26 11:32:21"
+      "updated_at": "2026-05-02 20:12:50"
     },
     "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\mechanics\\test_tracker.md::MECH-02": {
       "status": "Not Run",
       "notes": "",
-      "updated_at": "2026-04-26 11:32:21"
+      "updated_at": "2026-05-02 20:12:50"
     },
     "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\mechanics\\test_tracker.md::MECH-03": {
       "status": "Not Run",
       "notes": "",
-      "updated_at": "2026-04-26 11:32:21"
+      "updated_at": "2026-05-02 20:12:50"
     },
     "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\mechanics\\test_tracker.md::MECH-04": {
       "status": "Not Run",
       "notes": "",
-      "updated_at": "2026-04-26 11:32:21"
+      "updated_at": "2026-05-02 20:12:50"
     },
     "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\mechanics\\test_tracker.md::MECH-05": {
       "status": "Not Run",
       "notes": "",
-      "updated_at": "2026-04-26 11:32:21"
+      "updated_at": "2026-05-02 20:12:50"
     },
     "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\mechanics\\test_tracker.md::MECH-06": {
       "status": "Not Run",
       "notes": "",
-      "updated_at": "2026-04-26 11:32:21"
+      "updated_at": "2026-05-02 20:12:50"
     },
     "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\mechanics\\test_tracker.md::MECH-07": {
       "status": "Not Run",
       "notes": "",
-      "updated_at": "2026-04-26 11:32:21"
+      "updated_at": "2026-05-02 20:12:50"
     },
     "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\mechanics\\test_tracker.md::MECH-08": {
       "status": "Not Run",
       "notes": "",
-      "updated_at": "2026-04-26 11:32:21"
+      "updated_at": "2026-05-02 20:12:50"
     },
     "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\mechanics\\test_tracker.md::MECH-09": {
       "status": "Not Run",
       "notes": "",
-      "updated_at": "2026-04-26 11:32:21"
+      "updated_at": "2026-05-02 20:12:50"
     },
     "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\mechanics\\test_tracker.md::MECH-10": {
       "status": "Not Run",
       "notes": "",
-      "updated_at": "2026-04-26 11:32:21"
+      "updated_at": "2026-05-02 20:12:50"
     },
     "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\mechanics\\test_tracker.md::MECH-11": {
       "status": "Fail",
       "notes": "",
-      "updated_at": "2026-04-26 11:32:21"
+      "updated_at": "2026-05-02 20:12:50"
     },
     "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\mechanics\\test_tracker.md::MECH-12": {
       "status": "Not Run",
       "notes": "",
-      "updated_at": "2026-04-26 11:32:21"
+      "updated_at": "2026-05-02 20:12:50"
     },
     "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\mechanics\\test_tracker.md::MECH-13": {
       "status": "Not Run",
       "notes": "",
-      "updated_at": "2026-04-26 11:32:21"
+      "updated_at": "2026-05-02 20:12:50"
     },
     "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\mechanics\\test_tracker.md::MECH-14": {
       "status": "Not Run",
       "notes": "",
-      "updated_at": "2026-04-26 11:32:21"
+      "updated_at": "2026-05-02 20:12:50"
     },
     "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\mechanics\\test_tracker.md::MECH-15": {
       "status": "Not Run",
       "notes": "",
-      "updated_at": "2026-04-26 11:32:21"
+      "updated_at": "2026-05-02 20:12:50"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\multiclass\\test_tracker.md::AUTO-01": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:06"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\multiclass\\test_tracker.md::CORE-01": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:06"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\multiclass\\test_tracker.md::CAST-01": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:06"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\multiclass\\test_tracker.md::CAST-02": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:06"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\multiclass\\test_tracker.md::COMBAT-01": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:06"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\multiclass\\test_tracker.md::PET-01": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:06"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\multiclass\\test_tracker.md::SKILL-01": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:06"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\multiclass\\test_tracker.md::ITEM-01": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:06"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\multiclass\\test_tracker.md::AA-01": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:06"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\multiclass\\test_tracker.md::ENT-01": {
+      "status": "Not Run",
+      "notes": "Pending final design decision for removed-class AA refund/reset versus soft-lock policy.",
+      "updated_at": "2026-05-02 21:16:06"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\multiclass\\test_tracker.md::PROG-01": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:06"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\multiclass\\test_tracker.md::WORLD-01": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:06"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\multiclass\\test_tracker.md::UI-01": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:06"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\multiclass\\test_tracker.md::AA-02": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:06"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\operations\\work_tracker.md::O-01": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:14"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\operations\\work_tracker.md::O-02": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:14"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\operations\\work_tracker.md::O-03": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:14"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\operations\\work_tracker.md::B-01": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:14"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\operations\\work_tracker.md::B-02": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:14"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\operations\\work_tracker.md::B-03": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:14"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\operations\\work_tracker.md::B-04": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:14"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\operations\\work_tracker.md::B-05": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:14"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\operations\\work_tracker.md::B-06": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:14"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\operations\\work_tracker.md::B-07": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:14"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\operations\\work_tracker.md::C-01": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:14"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\operations\\work_tracker.md::C-02": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:14"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\operations\\work_tracker.md::C-03": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:14"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\operations\\work_tracker.md::C-04": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:14"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\operations\\work_tracker.md::C-05": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:14"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\operations\\work_tracker.md::W-01": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:14"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\operations\\work_tracker.md::W-02": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:14"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\operations\\work_tracker.md::W-03": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:14"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\operations\\work_tracker.md::W-04": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:14"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\operations\\work_tracker.md::W-05": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:14"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\operations\\work_tracker.md::W-06": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:14"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\operations\\work_tracker.md::W-07": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:14"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\operations\\work_tracker.md::D-01": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:14"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\operations\\work_tracker.md::D-02": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:14"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\operations\\work_tracker.md::D-03": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:14"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\operations\\work_tracker.md::D-04": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:14"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\classes\\test_tracker.md::CL-01": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:19"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\classes\\test_tracker.md::CL-02": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:19"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\classes\\test_tracker.md::CL-03": {
+      "status": "Not Run",
+      "notes": "Steps 1-2 can be validated without a full in-game session via DB query and file inspection.",
+      "updated_at": "2026-05-02 21:16:19"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\classes\\test_tracker.md::CL-06": {
+      "status": "Pass",
+      "notes": "Good as of 2/24",
+      "updated_at": "2026-05-02 21:16:19"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\classes\\test_tracker.md::CL-07": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:19"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\classes\\test_tracker.md::CL-08": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:19"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\classes\\test_tracker.md::CL-09": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:19"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\infinite_progression\\test_tracker.md::IP-01": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:23"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\infinite_progression\\test_tracker.md::IP-02": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:23"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\infinite_progression\\test_tracker.md::IP-03": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:23"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\infinite_progression\\test_tracker.md::IP-04": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:23"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\infinite_progression\\test_tracker.md::IP-05": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:23"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\infinite_progression\\test_tracker.md::IP-06": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:23"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\infinite_progression\\test_tracker.md::IP-07": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:23"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\infinite_progression\\test_tracker.md::IP-08": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:23"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\infinite_progression\\test_tracker.md::IP-09": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:23"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\infinite_progression\\test_tracker.md::IP-10": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:23"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\infinite_progression\\test_tracker.md::IP-11": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:23"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\infinite_progression\\test_tracker.md::IP-12": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:23"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\infinite_progression\\test_tracker.md::IP-13": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:23"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\infinite_progression\\test_tracker.md::IP-14": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:23"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\infinite_progression\\test_tracker.md::IP-15": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:23"
+    },
+    "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\infinite_progression\\test_tracker.md::IP-16": {
+      "status": "Not Run",
+      "notes": "",
+      "updated_at": "2026-05-02 21:16:23"
     }
   }
 }

@@ -208,6 +208,20 @@ Run every active case in this tracker.
 **Status**: [x] Not Run  [ ] In Progress  [ ] Blocked  [ ] Pass  [ ] Fail
 **Notes**: ______________________________
 
+### [AA-02] Dynamic AA Timer Stability Across AA Table Refresh
+
+**Goal**: Verify multiclass AAs keep a stable dynamic cooldown family when the AA table is rebuilt.
+**Steps**:
+
+1. Confirm `Custom:UseDynamicAATimers` is enabled via `#test 2` or `#rules get Custom:UseDynamicAATimers`.
+2. On a multiclass character with at least two active AAs that normally use shared recast timers, open the AA window and note each AA's displayed cooldown family/recast grouping.
+3. Use one active AA, then trigger an AA table rebuild by zoning, relogging, or changing owned classes.
+4. Reopen the AA window and verify the same AAs still present the same cooldown family grouping and reuse the expected cooldown instead of shifting to a different timer.
+5. Activate the second AA if it should share the cooldown and confirm the server/client both reflect the expected remaining reuse timer.
+**Expected**: Dynamic timer IDs remain stable across AA table refreshes, shared cooldown AAs stay grouped correctly, and no AA shifts to a different reuse family after zoning, relogging, or class mutation.
+**Status**: [x] Not Run  [ ] In Progress  [ ] Blocked  [ ] Pass  [ ] Fail
+**Notes**: ______________________________
+
 ### [ENT-01] Class Removal Soft-Lock Policy
 
 **Goal**: Verify removing a class has a clear entitlement outcome for spells, AAs, items, and UI.

@@ -3,18 +3,33 @@
 **Status**: Active Testing
 **Tracker Area**: Classes
 **Tracker State**: Active
-**Last Updated**: 2026-02-27
+**Last Updated**: 2026-05-02
 
 ## Purpose
 
 Tracks class-specific combat behavior, custom class abilities, and class-tuned formula paths.
 
-## How To Use
+## Status Rules
 
-1. Fill out `Session Header`.
-2. Run `Smoke Run` first.
-3. Mark each test `Pass` or `Fail`.
-4. Add direct evidence (chat lines, logs, damage samples).
+- `Not Run`: Ready for validation but not executed in the current build.
+- `In Progress`: Actively being tested or partially executed.
+- `Blocked`: Cannot be validated due to environment, data, or design dependency.
+- `Pass`: Expected behavior confirmed with objective evidence.
+- `Fail`: Behavior mismatches expected results or produces a regression.
+
+## Evidence Format
+
+`Observed:` one-line actual result.
+`Evidence:` exact chat/log snippet, combat log sample, or screenshot reference.
+`Commands:` minimal command sequence to reproduce.
+`Next:` immediate code/data target if blocked or failed.
+
+## Current Validation Focus
+
+1. Run **CL-01** and **CL-02** after any custom AA or warrior code changes.
+2. Run **CL-06** (Ranger autofire) after ranged combat changes.
+3. Run **CL-08** and **CL-09** when DEX formula rules or frenzy multipliers change.
+4. **CL-03** can be automated — verify DB rows and client exports without in-game play.
 
 ## Session Header
 
@@ -46,8 +61,9 @@ Run all tests in this document.
 2. Open AA window and confirm `Heroic Throw` entry is present.
 3. Activate AA on valid target and observe result.
 4. Re-activate before cooldown ends.
+
 **Expected**: AA is visible, activates successfully on target, and enforces cooldown/recast.
-**Status**: [ ] Pass  [ ] Fail
+**Status**: [x] Not Run  [ ] In Progress  [ ] Blocked  [ ] Pass  [ ] Fail
 **Notes**: ______________________________
 
 ### [CL-02] Colossal Smash AA Visibility + Activation
@@ -59,8 +75,9 @@ Run all tests in this document.
 2. Open AA window and confirm `Colossal Smash` entry is present.
 3. Activate AA in combat on valid target.
 4. Confirm expected combat output and recast behavior.
+
 **Expected**: AA is visible, ability fires with expected result, and recast rules apply.
-**Status**: [ ] Pass  [ ] Fail
+**Status**: [x] Not Run  [ ] In Progress  [ ] Blocked  [ ] Pass  [ ] Fail
 **Notes**: ______________________________
 
 ### [CL-03] Warrior AA Export/Client Data Parity
@@ -68,12 +85,13 @@ Run all tests in this document.
 **Goal**: Verify server spell/DB entries for custom warrior AAs match client exports.
 **Steps**:
 
-1. Confirm server has expected spell and AA rows for `Heroic Throw` and `Colossal Smash`.
+1. Confirm server has expected spell and AA rows for `Heroic Throw` and `Colossal Smash` (DB query or `#showitem`).
 2. Run export path for client spell/dbstr assets.
 3. Validate client can see AA names/descriptions and activate both AAs.
+
 **Expected**: No client/server mismatch for names, descriptions, spell IDs, or activation behavior.
-**Status**: [ ] Pass  [ ] Fail
-**Notes**: ______________________________
+**Status**: [x] Not Run  [ ] In Progress  [ ] Blocked  [ ] Pass  [ ] Fail
+**Notes**: Steps 1-2 can be validated without a full in-game session via DB query and file inspection.
 
 ---
 
@@ -88,8 +106,9 @@ Run all tests in this document.
 1. Ranger class available, bow equipped.
 2. Stand at melee distance.
 3. Enable autofire.
+
 **Expected**: No `RANGED_TOO_CLOSE` rejection for ranger path.
-**Status**: [X] Pass  [ ] Fail
+**Status**: [ ] Not Run  [ ] In Progress  [ ] Blocked  [x] Pass  [ ] Fail
 **Notes**: Good as of 2/24
 
 ### [CL-07] Bow Augment Self-Heal Proc (THJ Style)
@@ -98,53 +117,68 @@ Run all tests in this document.
 **Legacy ID**: `P-07`
 **Setup**:
 
-1. Buy one of the new augs from `Gemcrafter_Tessu` (`NPC 52099`) or `Gemcrafter_Anuk` (`NPC 382051`) or `Gemcrafter_Lentos` (`NPC 394174`):
-2. `1152012000` (`Lesser Bowstone of Mending`) `Level 20`
-3. `1152012001` (`Bowstone of Mending`) `Level 40`
-4. `1152012002` (`Greater Bowstone of Mending`) `Level 60`
-5. `1152012003` (`Grand Bowstone of Mending`) `Level 80`
+1. Buy one of the bow heal augs from `Gemcrafter_Tessu` (NPC 52099), `Gemcrafter_Anuk` (NPC 382051), or `Gemcrafter_Lentos` (NPC 394174):
+   - `1152012000` (Lesser Bowstone of Mending) Level 20
+   - `1152012001` (Bowstone of Mending) Level 40
+   - `1152012002` (Greater Bowstone of Mending) Level 60
+   - `1152012003` (Grand Bowstone of Mending) Level 80
+
 **Steps**:
 
 1. Insert selected augment into bow.
 2. Enable autofire and fight a valid target for multiple rounds.
 3. Watch combat/chat output for heal proc messages.
 4. Repeat at a level below the augment gate to verify it does not proc early.
+
 **Expected**: Proc fires during ranged combat and heal lands on self; proc is blocked below its required level.
-**Status**: [ ] Pass  [ ] Fail
+**Status**: [x] Not Run  [ ] In Progress  [ ] Blocked  [ ] Pass  [ ] Fail
 **Notes**: ______________________________
 
 ### [CL-08] Legacy Bow Scaling (hDEX + Minimum Clamp)
 
 **Goal**: Verify THJ-style legacy bow scaling behavior when new dex formulas are disabled.
-**Legacy ID**: `P-08`
 **Setup**:
 
 1. Confirm `Combat:UseNewDexFormulas = false`.
 2. Confirm `Custom:ScaleBowByHDex > 0`.
 3. Confirm `Custom:ScaleBowMinimumDamageDivisor > 0` and `Custom:ScaleBowMinimumDamageMultiplier > 0`.
+
 **Steps**:
 
-1. Use a bow with low base damage and engage a valid target with autofire.
+1. Use a bow with low base damage, engage a valid target with autofire.
 2. Record several hit values with low hDEX gear.
 3. Repeat with high hDEX gear.
+
 **Expected**: Higher hDEX produces higher ranged damage profile; floor clamping prevents unexpectedly low legacy-archery hits.
-**Status**: [ ] Pass  [ ] Fail
+**Status**: [x] Not Run  [ ] In Progress  [ ] Blocked  [ ] Pass  [ ] Fail
 **Notes**: ______________________________
 
 ### [CL-09] Devastating Frenzy Legacy Scaling
 
 **Goal**: Verify THJ-style berserker frenzy scaling against lower target HP.
-**Legacy ID**: `P-09`
 **Setup**:
 
 1. Confirm `Combat:UseNewDexFormulas = false`.
 2. Confirm `Custom:DevastatingFrenzyDamageMultiplier > 0`.
 3. Test character has Berserker class and uses Frenzy.
+
 **Steps**:
 
 1. Hit a target near full HP with Frenzy and record crit/frenzy damage range.
 2. Lower target HP in ~20% bands and continue Frenzy attacks.
 3. Compare damage profile as target HP drops.
+
 **Expected**: Frenzy critical output scales upward as target HP decreases, with occasional large spike behavior matching THJ-style legacy scaling.
-**Status**: [ ] Pass  [ ] Fail
+**Status**: [x] Not Run  [ ] In Progress  [ ] Blocked  [ ] Pass  [ ] Fail
 **Notes**: ______________________________
+
+---
+
+## Agent Closeout Requirement
+
+When an agent validates or changes class-specific work, it must update this tracker:
+
+1. Set one clear status per case.
+2. Add concise notes using `Observed`, `Evidence`, `Commands`, and `Next`.
+3. Mark blocked cases as `Blocked`, not `Fail`, unless game behavior itself failed.
+4. Prefer updating existing scenario cases over adding new micro-cases.

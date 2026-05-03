@@ -279,10 +279,15 @@ void Mob::MakePoweredPet(uint16 spell_id, const char* pettype, int16 petpower,
 		float scale_power = (float)act_power / 100.0f;
 		if(scale_power > 0)
 		{
+			const int level_bonus = std::min(
+				static_cast<int>(RuleR(Pets, PetPowerLevelCap)),
+				std::max(0, static_cast<int>(act_power * RuleR(Pets, PetPowerLevelScale)))
+			);
+
 			npc_type->max_hp *= (1 + scale_power);
 			npc_type->current_hp = npc_type->max_hp;
 			npc_type->AC *= (1 + scale_power);
-			npc_type->level += 1 + ((int)act_power / 25) > npc_type->level + RuleR(Pets, PetPowerLevelCap) ? RuleR(Pets, PetPowerLevelCap) : 1 + ((int)act_power / 25); // gains an additional level for every 25 pet power
+			npc_type->level += level_bonus;
 			npc_type->min_dmg = (npc_type->min_dmg * (1 + (scale_power / 2)));
 			npc_type->max_dmg = (npc_type->max_dmg * (1 + (scale_power / 2)));
 			npc_type->size = npc_type->size * (1 + (scale_power / 2)) > npc_type->size * 3 ? npc_type->size * 3 : npc_type-> size * (1 + (scale_power / 2));

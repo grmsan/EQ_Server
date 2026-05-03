@@ -1026,6 +1026,10 @@ int32 Client::SetDynamicAATimer(uint32 aa_id) {
 }
 
 void Client::SendAlternateAdvancementTable() {
+	if (RuleB(Custom, UseDynamicAATimers)) {
+		LoadDynamicAATimers();
+	}
+
 	for(auto &aa : zone->aa_abilities) {
 		uint32 charges = 0;
 		auto ranks = GetAA(aa.second->first_rank_id, &charges);

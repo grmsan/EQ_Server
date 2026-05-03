@@ -38,7 +38,7 @@ For each area that is test-ready:
 2. Add metadata header:
    - `Tracker Area`
    - `Tracker State` (`Active`, `WIP`, or `Concept`)
-3. Use stable IDs. Prefer area prefixes for non-core domains (`CL-01`, `MECH-01`, `QST-01`, `QOL-01`, `TOOL-01`, `IP-101`, etc.).
+3. Use stable IDs. Prefer area prefixes for non-core domains (`CL-01`, `MECH-01`, `QST-01`, `QOL-01`, `TOOL-01`, `IP-01`, etc.).
 4. Keep cases scenario-level. One case should validate a meaningful player or operator workflow, not every tiny input variant.
 5. Keep each case structured as:
    - `Goal`
@@ -46,6 +46,10 @@ For each area that is test-ready:
    - `Expected`
    - `Status`
    - `Notes`
+6. Use case type markers in the title when applicable:
+   - `[AUTO]`: Can be validated via SQL queries or `#test` commands without sustained in-game play.
+   - `[SOAK]`: Requires extended play for statistical confidence; exclude from standard smoke runs.
+   - `[DLL POC]`: Requires built and deployed `dinput8.dll` + matching UI assets (validate `TOOL-11` first).
 
 Examples:
 

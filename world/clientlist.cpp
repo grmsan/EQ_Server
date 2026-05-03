@@ -54,6 +54,10 @@ static uint16 GetMulticlassBitsOrBase(uint32 character_id, uint8 base_class_id)
 {
 	const uint16 base_bit = GetPlayerClassBit(base_class_id);
 
+	if (!RuleB(Custom, MulticlassingEnabled)) {
+		return base_bit;
+	}
+
 	if (character_id == 0) {
 		return base_bit;
 	}
@@ -96,7 +100,7 @@ static uint16 GetMulticlassBitsOrBase(uint32 character_id, uint8 base_class_id)
 	}
 
 	uint16 bits = static_cast<uint16>(Strings::ToUnsignedInt(raw, base_bit) & 0xFFFF);
-	return bits;
+	return bits ? bits : base_bit;
 }
 
 static std::string BuildMulticlassBaseList(uint16 bits)
@@ -939,7 +943,8 @@ void ClientList::SendWhoAll(uint32 fromid,const char* to, int16 admin, Who_All_S
 
 				if (cle->Anon()==0 || (admin>=cle->Admin() && admin> AccountStatus::Player)) {
 					// Keep the class field as a single class id for stock clients (/who will otherwise show "Unknown").
-					// Multiclass display is handled via appended name suffix and/or custom DLLs.
+					// MC-DEC-01 still owns whether normal /who should change payload policy; FriendsWho suffixes
+					// and custom DLL presentation are separate from this stock-client-safe class field.
 					plclass_ = cle->class_();
 					pllevel=cle->level();
 

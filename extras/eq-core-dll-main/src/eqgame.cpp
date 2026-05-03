@@ -2587,6 +2587,40 @@ static int GetBestSpellLevelForEffectiveClasses(PSPELL spell, uint32_t effective
 	return bestLevel;
 }
 
+static PSPELL ResolveSpellBookEntry(int bookSlot, DWORD* resolvedSpellId = nullptr)
+{
+	if (resolvedSpellId) {
+		*resolvedSpellId = 0xFFFFFFFFu;
+	}
+
+	if (bookSlot < 0 || bookSlot >= NUM_BOOK_SLOTS) {
+		return nullptr;
+	}
+
+	PCHARINFO2 ci2 = nullptr;
+	__try {
+		ci2 = GetCharInfo2();
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		ci2 = nullptr;
+	}
+
+	if (!ci2) {
+		return nullptr;
+	}
+
+	const DWORD spellId = ci2->SpellBook[bookSlot];
+	if (resolvedSpellId) {
+		*resolvedSpellId = spellId;
+	}
+
+	if (spellId == 0xFFFFFFFFu) {
+		return nullptr;
+	}
+
+	return GetSpellByID(spellId);
+}
+
 DETOUR_TRAMPOLINE_EMPTY(int __fastcall EQSpell_GetSpellLevelNeeded_Tramp(void*, void*, int));
 int __fastcall EQSpell_GetSpellLevelNeeded_Detour(void* This, void* edx, int classId)
 {
@@ -3257,12 +3291,12 @@ int __fastcall EQCharacter_IsSpellcaster3_Detour(void* This, void* edx)
 }
 
 DETOUR_TRAMPOLINE_EMPTY(int __fastcall CSpellBookWnd_CanStartMemming_Tramp(void*, void*, int));
-int __fastcall CSpellBookWnd_CanStartMemming_Detour(void* This, void* edx, int spellId)
+int __fastcall CSpellBookWnd_CanStartMemming_Detour(void* This, void* edx, int bookSlot)
 {
 	g_last_hook_tag = Hook_CanStartMemming;
 	int nativeVal = 0;
 	__try {
-		nativeVal = CSpellBookWnd_CanStartMemming_Tramp(This, edx, spellId);
+		nativeVal = CSpellBookWnd_CanStartMemming_Tramp(This, edx, bookSlot);
 	}
 	__except (EXCEPTION_EXECUTE_HANDLER) {
 		if (isDebugLoggingEnabled) {
@@ -3276,12 +3310,18 @@ int __fastcall CSpellBookWnd_CanStartMemming_Detour(void* This, void* edx, int s
 		return nativeVal;
 	}
 
+	DWORD resolvedSpellId = 0xFFFFFFFFu;
 	PSPELL spell = nullptr;
 	__try {
-		spell = GetSpellByID(static_cast<DWORD>(spellId));
+		spell = ResolveSpellBookEntry(bookSlot, &resolvedSpellId);
+		if (!spell) {
+			resolvedSpellId = static_cast<DWORD>(bookSlot);
+			spell = GetSpellByID(resolvedSpellId);
+		}
 	}
 	__except (EXCEPTION_EXECUTE_HANDLER) {
 		spell = nullptr;
+		resolvedSpellId = 0xFFFFFFFFu;
 	}
 
 	if (!spell) {
@@ -3292,17 +3332,19 @@ int __fastcall CSpellBookWnd_CanStartMemming_Detour(void* This, void* edx, int s
 	const int result = (bestLevel < 255) ? 1 : 0;
 
 	if (isDebugLoggingEnabled) {
-		static std::set<int> s_logged_memming_spells;
-		if (s_logged_memming_spells.find(spellId) == s_logged_memming_spells.end()) {
+		static std::set<uint64_t> s_logged_memming_spells;
+		const uint64_t logKey = (static_cast<uint64_t>(static_cast<uint32_t>(bookSlot)) << 32) | resolvedSpellId;
+		if (s_logged_memming_spells.find(logKey) == s_logged_memming_spells.end()) {
 			LogDebug(
-				"[CAN_START_MEMMING] spellId=%d native=%d best=%d mask=0x%04X result=%d (first)",
-				spellId,
+				"[CAN_START_MEMMING] slot=%d spell=%u native=%d best=%d mask=0x%04X result=%d (first)",
+				bookSlot,
+				resolvedSpellId,
 				nativeVal,
 				bestLevel,
 				(unsigned)(effectiveMask & 0xFFFF),
 				result
 			);
-			s_logged_memming_spells.insert(spellId);
+			s_logged_memming_spells.insert(logKey);
 		}
 	}
 

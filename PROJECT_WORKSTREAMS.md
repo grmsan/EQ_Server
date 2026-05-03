@@ -117,7 +117,7 @@ This is the assignment board. Keep work packets small enough that another agent 
 **Inputs:**
 - [THJ_GAP_REGISTER.md](THJ_GAP_REGISTER.md)
 - `extras/THJServer/world/clientlist.cpp`
-**Latest Finding:** `world/clientlist.cpp::GetMulticlassBitsOrBase()` no longer ORs the legacy base-class bit back into persisted multiclass ownership. Next runtime proof should target `CORE-01` and `UI-01` to confirm `/who` class filters and friends display stop surfacing removed starting classes.
+**Latest Finding:** `world/clientlist.cpp::GetMulticlassBitsOrBase()` no longer ORs the legacy base-class bit back into persisted multiclass ownership, now short-circuits to the compatibility/base class when `Custom:MulticlassingEnabled` is off, and falls back from invalid zero masks to the compatibility/base class. Next runtime proof should target `CORE-01` and `UI-01` to confirm `/who` class filters and friends display stop surfacing removed starting classes. Rebuild is currently blocked if `build/bin/RelWithDebInfo/world.exe` is left running.
 **Done Criteria:** World-side helper uses authoritative persisted multiclass ownership without silently OR-ing the legacy base class back in, and the gap register/workstream notes reflect the fix.
 
 ### MC-FIX-02 - Bard Item-Click Guard Parity
@@ -137,13 +137,14 @@ This is the assignment board. Keep work packets small enough that another agent 
 
 **Priority:** P1
 **Role:** Implementer
-**Status:** Ready
+**Status:** Review
 **Objective:** Add THJ-style dynamic AA timer cache preload before rebuilding the AA table, reusing existing local timer storage infrastructure.
 **Scope:** `zone/aa.cpp`, `zone/client.h`, multiclass AA validation notes, [THJ_GAP_REGISTER.md](THJ_GAP_REGISTER.md).
 **Out of Scope:** Adding toggle-AA disabled-state persistence.
 **Inputs:**
 - [THJ_GAP_REGISTER.md](THJ_GAP_REGISTER.md)
 - `extras/THJServer/zone/aa.cpp`
+**Latest Finding:** `zone/aa.cpp::SendAlternateAdvancementTable()` now preloads the persisted dynamic AA timer cache via `LoadDynamicAATimers()` before serializing ranks when `Custom:UseDynamicAATimers` is enabled. Next proof should run `AA-02` to confirm cooldown-family stability across zoning, relogging, and class-mutation-driven AA table rebuilds.
 **Done Criteria:** AA table rebuild path preloads dynamic timer cache in a THJ-equivalent way without duplicating the existing local timer repository logic.
 
 ### MC-FIX-03B - Toggle-AA Disabled-State Parity

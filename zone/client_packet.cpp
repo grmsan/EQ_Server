@@ -532,6 +532,34 @@ int Client::HandlePacket(const EQApplicationPacket *app)
 	return(true);
 }
 
+// Compute the scaled click-cast time for a dynamic item.
+// Short casts (< threshold) can reduce all the way to instant.
+// Long casts (>= threshold) lerp toward a minimum floor based on excess over threshold.
+static int32 ComputeScaledClickCastTimeMs(int32 base_ms, uint32 item_id)
+{
+	if (!RuleB(Custom, ItemClickCastTimeScalingEnabled) || base_ms <= 0)
+		return base_ms;
+
+	int item_lvl = EQ::DynamicItemManager::Get().GetItemLevel(item_id);
+	if (item_lvl <= 0)
+		return base_ms;
+
+	double R = ItemScaling::Config::Get().GetClickCastReductionFraction(item_lvl);
+	int32 threshold_ms = RuleI(Custom, ItemClickCastTimeInstantThresholdMs);
+	int32 result;
+
+	if (base_ms <= threshold_ms) {
+		// Short cast: scales fully down to 0
+		result = static_cast<int32>(base_ms * (1.0 - R));
+	} else {
+		// Long cast: interpolate toward a minimum floor so it never reaches 0
+		int32 floor_ms = static_cast<int32>((base_ms - threshold_ms) * (RuleI(Custom, ItemClickCastTimeLongCastFloorPct) / 100.0));
+		result = static_cast<int32>(base_ms + (floor_ms - base_ms) * R);
+	}
+
+	return std::max(result, RuleI(Custom, ItemClickCastTimeMinMs));
+}
+
 // Finish client connecting state
 void Client::CompleteConnect()
 {
@@ -4671,7 +4699,7 @@ void Client::Handle_OP_CastSpell(const EQApplicationPacket *app)
 							}
 
 							if (i == 0) {
-								CastSpell(item->Click.Effect, castspell->target_id, slot, item->CastTime, 0, 0, castspell->inventoryslot);
+								CastSpell(item->Click.Effect, castspell->target_id, slot, ComputeScaledClickCastTimeMs(item->CastTime, inst->GetID()), 0, 0, castspell->inventoryslot);
 							}
 							else {
 								InterruptSpell(castspell->spell_id);
@@ -4703,16 +4731,7 @@ void Client::Handle_OP_CastSpell(const EQApplicationPacket *app)
 						}
 
 						if (i == 0) {
-							int32 click_cast_ms = item->CastTime;
-							if (RuleB(Custom, ItemClickCastTimeScalingEnabled) && click_cast_ms > 0) {
-								int item_lvl = EQ::DynamicItemManager::Get().GetItemLevel(inst->GetID());
-								if (item_lvl > 0) {
-									double reduction = ItemScaling::Config::Get().GetClickCastReductionFraction(item_lvl);
-									click_cast_ms = static_cast<int32>(click_cast_ms * (1.0 - reduction));
-									click_cast_ms = std::max(click_cast_ms, RuleI(Custom, ItemClickCastTimeMinMs));
-								}
-							}
-							CastSpell(item->Click.Effect, castspell->target_id, slot, click_cast_ms, 0, 0, castspell->inventoryslot);
+							CastSpell(item->Click.Effect, castspell->target_id, slot, ComputeScaledClickCastTimeMs(item->CastTime, inst->GetID()), 0, 0, castspell->inventoryslot);
 						}
 						else {
 							InterruptSpell(castspell->spell_id);
@@ -9876,16 +9895,7 @@ void Client::Handle_OP_ItemVerifyRequest(const EQApplicationPacket *app)
 						if (!IsCastWhileInvisibleSpell(item->Click.Effect)) {
 							CommonBreakInvisible(); // client can't do this for us :(
 						}
-						// Scale click-cast time by item level
-						int32 click_cast_ms = item->CastTime;
-						if (RuleB(Custom, ItemClickCastTimeScalingEnabled) && click_cast_ms > 0) {
-							int item_lvl = EQ::DynamicItemManager::Get().GetItemLevel(p_inst->GetID());
-							if (item_lvl > 0) {
-								double reduction = ItemScaling::Config::Get().GetClickCastReductionFraction(item_lvl);
-								click_cast_ms = static_cast<int32>(click_cast_ms * (1.0 - reduction));
-								click_cast_ms = std::max(click_cast_ms, RuleI(Custom, ItemClickCastTimeMinMs));
-							}
-						}
+						int32 click_cast_ms = ComputeScaledClickCastTimeMs(item->CastTime, p_inst->GetID());
 						if (HasClass(Class::Bard)){
 							DoBardCastingFromItemClick(is_casting_bard_song, click_cast_ms, item->Click.Effect, target_id, CastingSlot::Item, slot_id, item->RecastType, item->RecastDelay);
 						}
@@ -9951,16 +9961,7 @@ void Client::Handle_OP_ItemVerifyRequest(const EQApplicationPacket *app)
 						if (!IsCastWhileInvisibleSpell(augitem->Click.Effect)) {
 							CommonBreakInvisible(); // client can't do this for us :(
 						}
-						// Scale click-cast time by aug item level
-						int32 click_cast_ms = augitem->CastTime;
-						if (RuleB(Custom, ItemClickCastTimeScalingEnabled) && click_cast_ms > 0) {
-							int item_lvl = EQ::DynamicItemManager::Get().GetItemLevel(clickaug->GetID());
-							if (item_lvl > 0) {
-								double reduction = ItemScaling::Config::Get().GetClickCastReductionFraction(item_lvl);
-								click_cast_ms = static_cast<int32>(click_cast_ms * (1.0 - reduction));
-								click_cast_ms = std::max(click_cast_ms, RuleI(Custom, ItemClickCastTimeMinMs));
-							}
-						}
+						int32 click_cast_ms = ComputeScaledClickCastTimeMs(augitem->CastTime, clickaug->GetID());
 						if (HasClass(Class::Bard)) {
 							DoBardCastingFromItemClick(is_casting_bard_song, click_cast_ms, augitem->Click.Effect, target_id, CastingSlot::Item, slot_id, augitem->RecastType, augitem->RecastDelay);
 						}

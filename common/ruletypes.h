@@ -1289,6 +1289,8 @@ RULE_BOOL(Custom, MulticlassDebug, false, "Enable multiclass debug logging in zo
 RULE_BOOL(Custom, ClearRestingDetrimentalEffectsEnabled, true, "When out of combat, sitting, and rest timer expires: remove detrimental buffs from player and their pets.")
 RULE_BOOL(Custom, ItemClickCastTimeScalingEnabled, true, "Scale click-cast times by item level: leveled items cast faster, up to instant at max level.")
 RULE_INT(Custom, ItemClickCastTimeMinMs, 0, "Minimum click-cast time in milliseconds after scaling (0 = instant allowed, 1000 = 1s floor, etc.)")
+RULE_INT(Custom, ItemClickCastTimeInstantThresholdMs, 6000, "Cast times at or below this (ms) can become fully instant at max item level. Longer casts retain a proportional floor.")
+RULE_INT(Custom, ItemClickCastTimeLongCastFloorPct, 50, "For casts exceeding InstantThreshold, the excess above the threshold is retained at this % at max item level. E.g. 50 = 12s cast with 6s threshold keeps 3s at max level.")
 RULE_CATEGORY_END()
 
 #undef RULE_CATEGORY

@@ -16,6 +16,19 @@ local CLASS_NAMES = {
     [13]="Magician",[14]="Enchanter",[15]="Beastlord",[16]="Berserker"
 }
 
+-- Pet-summoning classes → their class-specific bag item ID
+-- Necromancer=11, Magician=13, Beastlord=15
+local PET_CLASS_BAGS = {
+    [11] = 960002,  -- Necromantic Bag
+    [13] = 960001,  -- Familiar's Satchel
+    [15] = 960003,  -- Warder's Pack
+}
+
+-- Mirrors the has_class() logic in Emissary_of_the_Guilds.lua
+local function has_class(bits, class_id)
+    return (bits & (1 << (class_id - 1))) ~= 0
+end
+
 -- Helper: return the display name for the player's primary class
 local function primary_class_name(e)
     local id = e.other:GetClass()
@@ -57,6 +70,24 @@ function event_say(e)
             -- Give starter bag (10-slot backpack) and some coin
             e.other:SummonFixedItem(22292)  -- Backpack (10-slot)
             e.other:AddMoneyToPP(0, 0, 0, 50, false)  -- 50 plat starter coin
+
+            -- Give pet class bags for each summoner calling the player has chosen
+            local bits = e.other:GetClassesBitmask()
+            local pet_bag_count = 0
+            for class_id, bag_id in pairs(PET_CLASS_BAGS) do
+                if has_class(bits, class_id) then
+                    e.other:SummonFixedItem(bag_id)
+                    pet_bag_count = pet_bag_count + 1
+                end
+            end
+            if pet_bag_count > 0 then
+                e.other:Message(
+                    15,
+                    "You also receive a pet equipment bag for each of your summoner callings. " ..
+                    "Use them to organize gear for your companions!"
+                )
+            end
+
             e.other:Message(
                 15,
                 "Tip: Ask Tearel nearby to travel to the classic lands of Norrath. " ..

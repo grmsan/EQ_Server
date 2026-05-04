@@ -92,3 +92,15 @@ VALUES (990200, 'bazaar', 0,  65, -15, 0.72, 256, 1800, 0, 0, 0, 0, 1, 0, -1, -1
 INSERT IGNORE INTO spawn2 (spawngroupID, zone, version, x, y, z, heading, respawntime, variance, pathgrid, path_when_zone_idle, _condition, cond_value, animation, min_expansion, max_expansion)
 VALUES (990201, 'bazaar', 0, 115, -15, 0.72, 256, 1800, 0, 0, 0, 0, 1, 0, -1, -1);
 
+-- -------------------------------------------------------
+-- 10. Pet class bags for summoner classes
+--     Given by the Bazaar Greeter when the player has a
+--     pet-summoning class at the end of the intro quest.
+-- -------------------------------------------------------
+INSERT INTO items (id, Name, lore, bagtype, bagslots, bagsize, bagwr, classes, races, nodrop, norent, weight, size, itemclass, icon, slots, magic)
+VALUES
+    (960001, "Familiar's Satchel",   'A satchel for organizing gear for your elemental familiar.',   1, 8, 4, 0, 65535, 65535, 1, 1, 10, 1, 1, 557, 0, 0),
+    (960002, 'Necromantic Bag',      'A dark bag used to carry equipment for your undead servant.',  1, 8, 4, 0, 65535, 65535, 1, 1, 10, 1, 1, 557, 0, 0),
+    (960003, "Warder's Pack",        'A rugged pack for storing equipment destined for your warder.',1, 8, 4, 0, 65535, 65535, 1, 1, 10, 1, 1, 557, 0, 0)
+ON DUPLICATE KEY UPDATE Name=VALUES(Name), lore=VALUES(lore);
+

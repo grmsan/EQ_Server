@@ -687,6 +687,7 @@ bool Client::Process() {
 			CalcATK();
 			CalcMaxEndurance();
 			CalcRestState();
+			ClearRestingDetrimentalEffects();
 			DoHPRegen();
 			DoManaRegen();
 			DoEnduranceRegen();
@@ -2332,16 +2333,59 @@ void Client::CalcRestState()
 	// so we don't have aggro, our timer has expired, we do not want this to cause issues
 	m_pp.RestTimer = 0;
 
-	uint32 buff_count = GetMaxTotalSlots();
-	for (unsigned int j = 0; j < buff_count; j++) {
-		if(IsValidSpell(buffs[j].spellid)) {
-			if(IsDetrimentalSpell(buffs[j].spellid) && (buffs[j].ticsremaining > 0))
-				if(!IsRestAllowedSpell(buffs[j].spellid))
-					return;
+	// When ClearRestingDetrimentalEffectsEnabled is on, we skip the detrimental block check here
+	// because ClearRestingDetrimentalEffects() will handle removing them right after this call.
+	if (!RuleB(Custom, ClearRestingDetrimentalEffectsEnabled)) {
+		uint32 buff_count = GetMaxTotalSlots();
+		for (unsigned int j = 0; j < buff_count; j++) {
+			if(IsValidSpell(buffs[j].spellid)) {
+				if(IsDetrimentalSpell(buffs[j].spellid) && (buffs[j].ticsremaining > 0))
+					if(!IsRestAllowedSpell(buffs[j].spellid))
+						return;
+			}
 		}
 	}
 
 	ooc_regen = true;
+}
+
+void Client::ClearRestingDetrimentalEffects()
+{
+	if (!RuleB(Custom, ClearRestingDetrimentalEffectsEnabled)) {
+		return;
+	}
+
+	// Only fire when OOC, sitting, and rest timer has elapsed (same conditions as CalcRestState).
+	if (AggroCount || !(IsSitting() || CanMedOnHorse()) || !rest_timer.Check(false)) {
+		return;
+	}
+
+	// Remove detrimental buffs from the player.
+	const uint32 buff_count = GetMaxTotalSlots();
+	for (unsigned int j = 0; j < buff_count; j++) {
+		const uint16 buff_id = buffs[j].spellid;
+		if (IsValidSpell(buff_id) && IsDetrimentalSpell(buff_id) && buffs[j].ticsremaining > 0) {
+			BuffFadeBySlot(j);
+		}
+	}
+
+	// Remove enemy-cast detrimental buffs from pets.
+	// We skip buffs that the player themselves cast — those are intentional (dots, debuffs on own pet etc.).
+	for (auto pet : GetAllPets()) {
+		const uint32 pet_buff_count = pet->GetMaxTotalSlots();
+		const auto pet_buffs = pet->GetBuffs();
+		for (unsigned int j = 0; j < pet_buff_count; j++) {
+			const uint16 buff_id = pet_buffs[j].spellid;
+			if (
+				IsValidSpell(buff_id) &&
+				IsDetrimentalSpell(buff_id) &&
+				pet_buffs[j].ticsremaining > 0 &&
+				strcmp(pet_buffs[j].caster_name, GetCleanName()) != 0
+			) {
+				pet->BuffFadeBySlot(j);
+			}
+		}
+	}
 }
 
 void Client::DoTracking()

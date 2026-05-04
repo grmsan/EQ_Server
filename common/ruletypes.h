@@ -1286,6 +1286,7 @@ RULE_BOOL(Custom, TauntTogglesPetTanking, true, "Enable to let pets hold aggro w
 RULE_INT(Custom, PetAssistRateLimit, 1000, "Minimum time in milliseconds between pet assist commands.")
 RULE_INT(Custom, PetProcRateCap, 100, "Maximum item (weapon and aug) proc rate bonus available to pets, 0 to disable.")
 RULE_BOOL(Custom, MulticlassDebug, false, "Enable multiclass debug logging in zone/world.")
+RULE_BOOL(Custom, ClearRestingDetrimentalEffectsEnabled, true, "When out of combat, sitting, and rest timer expires: remove detrimental buffs from player and their pets.")
 RULE_CATEGORY_END()
 
 #undef RULE_CATEGORY

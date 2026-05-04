@@ -3413,6 +3413,13 @@ int Mob::CheckStackConflict(uint16 spellid1, int caster_level1, uint16 spellid2,
 		}
 	}
 
+	// When OOC rest cleansing is enabled, prevent beneficial and detrimental spells from displacing
+	// each other. This ensures debuffs occupy their own slots and are cleared cleanly on rest.
+	if (RuleB(Custom, ClearRestingDetrimentalEffectsEnabled) && IsDetrimentalSpell(spellid1) != IsDetrimentalSpell(spellid2)) {
+		LogSpells("[{}] and [{}] have dissimilar detrimentalness, no action taken", sp1.name, sp2.name);
+		return (0);
+	}
+
 	bool effect_match = true; // Figure out if we're identical in effects on all slots.
 	if (spellid1 != spellid2) {
 		for (i = 0; i < EFFECT_COUNT; i++) {

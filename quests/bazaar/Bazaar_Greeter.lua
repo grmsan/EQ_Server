@@ -16,12 +16,17 @@ local CLASS_NAMES = {
     [13]="Magician",[14]="Enchanter",[15]="Beastlord",[16]="Berserker"
 }
 
--- Pet-summoning classes → their class-specific bag item ID
--- Necromancer=11, Magician=13, Beastlord=15
+-- Pet-summoning classes → their class-specific Pet Armory bag item ID
+-- These bags were created in utils/sql/custom/2026_02_26_thj_pet_bags.sql
 local PET_CLASS_BAGS = {
-    [11] = 960002,  -- Necromantic Bag
-    [13] = 960001,  -- Familiar's Satchel
-    [15] = 960003,  -- Warder's Pack
+    [5]  = 899980,  -- Shadowknight Pet Armory
+    [6]  = 899981,  -- Druid Pet Armory
+    [8]  = 899983,  -- Bard Pet Armory
+    [10] = 899984,  -- Shaman Pet Armory
+    [11] = 899985,  -- Necromancer Pet Armory
+    [13] = 899986,  -- Magician Pet Armory
+    [14] = 899987,  -- Enchanter Pet Armory
+    [15] = 899988,  -- Beastlord Pet Armory
 }
 
 -- Mirrors the has_class() logic in Emissary_of_the_Guilds.lua

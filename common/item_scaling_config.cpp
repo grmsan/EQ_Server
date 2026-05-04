@@ -241,6 +241,22 @@ void Config::Load(const std::string &path) {
         }
     }
 
+    // Click-cast time reduction curve
+    if (!cfg.RawHandle().isNull() && cfg.RawHandle().isMember("ClickCastTimeReduction")) {
+        auto &node = cfg.RawHandle()["ClickCastTimeReduction"];
+        try {
+            if (node.isMember("points")) {
+                click_cast_reduction_curve.clear();
+                for (auto &pt : node["points"]) {
+                    if (pt.isArray() && pt.size() == 2) {
+                        click_cast_reduction_curve.push_back(CurvePoint{pt[0].asInt(), pt[1].asDouble()});
+                    }
+                }
+                std::sort(click_cast_reduction_curve.begin(), click_cast_reduction_curve.end(),
+                    [](const CurvePoint&a, const CurvePoint&b){ return a.level < b.level; });
+            }
+        } catch (...) {}
+    }
 
     // Write a debug entry in logs/inf
     std::ofstream logfile("logs/inf/item_scaling_config.log", std::ios::app);
@@ -386,6 +402,17 @@ double Config::GetSlotMultiplierByMask(uint32_t slotMask, const std::string &sta
         }
     }
     return 1.0;
+}
+
+double Config::GetClickCastReductionFraction(int level) const {
+    if (click_cast_reduction_curve.empty()) {
+        // Fallback linear formula: 0.67% reduction per level, capped at 100%
+        double fraction = std::min(1.0, level * 0.0067);
+        return fraction;
+    }
+    // Clamp returned value to [0.0, 1.0]
+    double v = EvaluateCurve(click_cast_reduction_curve, level);
+    return std::max(0.0, std::min(1.0, v));
 }
 
 } // namespace ItemScaling

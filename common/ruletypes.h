@@ -1287,6 +1287,8 @@ RULE_INT(Custom, PetAssistRateLimit, 1000, "Minimum time in milliseconds between
 RULE_INT(Custom, PetProcRateCap, 100, "Maximum item (weapon and aug) proc rate bonus available to pets, 0 to disable.")
 RULE_BOOL(Custom, MulticlassDebug, false, "Enable multiclass debug logging in zone/world.")
 RULE_BOOL(Custom, ClearRestingDetrimentalEffectsEnabled, true, "When out of combat, sitting, and rest timer expires: remove detrimental buffs from player and their pets.")
+RULE_BOOL(Custom, ItemClickCastTimeScalingEnabled, true, "Scale click-cast times by item level: leveled items cast faster, up to instant at max level.")
+RULE_INT(Custom, ItemClickCastTimeMinMs, 0, "Minimum click-cast time in milliseconds after scaling (0 = instant allowed, 1000 = 1s floor, etc.)")
 RULE_CATEGORY_END()
 
 #undef RULE_CATEGORY

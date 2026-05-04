@@ -58,6 +58,9 @@ public:
     std::map<std::string, std::vector<CurvePoint>> mod2_curves;
     std::vector<CurvePoint> weapon_damage_curve;
     std::vector<CurvePoint> weapon_attack_curve;
+
+    // Click-cast time reduction curve: maps item level -> reduction fraction (0.0 = no reduction, 1.0 = instant)
+    std::vector<CurvePoint> click_cast_reduction_curve;
     // Per-slot multipliers (e.g., Chest: { Attributes:1.5, HP:1.2, AC:1.2 })
     // Maps slot name to a map of statKey->multiplier. Example: slot_multipliers_by_stat["Chest"]["Attributes"] = 1.5
     std::map<std::string, std::map<std::string, double>> slot_multipliers_by_stat;
@@ -83,6 +86,8 @@ public:
     double GetWeaponDamageCurve(int level) const;
     double GetWeaponAttackCurve(int level) const;
     double GetMod2Curve(const std::string &mod2Key, int level) const;
+    // Returns the click-cast time reduction fraction for this item level (0.0 = no change, 1.0 = instant)
+    double GetClickCastReductionFraction(int level) const;
     std::string GetAttributeBudgetMode() const { return attribute_budget_mode; }
     int GetAttributeStaticBudget() const { return attribute_static_budget; }
 

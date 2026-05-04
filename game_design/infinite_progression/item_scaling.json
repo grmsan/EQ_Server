@@ -1,4 +1,13 @@
 {
+  "ClickCastTimeReduction": {
+    "points": [
+      [0,   0.00],
+      [25,  0.50],
+      [75,  0.85],
+      [125, 0.95],
+      [150, 1.00]
+    ]
+  },
   "SpellDmgFromInt": {
     "enabled": true,
     "mode": "curve",

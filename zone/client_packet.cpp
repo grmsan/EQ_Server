@@ -59,6 +59,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 #include "zone.h"
 #include "mob_movement_manager.h"
 #include "dynamic_item_manager.h"
+#include "../common/item_scaling_config.h"
 #include "../common/repositories/character_instance_safereturns_repository.h"
 #include "../common/repositories/criteria/content_filter_criteria.h"
 #include "../common/shared_tasks.h"
@@ -4702,7 +4703,16 @@ void Client::Handle_OP_CastSpell(const EQApplicationPacket *app)
 						}
 
 						if (i == 0) {
-							CastSpell(item->Click.Effect, castspell->target_id, slot, item->CastTime, 0, 0, castspell->inventoryslot);
+							int32 click_cast_ms = item->CastTime;
+							if (RuleB(Custom, ItemClickCastTimeScalingEnabled) && click_cast_ms > 0) {
+								int item_lvl = EQ::DynamicItemManager::Get().GetItemLevel(inst->GetID());
+								if (item_lvl > 0) {
+									double reduction = ItemScaling::Config::Get().GetClickCastReductionFraction(item_lvl);
+									click_cast_ms = static_cast<int32>(click_cast_ms * (1.0 - reduction));
+									click_cast_ms = std::max(click_cast_ms, RuleI(Custom, ItemClickCastTimeMinMs));
+								}
+							}
+							CastSpell(item->Click.Effect, castspell->target_id, slot, click_cast_ms, 0, 0, castspell->inventoryslot);
 						}
 						else {
 							InterruptSpell(castspell->spell_id);
@@ -9866,11 +9876,21 @@ void Client::Handle_OP_ItemVerifyRequest(const EQApplicationPacket *app)
 						if (!IsCastWhileInvisibleSpell(item->Click.Effect)) {
 							CommonBreakInvisible(); // client can't do this for us :(
 						}
+						// Scale click-cast time by item level
+						int32 click_cast_ms = item->CastTime;
+						if (RuleB(Custom, ItemClickCastTimeScalingEnabled) && click_cast_ms > 0) {
+							int item_lvl = EQ::DynamicItemManager::Get().GetItemLevel(p_inst->GetID());
+							if (item_lvl > 0) {
+								double reduction = ItemScaling::Config::Get().GetClickCastReductionFraction(item_lvl);
+								click_cast_ms = static_cast<int32>(click_cast_ms * (1.0 - reduction));
+								click_cast_ms = std::max(click_cast_ms, RuleI(Custom, ItemClickCastTimeMinMs));
+							}
+						}
 						if (HasClass(Class::Bard)){
-							DoBardCastingFromItemClick(is_casting_bard_song, item->CastTime, item->Click.Effect, target_id, CastingSlot::Item, slot_id, item->RecastType, item->RecastDelay);
+							DoBardCastingFromItemClick(is_casting_bard_song, click_cast_ms, item->Click.Effect, target_id, CastingSlot::Item, slot_id, item->RecastType, item->RecastDelay);
 						}
 						else {
-							CastSpell(item->Click.Effect, target_id, CastingSlot::Item, item->CastTime, 0, 0, slot_id);
+							CastSpell(item->Click.Effect, target_id, CastingSlot::Item, click_cast_ms, 0, 0, slot_id);
 						}
 					} else {
 						InterruptSpell(item->Click.Effect);
@@ -9931,11 +9951,21 @@ void Client::Handle_OP_ItemVerifyRequest(const EQApplicationPacket *app)
 						if (!IsCastWhileInvisibleSpell(augitem->Click.Effect)) {
 							CommonBreakInvisible(); // client can't do this for us :(
 						}
+						// Scale click-cast time by aug item level
+						int32 click_cast_ms = augitem->CastTime;
+						if (RuleB(Custom, ItemClickCastTimeScalingEnabled) && click_cast_ms > 0) {
+							int item_lvl = EQ::DynamicItemManager::Get().GetItemLevel(clickaug->GetID());
+							if (item_lvl > 0) {
+								double reduction = ItemScaling::Config::Get().GetClickCastReductionFraction(item_lvl);
+								click_cast_ms = static_cast<int32>(click_cast_ms * (1.0 - reduction));
+								click_cast_ms = std::max(click_cast_ms, RuleI(Custom, ItemClickCastTimeMinMs));
+							}
+						}
 						if (HasClass(Class::Bard)) {
-							DoBardCastingFromItemClick(is_casting_bard_song, augitem->CastTime, augitem->Click.Effect, target_id, CastingSlot::Item, slot_id, augitem->RecastType, augitem->RecastDelay);
+							DoBardCastingFromItemClick(is_casting_bard_song, click_cast_ms, augitem->Click.Effect, target_id, CastingSlot::Item, slot_id, augitem->RecastType, augitem->RecastDelay);
 						}
 						else {
-							CastSpell(augitem->Click.Effect, target_id, CastingSlot::Item, augitem->CastTime, 0, 0, slot_id);
+							CastSpell(augitem->Click.Effect, target_id, CastingSlot::Item, click_cast_ms, 0, 0, slot_id);
 						}
 					} else {
 						InterruptSpell(item->Click.Effect);

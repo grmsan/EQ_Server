@@ -2712,9 +2712,21 @@ int __fastcall EQSpell_GetSpellLevelNeeded_Detour(void* This, void* edx, int cla
 	// Only apply filtering in filter contexts (spell merchant "Show Usable Items" checkbox).
 	// In display contexts (tooltips), always return native values to show correct class/level info.
 	if (isFilterContext && bestLevel == 255) {
-		// Filter context AND player cannot use this spell with any of their classes
-		// Return 255 to hide it from the "Show Usable Items" filter
-		return 255;
+		// Player cannot use this spell with any of their owned classes.
+		// For OWNED classes: return 255 to correctly gate "Show Usable Items" filtering.
+		// For NON-OWNED classes: return the native level for display accuracy.
+		//   e.g. a MAG/MON/CLR player looking at a NEC spell should see "NEC(58)", not "NEC(255)".
+		// If the merchant filter aggregates ALL class levels to decide visibility, returning the
+		// native level for non-owned classes is safe: the player cannot actually use NEC spells
+		// server-side regardless of what the client displays.
+		const uint16_t classBit = (classId >= 1 && classId <= 16)
+			? static_cast<uint16_t>(1u << (classId - 1))
+			: 0u;
+		const bool playerOwnsClass = (classBit != 0 && (effectiveMask & classBit) != 0);
+		if (playerOwnsClass) {
+			return 255;
+		}
+		// Non-owned class: fall through to return native level below
 	}
 
 	// For multiclass: if the queried classId's native level is 255 (can't use), but we have spell levels

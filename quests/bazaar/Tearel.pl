@@ -25,17 +25,7 @@ my @waypoints = (
     { cat => "Faydwer",   short => "akanon",       long => "Ak'anon",             zid => 55,  x => -761, y => 1279, z => -24,  h => 182 },
     # -- Odus --
     { cat => "Odus",      short => "erudnext",     long => "Erudin",              zid => 24,  x => -240, y => -1216,z => 52,   h => 510 },
-    # -- Kunark --
-    { cat => "Kunark",    short => "cabeast",      long => "East Cabilis",        zid => 106, x => 10,   y => 10,   z => 3,    h => 256 },
-    { cat => "Kunark",    short => "fieldofbone",  long => "The Field of Bone",   zid => 78,  x => 1617, y => -1691,z => -45,  h => 10  },
-    { cat => "Kunark",    short => "dreadlands",   long => "Dreadlands",          zid => 86,  x => 9722, y => 1136, z => 2626, h => 0   },
-    # -- Velious --
-    { cat => "Velious",   short => "iceclad",      long => "Iceclad Ocean",       zid => 110, x => 350,  y => 5300, z => -5,   h => 190 },
-    # -- Luclin --
-    { cat => "Luclin",    short => "sharvahl",     long => "Shar Vahl",           zid => 155, x => 240,  y => 35,   z => 3,    h => 256 },
-    # -- Planes --
-    { cat => "Planes",    short => "poknowledge",  long => "Plane of Knowledge",  zid => 202, x => 830,  y => 575,  z => -64,  h => 128 },
-    # -- Dungeons (unlocked by discovering Faded Runestones in each zone) --
+    # -- Classic Dungeons --
     { cat => "Dungeons",  short => "befallen",     long => "Befallen",            zid => 36,  x => 35,   y => -82,  z => 3,    h => 0   },
     { cat => "Dungeons",  short => "najena",       long => "Najena",              zid => 44,  x => 858,  y => -76,  z => 4,    h => 0   },
     { cat => "Dungeons",  short => "permafrost",   long => "Permafrost Caverns",  zid => 73,  x => 61,   y => -121, z => 2,    h => 0   },
@@ -47,10 +37,6 @@ my @waypoints = (
     { cat => "Dungeons",  short => "crushbone",    long => "Crushbone",           zid => 58,  x => 158,  y => -644, z => 4,    h => 0   },
     { cat => "Dungeons",  short => "mistmoore",    long => "Castle Mistmoore",    zid => 59,  x => 120,  y => -330, z => -178, h => 0   },
     { cat => "Dungeons",  short => "kedge",        long => "Kedge Keep",          zid => 64,  x => 14,   y => 100,  z => 302,  h => 0   },
-    { cat => "Dungeons",  short => "sebilis",      long => "Ruins of Sebilis",    zid => 89,  x => 0,    y => 250,  z => 44,   h => 0   },
-    { cat => "Dungeons",  short => "chardok",      long => "Chardok",             zid => 103, x => 859,  y => 119,  z => 106,  h => 0   },
-    { cat => "Dungeons",  short => "karnor",       long => "Karnor's Castle",     zid => 102, x => 302,  y => 18,   z => 6,    h => 0   },
-    { cat => "Dungeons",  short => "kael",         long => "Kael Drakkel",        zid => 113, x => -633, y => -47,  z => 128,  h => 0   },
     # -- Utility --
     { cat => "Utility",   short => "bazaar",       long => "The Bazaar",          zid => 151, x => 20,   y => -15,  z => 0.72, h => 256 },
 );

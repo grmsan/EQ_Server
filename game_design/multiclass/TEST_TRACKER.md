@@ -3,7 +3,7 @@
 **Status**: Active Testing
 **Tracker Area**: Multiclass
 **Tracker State**: Active
-**Last Updated**: 2026-04-26
+**Last Updated**: 2026-06-21
 **Technical Plan**: [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
 
 ## Purpose
@@ -82,7 +82,14 @@ Run every active case in this tracker.
 4. Review server logs for failed assertions or missing DLL callback responses.
 **Expected**: All automated checks complete without assertion failures; DLL callback tests report expected class/mana/snapshot parity.
 **Status**: [x] Not Run  [ ] In Progress  [ ] Blocked  [ ] Pass  [ ] Fail
-**Notes**: ______________________________
+**Notes**: See managed notes block below.
+<!-- TEST_MANAGER_NOTES_START -->
+```text
+[FEEDBACK 2026-05-03]: Right now when i cast Burnout IV the game automatically targets my pet. I want to keep my current target but the spell should automatically land on my pet regardless of target. (I'm just using burnout IV for this example but I imagine this is true for maybe any pet spell.
+
+[CODE-VERIFIED 2026-06-21]: Test harness fully implemented in zone/gm_commands/test.cpp. Tests 1-15 are purely server-side (rule checks, bucket consistency, HasClass API, spell timer transforms, guild query shape, AA gates, proc preconditions, pet bag DB coverage). Tests 16-20 are DLL round-trip probes requiring EQ Core DLL client. BuildPackSmoke = tests 1-10; BuildPackCombat = tests 6,12,13,14,15; #test 16-20 dispatches probe+callback sequence. Pet auto-targeting (ST_Pet shortcut) is existing server design — spell lands on pet regardless of UI target; the feedback is a design/UX decision, not a code defect. Ready to run.
+```
+<!-- TEST_MANAGER_NOTES_END -->
 
 ### [CORE-01] Class Ownership, Sync, And Persistence
 
@@ -96,7 +103,7 @@ Run every active case in this tracker.
 5. Remove one added class and confirm diagnostics/client state update again.
 **Expected**: Runtime class mask, profile/client state, mana visibility, and persisted `GestaltClasses` stay consistent through add, remove, zone, and relog.
 **Status**: [x] Not Run  [ ] In Progress  [ ] Blocked  [ ] Pass  [ ] Fail
-**Notes**: ______________________________
+**Notes**: [CODE-VERIFIED 2026-06-21]: `AddExtraClass`/`RemoveExtraClass` implemented in `zone/client.cpp`. `GetClassesBits()` reads canonical `GestaltClasses` bucket, falls back to base class bit. `SendEdgeStats()` called on every mutation to sync DLL. Guild member update fired on add/remove. `#addclass` and `#removeclass` commands exist. Automated tests 3–8 cover bucket/profile/API consistency. Ready for manual validation.
 
 ---
 
@@ -115,7 +122,7 @@ Run every active case in this tracker.
 6. Try one Magician-restricted item, augment, or click effect that should now be allowed.
 **Expected**: Added Magician ownership unlocks caster UI, spell learning/casting, relevant AA access, and class-restricted interactions without breaking the base class.
 **Status**: [x] Not Run  [ ] In Progress  [ ] Blocked  [ ] Pass  [ ] Fail
-**Notes**: ______________________________
+**Notes**: [CODE-VERIFIED 2026-06-21]: `Client::CheckFizzle` calls `GetBestSpellLevelForMulticlass(spell_id, GetClassesBits(), ...)`. Spell scribe validates `HasClass(class_id)` in `client_process.cpp`. Mana UI driven by DLL via `SendEdgeStats` (EdgeStatLabel key 200 = classes bitmask). AA purchase normalized bitmask vs `GetClassesBits()` in `aa.cpp`. Item click/equip use `GetClassesBitmask()` in `effects.cpp`; `SwapItem` passes `GetClassesBits()` through equip validation. Ready for manual validation.
 
 ### [CAST-02] Bard, Group, And Targeting Behavior
 
@@ -128,7 +135,7 @@ Run every active case in this tracker.
 4. Confirm spell target transforms loaded by `#test` still match live cast behavior.
 **Expected**: Songs pulse as intended, group spells hit valid recipients, implied targeting respects friendly/hostile rules, and loaded target transforms match live behavior.
 **Status**: [x] Not Run  [ ] In Progress  [ ] Blocked  [ ] Pass  [ ] Fail
-**Notes**: ______________________________
+**Notes**: [CODE-VERIFIED 2026-06-21]: `HasClass(Class::Bard)` used in `spells.cpp` for pulse, cast-while-moving, and cast-while-attacking. Bard pulse hook confirmed in `spell_effects.cpp`. Group/implied target transforms covered by automated test 10 (`#test 10`). Targeting friendly/hostile rules in place. Ready for manual validation.
 
 ---
 
@@ -145,7 +152,7 @@ Run every active case in this tracker.
 4. Fight long enough to confirm cooldown cadence and no recovery spam.
 **Expected**: Combat gates use owned classes, autoskills fire at valid intervals, ranged/autofire behavior remains stable, and no unexpected cooldown/proc spam appears.
 **Status**: [x] Not Run  [ ] In Progress  [ ] Blocked  [ ] Pass  [ ] Fail
-**Notes**: ______________________________
+**Notes**: [CODE-VERIFIED 2026-06-21]: `attack.cpp` extensively uses `HasClass()` for all combat class gates (Monk/Beastlord fists, Rogue backstab, Ranger archery, Berserker frenzy, Bard cast-while-attacking, damage caps). `DoDamageCaps` uses `GetClassesBits()`. 2H/bow proc preconditions covered by automated test 13 (`#test 13`). Ready for manual validation.
 
 ### [PET-01] Multi-Pet, Pet Bags, And Charmed Inventory
 
@@ -159,7 +166,7 @@ Run every active case in this tracker.
 5. Charm a test NPC, exercise pet bag sync if applicable, then break charm and verify original inventory is restored.
 **Expected**: Pet focus, commands, persistence, bag equipment sync, and charmed inventory restore behave coherently across owned pet classes.
 **Status**: [x] Not Run  [ ] In Progress  [ ] Blocked  [ ] Pass  [ ] Fail
-**Notes**: ______________________________
+**Notes**: [CODE-VERIFIED 2026-06-21]: `DoPetBagResync` called on pet summon (`pets.cpp`), zone-in packet (`client_packet.cpp`), item move (`inventory.cpp`), and charm break (`spell_effects.cpp`). `GetActivePetBag`/`GetActivePetBagSlot` implemented. Charmed inventory tracked via entity variable `"is_charmed"` with restore on charm break. Pet bag rule+DB coverage confirmed by automated test 14 (`#test 14`). Ready for manual validation.
 
 ### [SKILL-01] Skills, Trainers, And Discipline Use
 
@@ -173,7 +180,7 @@ Run every active case in this tracker.
 5. Add Monk if needed and verify one monk special attack path.
 **Expected**: Skill caps use the best owned class, trainer access does not base-class deny incorrectly, disciplines learn/use correctly, and timer families remain distinct.
 **Status**: [x] Not Run  [ ] In Progress  [ ] Blocked  [ ] Pass  [ ] Fail
-**Notes**: ______________________________
+**Notes**: [CODE-VERIFIED 2026-06-21]: `MaxSkill()`/`GetRawSkillCap()` use `HasClass()` in `client_mods.cpp`. Trainer packet handler uses `HasClass(trains_class)` in `client_process.cpp`. `UseDiscipline()` in `effects.cpp` iterates `GetClassesBits()` to find lowest valid level. Disc timer families are per-spell (`spell.timer_id`), so different class discs use distinct timers. Ready for manual validation.
 
 ---
 
@@ -192,7 +199,7 @@ Run every active case in this tracker.
 6. Confirm one invalid race or unrelated restriction still blocks correctly.
 **Expected**: Owned class state allows valid class-restricted item paths, Monk-owned characters can use the Secondary slot at level 1, non-owned classes remain denied, race/other restrictions still apply, and merchant filtering updates from current ownership.
 **Status**: [x] Not Run  [ ] In Progress  [ ] Blocked  [ ] Pass  [ ] Fail
-**Notes**: ______________________________
+**Notes**: [CODE-VERIFIED 2026-06-21]: `SwapItem` in `inventory.cpp` passes `GetClassesBits()` through entire equip validation path. Item click and equip-cast in `effects.cpp` use `GetClassesBitmask()` against `item->Classes`. Merchant list in `client_process.cpp` filters via `(ml.classes_required & classes_bits)`. Auto-equip uses `IsEquipable(GetBaseRace(), GetClassesBits())`. Guild banker equip check uses same. Ready for manual validation.
 
 ### [AA-01] AA Visibility, Purchase, Activation, And Special Gates
 
@@ -206,7 +213,7 @@ Run every active case in this tracker.
 5. Check special gates for Mnemonic Retention and Fury of Magic pure-caster policy if relevant to the build.
 **Expected**: AA visibility, purchase, activation, passive effects, and special multiclass gates follow owned-class policy.
 **Status**: [x] Not Run  [ ] In Progress  [ ] Blocked  [ ] Pass  [ ] Fail
-**Notes**: ______________________________
+**Notes**: [CODE-VERIFIED 2026-06-21]: AA purchase checks `(aa_classes_normalized & GetClassesBits())` in `aa.cpp`. Display via `SendAlternateAdvancementTable()`. Passive effects gated on `GetClassesBits()`. Mnemonic Retention gate covered by automated test 12. Fury of Magic pure-caster gate covered by automated test 15 (`#test 12,15`). Ready for manual validation.
 
 ### [AA-02] Dynamic AA Timer Stability Across AA Table Refresh
 
@@ -220,7 +227,7 @@ Run every active case in this tracker.
 5. Activate the second AA if it should share the cooldown and confirm the server/client both reflect the expected remaining reuse timer.
 **Expected**: Dynamic timer IDs remain stable across AA table refreshes, shared cooldown AAs stay grouped correctly, and no AA shifts to a different reuse family after zoning, relogging, or class mutation.
 **Status**: [x] Not Run  [ ] In Progress  [ ] Blocked  [ ] Pass  [ ] Fail
-**Notes**: ______________________________
+**Notes**: [CODE-VERIFIED 2026-06-21]: `LoadDynamicAATimers`/`SaveDynamicAATimers` persist via `DynamicAATimers` bucket. `GetDynamicAATimer`/`SetDynamicAATimer` assign stable IDs at activation time. `UseDynamicAATimers` rule gates entire path. Timer ID reuse logic uses existing cache before allocating new. Rule verified by automated test 2 (`#test 2`). Ready for manual validation.
 
 ### [ENT-01] Class Removal Soft-Lock Policy
 
@@ -233,8 +240,9 @@ Run every active case in this tracker.
 4. Reopen the AA window and attempt to activate the affected AA.
 5. Recheck item equip/click behavior and record whether the system soft-locks, clears, refunds, or blocks each entitlement.
 **Expected**: Removed-class entitlements follow the chosen policy consistently and do not leave hung spell gems, usable invalid AAs, stale UI, or invalid item access.
-**Status**: [x] Not Run  [ ] In Progress  [ ] Blocked  [ ] Pass  [ ] Fail
-**Notes**: Pending final design decision for removed-class AA refund/reset versus soft-lock policy.
+**Status**: [ ] Not Run  [ ] In Progress  [x] Blocked  [ ] Pass  [ ] Fail
+**Notes**: [CODE-VERIFIED 2026-06-21]: `RemoveExtraClass` clears invalid memorized spell gems (`UnmemInvalidSpellsForCurrentClasses`), interrupts invalid casts, rebuilds AA table (`SendAlternateAdvancementTable`), and resyncs HP/mana/end/EdgeStats. Soft-lock behavior for AAs is present (AA remains in table; `CanUseAlternateAdvancementRank` returns false without the class). BLOCKED: Design decision on removed-class AA policy (soft-lock vs refund/reset) is not finalized — see IMPLEMENTATION_PLAN.md E-02. Cannot validate ENT-01 step 4 until policy is decided and documented.
+  Next: Decide E-02 policy; update IMPLEMENTATION_PLAN.md; then validate.
 
 ### [PROG-01] XP, Level Cap, Regen, Hunger, And Scaling Rules
 
@@ -247,7 +255,7 @@ Run every active case in this tracker.
 4. Confirm multiclass ownership does not bypass intended level cap or XP cap rules.
 **Expected**: XP, level cap, regen, and hunger behavior follow the intended ruleset without unintended cap bypasses or passive stat drift.
 **Status**: [x] Not Run  [ ] In Progress  [ ] Blocked  [ ] Pass  [ ] Fail
-**Notes**: ______________________________
+**Notes**: [CODE-VERIFIED 2026-06-21]: `exp.cpp` uses `HasClass(Class::Warrior)` and `HasClass(Class::Rogue)` for hybrid XP bonuses. THJ-style `MaxExpLevel` clamp restored (IMPLEMENTATION_PLAN Phase 7). `CalcBonuses()` called on every class mutation to prevent passive stat drift. Level-cap and XP-cap path verified in implementation. Ready for manual validation.
 
 ---
 
@@ -264,8 +272,9 @@ Run every active case in this tracker.
 4. Verify one class-gated title eligibility check.
 5. Refresh guild roster/member display after class mutation.
 **Expected**: NPC scripts, quest gates, title checks, and guild projection use current owned class state rather than only base class.
-**Status**: [x] Not Run  [ ] In Progress  [ ] Blocked  [ ] Pass  [ ] Fail
-**Notes**: ______________________________
+**Status**: [ ] Not Run  [ ] In Progress  [x] Blocked  [ ] Pass  [ ] Fail
+**Notes**: [CODE-VERIFIED 2026-06-21]: `quests/bazaar/Emissary_of_the_Guilds.lua` uses `AddExtraClass` ✓. Lua/Perl `AddExtraClass`/`RemoveExtraClass`/`HasClass` APIs all exposed. Guild projection DB query shape verified by automated test 11. BLOCKED: No `Vision_of_Ayonae` or equivalent class-removal NPC script found under `quests/` — step 2 (class removal NPC path) is unimplemented. Class-gated title scripts not yet found.
+  Next: Implement Vision_of_Ayonae (or equivalent) class-removal NPC script; add at least one class-gated title check script.
 
 ### [UI-01] Client Presentation And Diagnostics
 
@@ -279,7 +288,7 @@ Run every active case in this tracker.
 5. Confirm the presentation remains correct after zoning and relog.
 **Expected**: Character select, `/who`, diagnostics, inventory labels, and relog presentation reflect the chosen multiclass display policy without falling back to stale compatibility/base-class output.
 **Status**: [x] Not Run  [ ] In Progress  [ ] Blocked  [ ] Pass  [ ] Fail
-**Notes**: ______________________________
+**Notes**: [CODE-VERIFIED 2026-06-21]: `world/clientlist.cpp` reads `GestaltClasses` bucket for `/who` output. `#multiclassdiag` command exists (`zone/gm_commands/multiclassdiag.cpp`). DLL handles class-name overrides for char select and `/who` labels. Inventory `IW_Class`/`IW_ClassAbbr` rewritten via DLL. All server-side paths verified. Ready for manual validation (requires EQ Core DLL loaded).
 
 ---
 

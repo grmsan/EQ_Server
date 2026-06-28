@@ -2780,6 +2780,9 @@ void NPC::DoPetCommandAssist(bool enabled)
 
 	owner->SetSavedPetCommand(class_id, CUSTOM_PET_ASSIST, enabled);
 	SetPetAssisting(enabled);
+	if (enabled) {
+		owner->ResetPetAssistTargetTracking();
+	}
 
 	if (enabled) {
 		owner->Message(Chat::PetResponse, fmt::format("{} tells you, 'As you command, Master. I will assist you in battle.'", GetCleanName()).c_str());

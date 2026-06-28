@@ -541,12 +541,18 @@ bool Client::Process() {
 			}
 
 			if (auto_attack_target && IsAttackAllowed(auto_attack_target)) {
+				const auto current_pet_assist_target_id = auto_attack_target->GetID();
+				const bool assist_target_changed = current_pet_assist_target_id != m_last_pet_assist_target_id;
+				if (assist_target_changed) {
+					m_last_pet_assist_target_id = current_pet_assist_target_id;
+				}
+
 				for (auto pet : GetAllPets()) {
 					if (!pet || !pet->IsNPC()) {
 						continue;
 					}
 
-					if (pet->IsPetAssisting()) {
+					if (pet->IsPetAssisting() && assist_target_changed) {
 						pet->CastToNPC()->DoPetCommandAssistOnTarget(auto_attack_target);
 					} else if (
 						!pet->GetTarget() &&
@@ -563,7 +569,7 @@ bool Client::Process() {
 						continue;
 					}
 
-					if (swarm_member->IsPetAssisting()) {
+					if (swarm_member->IsPetAssisting() && assist_target_changed) {
 						swarm_member->CastToNPC()->DoPetCommandAssistOnTarget(auto_attack_target);
 					} else if (!swarm_member->GetTarget()) {
 						swarm_member->AddToHateList(auto_attack_target, 1, 0, true, false, false, SPELL_UNKNOWN, true);

@@ -198,6 +198,7 @@ int command_init(void)
 		command_add("parcels", "View and edit the parcel system.  Requires parcels to be enabled in rules.", AccountStatus::GMMgmt, command_parcels) ||
 		command_add("path", "view and edit pathing", AccountStatus::GMMgmt, command_path) ||
 		command_add("peqzone", "[Zone ID|Zone Short Name] - Teleports you to the specified zone if you meet the requirements.", AccountStatus::Player, command_peqzone) ||
+		command_add("petassist", "[on|off|status] - Toggle or report your pet's assist behavior", AccountStatus::Player, command_petassist) ||
 		command_add("petitems", "View your pet's items if you have one", AccountStatus::ApprenticeGuide, command_petitems) ||
 		command_add("picklock", "Analog for ldon pick lock for the newer clients since we still don't have it working.", AccountStatus::Player, command_picklock) ||
 		command_add("profanity", "Manage censored language.", AccountStatus::GMLeadAdmin, command_profanity) ||

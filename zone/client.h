@@ -576,6 +576,7 @@ public:
 	bool GetSavedPetCommand(uint8 class_id, uint8 command_id);
 	bool HasSavedPetCommand(uint8 class_id, uint8 command_id);
 	void SetSavedPetCommand(uint8 class_id, uint8 command_id, bool new_state);
+	void ResetPetAssistTargetTracking() { m_last_pet_assist_target_id = 0; }
 
 	bool AutoAttackEnabled() const { return auto_attack; }
 	bool AutoFireEnabled() const { return auto_fire; }
@@ -2527,6 +2528,7 @@ private:
 	std::vector<BotSpellSettings> m_bot_spell_settings;
 	bool _illusion_block;
 	std::unordered_map<uint8, CharacterPetCommandStatesRepository::PetCommandStates> m_pet_command_cache;
+	uint32 m_last_pet_assist_target_id = 0;
 
 	bool CanTradeFVNoDropItem();
 	void SendMobPositions();

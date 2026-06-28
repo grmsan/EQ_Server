@@ -435,6 +435,7 @@ set(gm_command_sources
     gm_commands/parcels.cpp
     gm_commands/path.cpp
     gm_commands/peqzone.cpp
+    gm_commands/petassist.cpp
     gm_commands/petitems.cpp
     gm_commands/petname.cpp
     gm_commands/picklock.cpp

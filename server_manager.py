@@ -55,6 +55,10 @@ class ServerManagerApp(tk.Tk):
             "EQUI_PowerSlotWnd.xml",
             "EQUI_WaypointPOCWnd.xml",
         ]
+        self.eqcore_inventory_ui_variants = {
+            "THJ": "THJ__EQUI_Inventory.xml",
+            "Default": "Default__EQUI_Inventory.xml",
+        }
         self.eqcore_lua_script_files = [
             "waypoint_imgui_poc.lua",
         ]
@@ -62,6 +66,9 @@ class ServerManagerApp(tk.Tk):
         self.perl_bin_dir = os.path.join(os.getcwd(), "perl", "x64", "perl", "bin")
         # Default EQ client directory for exports/copies
         self.eq_dir_var = tk.StringVar(value=self._settings.get("eq_dir", r"D:\Rof2"))
+        self.eqcore_inventory_variant_var = tk.StringVar(
+            value=self._settings.get("eqcore_inventory_variant", "THJ")
+        )
         self.build_target_var = tk.StringVar(value=self._settings.get("build_target", "all"))
         self.layout_mode_var = tk.StringVar(value=self._settings.get("layout_mode", "auto"))
         self.multiclass_tracker_default_path = os.path.join(
@@ -130,6 +137,7 @@ class ServerManagerApp(tk.Tk):
         self._flush_early_logs()
         self._apply_saved_process_settings()
         self.eq_dir_var.trace_add("write", self._on_setting_changed)
+        self.eqcore_inventory_variant_var.trace_add("write", self._on_setting_changed)
         self.build_target_var.trace_add("write", self._on_setting_changed)
         self.layout_mode_var.trace_add("write", self._on_layout_mode_changed)
         self.test_tracker_path_var.trace_add("write", self._on_setting_changed)
@@ -254,6 +262,7 @@ class ServerManagerApp(tk.Tk):
         try:
             data = {
                 "eq_dir": self.eq_dir_var.get(),
+                "eqcore_inventory_variant": self.eqcore_inventory_variant_var.get(),
                 "build_target": self.build_target_var.get(),
                 "layout_mode": self.layout_mode_var.get(),
                 "test_tracker_path": self.test_tracker_path_var.get(),
@@ -450,27 +459,36 @@ class ServerManagerApp(tk.Tk):
 
         ttk.Label(client_card, text="EQ Folder").grid(row=0, column=0, sticky="w", pady=(0, 3))
         ttk.Entry(client_card, textvariable=self.eq_dir_var).grid(row=1, column=0, sticky="ew", pady=(0, 4))
+        ttk.Label(client_card, text="Inventory UI Variant").grid(row=2, column=0, sticky="w", pady=(0, 3))
+        ttk.Combobox(
+            client_card,
+            textvariable=self.eqcore_inventory_variant_var,
+            width=18,
+            state="readonly",
+            values=list(self.eqcore_inventory_ui_variants.keys()),
+        ).grid(row=3, column=0, sticky="ew", pady=(0, 4))
         browse_row = ttk.Frame(client_card)
-        browse_row.grid(row=2, column=0, sticky="ew", pady=(0, 4))
+        browse_row.grid(row=4, column=0, sticky="ew", pady=(0, 4))
         browse_row.grid_columnconfigure(0, weight=1)
         browse_row.grid_columnconfigure(1, weight=1)
         ttk.Button(browse_row, text="Browse", command=self.browse_eq_dir).grid(row=0, column=0, padx=(0, 3), sticky="ew")
         ttk.Button(browse_row, text="Refresh Status", command=self.refresh_status_indicators).grid(row=0, column=1, padx=(3, 0), sticky="ew")
 
         action_row_1 = ttk.Frame(client_card)
-        action_row_1.grid(row=3, column=0, sticky="ew", pady=2)
+        action_row_1.grid(row=5, column=0, sticky="ew", pady=2)
         action_row_1.grid_columnconfigure(0, weight=1)
         action_row_1.grid_columnconfigure(1, weight=1)
         ttk.Button(action_row_1, text="Build+Copy DLL", command=self.run_build_eqcore_thread).grid(row=0, column=0, padx=(0, 3), sticky="ew")
         ttk.Button(action_row_1, text="Copy DLL", command=self.copy_eqcore_dll).grid(row=0, column=1, padx=(3, 0), sticky="ew")
 
         action_row_2 = ttk.Frame(client_card)
-        action_row_2.grid(row=4, column=0, sticky="ew", pady=2)
+        action_row_2.grid(row=6, column=0, sticky="ew", pady=2)
         action_row_2.grid_columnconfigure(0, weight=1)
         action_row_2.grid_columnconfigure(1, weight=1)
         ttk.Button(action_row_2, text="Export spells_us", command=self.run_export_spells_thread).grid(row=0, column=0, padx=(0, 3), sticky="ew")
         ttk.Button(action_row_2, text="Export dbstr_us", command=self.run_export_dbstr_thread).grid(row=0, column=1, padx=(3, 0), sticky="ew")
-        ttk.Button(client_card, text="Launch eqgame", command=self.launch_eqgame).grid(row=5, column=0, sticky="ew", pady=(4, 0))
+        ttk.Button(client_card, text="Sync UI XML", command=self._sync_eqcore_ui_xml).grid(row=7, column=0, sticky="ew", pady=(4, 0))
+        ttk.Button(client_card, text="Launch eqgame", command=self.launch_eqgame).grid(row=8, column=0, sticky="ew", pady=(4, 0))
 
         status_card = ttk.LabelFrame(ops_rail, text="Client Asset Status", padding=8)
         status_card.grid(row=3, column=0, sticky="ew")
@@ -2625,6 +2643,27 @@ class ServerManagerApp(tk.Tk):
                     self.log(f"Copied UI XML {src} -> {dst}")
 
                 self._ensure_manifest_include(xml_name)
+
+            variant_name = self.eqcore_inventory_variant_var.get()
+            inventory_source_name = self.eqcore_inventory_ui_variants.get(variant_name)
+            if not inventory_source_name:
+                self.log(f"Unknown inventory UI variant [{variant_name}], skipping inventory XML sync.")
+                return
+
+            inventory_src = os.path.join(src_dir, inventory_source_name)
+            inventory_dst = os.path.join(dst_dir, "EQUI_Inventory.xml")
+
+            if not os.path.isfile(inventory_src):
+                self.log(f"Inventory UI XML source missing, skipping: {inventory_src}")
+                return
+
+            if os.path.isfile(inventory_dst) and filecmp.cmp(inventory_src, inventory_dst, shallow=False):
+                self.log(f"Inventory UI XML up to date ({variant_name}): {inventory_dst}")
+            else:
+                if os.path.exists(inventory_dst):
+                    self._backup_existing(inventory_dst)
+                shutil.copy2(inventory_src, inventory_dst)
+                self.log(f"Copied inventory UI XML ({variant_name}) {inventory_src} -> {inventory_dst}")
         except Exception as e:
             self.log(f"UI XML sync failed: {e}")
 

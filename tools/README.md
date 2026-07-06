@@ -11,6 +11,8 @@ All scripts read DB credentials from `../eqemu_config.json`.
 | `model_raid_economy.py` | Queries live loot tables to validate the Essence economy (iLevel 1:1 model, tier costs, per-zone totals). |
 | `validate_ilevel.py` | Tests the power-score → iLevel algorithm against real DB items. Shows distribution histogram and economy spot-check. |
 | `item_scale_preview.py` | Tkinter GUI for previewing `item_scaling.json` tier scaling values. Separate from iLevel/Essence system. |
+| `character_budget_sim.py` | Budget-first combat estimator for focused class sheets (warrior/ranger/wizard) against trash/named/raid target profiles. |
+| `gear_build_report.py` | Reusable slot-by-slot gear builder for any class / expansion / stat focus. Pulls live loot-table items, scores a build, and reports tier-scaled totals. |
 
 ## Quick Start
 
@@ -19,6 +21,8 @@ All scripts read DB credentials from `../eqemu_config.json`.
 python tools/validate_ilevel.py          # iLevel algorithm against live items
 python tools/model_raid_economy.py       # Full raid economy analysis
 python tools/db_viewer.py --query "SELECT name FROM items LIMIT 5"
+python tools/character_budget_sim.py --class ranger --preset kunark_60_focus --target named
+python tools/gear_build_report.py --class ranger --expansion 0 --max-level 50 --focus dex --tier legendary
 ```
 
 ## Design References

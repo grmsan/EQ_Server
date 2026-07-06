@@ -2,6 +2,7 @@
 
 > Design sources: `game_design/stats/WIS.md`, `game_design/stats/INT_WIS.md`, `game_design/stats/OVERVIEW.md`.
 > Intent: Wisdom is the Stat of Warding — spell mitigation, healing/ward amplification, and crowd-control resistance, plus shared mana pool scaling. Keep defenses potent but capped so encounters stay threatening.
+> Current architecture: keep legacy WIS behavior unless `Combat:UseNewWisSystems` or the relevant shared INT/WIS feature gate is enabled. Tuning should be hotfixable through `zone/combat_balance.ini`; `zone/combat_balance_config.h` should hold fallback defaults only.
 
 ## Vision
 - Make WIS the primary defensive scaler for magic-heavy content and the main heal/ward amplifier for priests and hybrids.
@@ -33,8 +34,8 @@
   - Shaman: melee/proc bonus from WIS via `SHM_WIS_MELEE_DIVISOR`; DoT poison/disease bonus multiplier `SHM_WIS_DOT_MULT`.  
   - Druid: damage shield bonus curve `druid_ds_mult = 1 + ApplySoftcap(WIS / DRUID_DS_DIVISOR, DRUID_DS_SOFTCAP, DRUID_DS_POWER)`; keep exponential growth optional.
 
-## Tuning Constants to add (`zone/combat_balance_config.h`)
-- Toggle: `USE_NEW_WIS_SYSTEMS` (RuleB `Combat:UseNewWisSystems` default true).
+## Runtime/Fallback Knobs
+- Toggle: `Combat:UseNewWisSystems` with legacy-safe default unless intentionally enabled for a test shard.
 - Spell mitigation: `WIS_SPELL_CAP = 0.50f`, `WIS_SPELL_DIVISOR = 500.0f`, optional `WIS_SPELL_SOFTCAP_START = 1000`, `WIS_SPELL_SOFTCAP_POWER = 0.75f`.
 - Heal/Runes: `WIS_HEAL_DIVISOR = 10.0f`, `WIS_HEAL_SOFTCAP = 2.0f`, `WIS_HEAL_SOFTCAP_POWER = 0.8f`; `WIS_RUNE_DIVISOR = 10.0f`, `WIS_RUNE_SOFTCAP = 2.0f`, `WIS_RUNE_SOFTCAP_POWER = 0.8f`.
 - CC resist: `WIS_CC_DIVISOR = 1000.0f`, `WIS_CC_CAP = 0.80f`, `WIS_CC_MIN = 0.0f`.
@@ -45,7 +46,7 @@
 
 ## Implementation Steps
 1) **Config/Rules**  
-   - Add constants and RuleB toggle; share mana scalar with INT.
+   - Add fallback constants, runtime keys, and RuleB toggle; share mana scalar with INT.
 
 2) **Spell Mitigation**  
    - In magic damage resolution (`Mob::ResistSpell`/spell damage stage), apply `spell_reduce` multiplicatively after resists and before runes. Clamp stacking with STA/CHA to keep total reduction sane.
@@ -84,4 +85,4 @@
 - **Class Masteries:** Cleric overheal-to-rune behavior, Shaman melee/proc gain, Druid DS scaling; ensure toggles/softcaps work.
 
 ## Deliverables
-- New constants and RuleB entry; updated mitigation, heal/rune, CC resist, mana pool, and class-specific logic; debug hooks for tuning; doc updates to `WIS.md` after numbers settle.
+- Runtime keys + fallback constants + RuleB entry; updated mitigation, heal/rune, CC resist, mana pool, and class-specific logic; debug hooks for tuning; doc updates to `WIS.md` after mechanics settle.

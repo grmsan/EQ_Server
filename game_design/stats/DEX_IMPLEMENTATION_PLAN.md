@@ -2,6 +2,7 @@
 
 > Design source: `game_design/stats/DEX.md`, system context: `game_design/stats/OVERVIEW.md`.
 > Goal: Make Dexterity the Stat of Precision — crit reliability + crit power, multi-proc chains, bow force (rangers), spell penetration — with clear tuning knobs in code/config.
+> Current architecture: keep legacy DEX behavior unless `Combat:UseNewDexFormulas` is enabled. Tuning should be hotfixable through `zone/combat_balance.ini`; `zone/combat_balance_config.h` should hold fallback defaults only.
 
 ## Executive Summary
 DEX drives four pillars:
@@ -24,7 +25,7 @@ DEX drives four pillars:
 - Ranger Bow Crit Damage: `CritDmgMod += DEX / 500`.
 - Spell Resist Penetration: `Resist_Ignore = DEX / 10`.
 
-## Tuning Knobs (centralize in `zone/combat_balance_config.h`)
+## Runtime/Fallback Knobs
 - `DEX_CRIT_DIVISOR` (default 500): raise to lower crit chance, lower to raise.
 - `DEX_BASE_CRIT_DMG_DIVISOR` (default 20): base crit damage per DEX.
 - `DEX_TWINCAST_DIVISOR` (default 2000).
@@ -37,14 +38,14 @@ DEX drives four pillars:
 - Slot/curve tuning: keep DEX item scaling via `item_scaling.json` curves & slot multipliers to control how much DEX appears on gear.
 - **Early-game crit floor**: Add a minimum crit chance floor driven by DEX for low levels (e.g., `DEX_CRIT_MIN = (DEX / DEX_CRIT_MIN_DIVISOR)`, default divisor ~3000–4000). For tuning: at level 20 with 200 DEX, aim for ~5% total crit; below 100 DEX at level 1–10 should be very low but non-zero. Combine floor + main formula, clamp to 100%.
 - **Crit step feel**: Consider an optional “step” contribution (e.g., +1% per X DEX chunk) if the floor formula alone doesn’t feel granular; keep this as a knob.
-- **Pet scaling**: Apply DEX crit/twincast to pets at a reduced scalar: `PET_DEX_CRIT_SCALAR` (e.g., 0.5) and `PET_DEX_TWINCAST_SCALAR` (e.g., 0.5). Consider a general “pet stat carryover” scalar for future consistency.
+- **Pet scaling**: Route DEX pet crit/proc/twincast contribution through the shared model in `PET_SCALING.md`, using `PET_OWNER_DEX_TRANSFER`, pet output curves, and final caps instead of standalone `PET_DEX_*` formulas.
 - **Suggested first guesses (tune after playtests):**
   - `DEX_CRIT_DIVISOR = 500` (matches DEX.md examples).
   - `DEX_CRIT_MIN_DIVISOR = 3500` (gives ~5% crit at level 20, 200 DEX; very low at sub-100 DEX early).
   - Overflow-to-crit-damage scalar: start at 1.0 (1:1); lower to 0.5 if top-end is too explosive.
   - Multi-proc max bands: +1 allowed proc per 500 DEX (0–499=1, 500–999=2, 1000–1499=3, etc.).
   - Multi-hit bonuses (BS/Frenzy/Flurry): add `DEX / 5000` as a small bonus chance per skill (cap with a max); start conservative.
-  - `PET_DEX_CRIT_SCALAR = 0.5`, `PET_DEX_TWINCAST_SCALAR = 0.5`.
+  - Pet DEX transfer should use the shared pet-scaling keys from `PET_SCALING.md`.
   - `DEX_BOW_LEVEL_DIVISOR = 10`, `DEX_BOW_CRIT_DMG_DIVISOR = 500` (from DEX.md).
   - `DEX_RESIST_PENETRATION_DIVISOR = 10` but treat as “minor”; increase divisor if stacking with CHA.
   - DOT crits: same DEX crit/overflow; DOT twincast toggle off by default until tested.
@@ -84,9 +85,9 @@ DEX drives four pillars:
    - Guard with class/skill checks and a max cap to avoid runaway multi-hits.
 
 8) **Pet Scaling**
-   - Apply DEX crit/twincast to pets using `PET_DEX_CRIT_SCALAR` and `PET_DEX_TWINCAST_SCALAR`.
-   - For pet DOT crits, reuse the same scalar.
-   - Keep a general “pet stat carryover” scalar to align with broader stat inheritance plans.
+   - Apply DEX crit/proc/twincast to pets through the shared pet-scaling helper from `PET_SCALING.md`.
+   - Use `PET_OWNER_DEX_TRANSFER`, pet output curves, class scalar, pet gear weight, and final caps.
+   - Do not add a separate DEX-only pet carryover path.
 
 9) **Scaling Data Alignment**
    - Ensure `item_scaling.json` keeps DEX growth in line with desired power; adjust `AttributeCurve` and slot multipliers if DEX is over/under represented on gear.
@@ -96,12 +97,13 @@ DEX drives four pillars:
    - Add rules to enable/disable DEX crit overflow, DEX bow force, DEX twincast, DEX DOT crits + DOT twincast, DEX multi-hit bonuses, and DEX resist penetration for easier balancing. Consider a single “UseNewDexFormulas” rule to gate the whole package, with sub-toggles for specific features.
 
 ## Files to Modify
-- `zone/combat_balance_config.h`: add DEX constants/toggles.
+- `zone/combat_balance_config.h`: add DEX fallback constants/toggles.
+- `zone/combat_balance.ini`: add DEX runtime override keys and curve sections.
 - `zone/attack.cpp`: melee crit chance/overflow, multi-proc, ranger bow force, DEX crit damage mod.
 - `zone/spell_effects.cpp` / `zone/spells.cpp`: spell crit chance/overflow (including DOT ticks), twincast, resist penetration.
 - `zone/attack.cpp` proc handling: multi-proc chain logic.
 - `zone/special_attacks.cpp` / class-specific code: DEX-based bonus for multi-hit skills (backstab, frenzy, flurry).
-- Pet handling (e.g., `zone/mob.cpp`, pet crit/twincast paths): apply pet scalars.
+- Pet handling (e.g., `zone/mob.cpp`, pet crit/twincast paths): use shared pet-scaling helper from `PET_SCALING.md`.
 - `item_scaling.json` (if gear DEX amounts need tuning).
 
 ## Validation & Examples
@@ -113,7 +115,7 @@ DEX drives four pillars:
 - **Resist penetration example (1000 DEX):** ignore 100 resist on DD spells.
 - **DOT crit example:** DOT ticks use same crit chance/overflow; apply DEX crit chance each tick; overflow adds to crit damage multiplier for DOT crits as well (toggleable).
 - **Multi-hit example (Rogue BS):** Add a small DEX-based bonus to double/triple backstab chance (e.g., +DEX/5000) layered on skill chance; similarly for Berserker Frenzy and Monk flurry/rapid strikes.
-- **Pet example:** Pet crit/twincast chance = owner-based DEX crit/twincast * pet scalar (e.g., 0.5) so pets benefit but at reduced rate.
+- **Pet example:** Owner DEX feeds `PET_OWNER_DEX_TRANSFER`; final pet crit/proc/twincast impact is then shaped by the shared pet curves, CHA multiplier/class scalar where applicable, pet gear weight, and final caps.
 
 ## Testing Plan
 - Unit/functional tests:
@@ -129,7 +131,7 @@ DEX drives four pillars:
 
 ## Rollout Notes
 - Keep defaults conservative (match DEX.md numbers) and adjust `DEX_CRIT_DIVISOR`, `DEX_BASE_CRIT_DMG_DIVISOR`, and proc denominators after playtests.
-- Document knob changes in the JSON/changelogs so designers can iterate without code changes where appropriate (gear/stat curves), and in `combat_balance_config.h` for code-level knobs.
+- Document mechanic changes in the design docs/changelogs. Designers should iterate exact DEX values through `combat_balance.ini` where possible.
 
 ## Additional Guardrails (high-stat safety)
 - Add explicit caps for resist penetration: `DEX_RESIST_PENETRATION_CAP` (e.g., 120) and shared cap with CHA (`CHA_DEX_RESIST_CAP` ~180) so combined sources cannot zero raid resists.

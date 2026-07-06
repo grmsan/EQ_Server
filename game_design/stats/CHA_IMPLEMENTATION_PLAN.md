@@ -1,12 +1,13 @@
 # Charisma (CHA) Implementation Plan
 
-> Design sources: `game_design/stats/CHA.md`, `game_design/stats/OVERVIEW.md`.
+> Design sources: `game_design/stats/CHA.md`, `game_design/stats/OVERVIEW.md`, `game_design/stats/PET_SCALING.md`.
 > Intent: Charisma is the Stat of Influence (loot luck, pet empowerment, charm reliability, soft mitigation, resist penetration). Deliver it with clear knobs and caps to prevent runaway scaling.
+> Current architecture: keep legacy CHA behavior unless `Combat:UseNewCharismaSystems` is enabled. Tuning should be hotfixable through `zone/combat_balance.ini`; `zone/combat_balance_config.h` should hold fallback defaults only.
 
 ## Vision
 - Make CHA the "off-axis" stat that amplifies support, farming, pet power, and crowd control while giving melee a light crit bump.
 - Keep stacking with DEX/INT/WIS meaningful but cap combined penetration/mitigation so bosses are not trivialized.
-- Center all knobs in `zone/combat_balance_config.h` with a single rule toggle `Combat:UseNewCharismaSystems`.
+- Gate CHA systems with `Combat:UseNewCharismaSystems` and expose tuning through runtime combat-balance config.
 
 ## Core Mechanics & Formulas (with guardrails)
 - **Rare Loot Bonus**  
@@ -14,8 +15,7 @@
   *Defaults:* divisor 20 (matches doc), max bonus 0.50 (50%) to keep ultra-farm builds from guaranteeing drops.
 
 - **Pet Stat Scaling**  
-  `pet_scalar = 1.0 + (CHA / CHA_PET_DIVISOR) * class_mult` (HP+Damage). Apply `ApplySoftcap(pet_scalar, CHA_PET_SOFTCAP, CHA_PET_SOFTCAP_POWER)` so values beyond the softcap taper instead of exploding.  
-  *Defaults:* divisor 10 (doc), softcap 2.5x total, power 0.65. Class multipliers: Magician 2.0x, Beastlord 1.5x, Necro/Ench/Shm 1.25x, others 1.0x.
+  CHA pet scaling should use the shared pet model in `PET_SCALING.md`. CHA provides the primary pet-power multiplier/class amplifier, while owner STR/STA/DEX/AGI/INT/WIS transfer at smaller configured rates and pet gear remains a separate weighted channel. Apply final pet softcaps/hardcaps after owner transfer, CHA multiplier, class scalar, and pet gear are combined.
 
 - **Enemy Damage Reduction ("Disarming Beauty")**  
   `incoming_mult = 1 - min((CHA * Level) / CHA_DMG_REDUCTION_DIVISOR, CHA_DMG_REDUCTION_CAP)`; applied multiplicatively after armor/STA reductions.  
@@ -36,10 +36,10 @@
   `song_mod = 1 + CHA / CHA_BARD_SONG_DIVISOR` (heals/damage/slows), capped by `CHA_BARD_SONG_CAP`.  
   *Defaults:* divisor 150, cap 1.5x to avoid dwarfing instrument mods.
 
-## Tuning Constants to add (`zone/combat_balance_config.h`)
-- Toggle: `USE_NEW_CHARISMA_SYSTEMS` (RuleB `Combat:UseNewCharismaSystems` default true on Solo server).
+## Runtime/Fallback Knobs
+- Toggle: `Combat:UseNewCharismaSystems` with legacy-safe default unless intentionally enabled for a test shard.
 - Loot: `CHA_RARE_DIVISOR = 20.0f`, `CHA_RARE_MAX_BONUS = 0.50f`.
-- Pets: `CHA_PET_DIVISOR = 10.0f`, `CHA_PET_SOFTCAP = 2.5f`, `CHA_PET_SOFTCAP_POWER = 0.65f`, class multipliers per archetype (see above).
+- Pets: use shared pet-scaling keys from `PET_SCALING.md`, especially `[Curve.PET_CHA_POWER]`, `PET_CHA_MULTIPLIER_*`, `PET_CLASS_SCALAR_*`, `PET_GEAR_STAT_WEIGHT`, and `PET_OUTPUT_*`. Avoid isolated `CHA_PET_*` keys unless they are aliases mapped into the shared pet model.
 - Damage reduction: `CHA_DMG_REDUCTION_DIVISOR = 2500.0f`, `CHA_DMG_REDUCTION_CAP = 0.35f`.
 - Resist pen: `CHA_RESIST_DIVISOR = 10.0f`, `CHA_RESIST_CAP = 120.0f`, `CHA_DEX_RESIST_CAP = 180.0f`.
 - Crits: `CHA_CRIT_DIVISOR = 100.0f`, `CHA_CRIT_CAP = 0.15f`.
@@ -48,17 +48,18 @@
 
 ## Implementation Steps
 1) **Config/Rules**  
-   - Add constants above to `combat_balance_config.h` and RuleB toggle `Combat:UseNewCharismaSystems`.  
-   - Wire shared cap for resist penetration with DEX constants.
+   - Add fallback constants, runtime keys, and RuleB toggle `Combat:UseNewCharismaSystems`.
+   - Wire shared cap for resist penetration with DEX runtime/fallback keys.
 
 2) **Rare Loot**  
    - In loot generation (`zone/loot.cpp` / `NPC::AddLootDrop` path), multiply rare table roll odds by `1 + rare_bonus` when toggle is on.  
    - Add debug log/metrics hook to track average rare rolls per CHA bucket for tuning.
 
 3) **Pet Empowerment**  
-   - In pet stat build (`NPC::CalcBonuses` or pet construction), apply `pet_scalar` to HP and base damage before other buffs.  
-   - Include class multipliers and softcap; allow pets without owners to skip CHA scaling.  
-   - For Beastlords, also propagate CHA-driven proc/crit inheritance hooks (reuse DEX crit pipeline with a CHA scalar).
+   - In pet stat build (`NPC::CalcBonuses` or pet construction), call the shared pet-scaling helper from `PET_SCALING.md`.
+   - Include owner stat transfer, pet gear weight, CHA pet-power curve, class/archetype multipliers, and final caps in one combined calculation.
+   - Allow pets without owners to skip owner/CHA scaling.
+   - For Beastlords, route proc/crit inheritance through the shared pet model instead of adding a separate CHA-only path.
 
 4) **Incoming Damage Reduction**  
    - In melee/spell damage intake (`Mob::CheckIncreaseIncomingDmg`, `Mob::ResistSpell`, or the shared mitigation path), apply `incoming_mult` after STA/AC/WIS reductions.  
@@ -83,7 +84,7 @@
 
 ## Safety & Fun Guardrails
 - Cap rare loot at 50% bonus to preserve hunt loops; revisit after playtests if grind feels too long/short.
-- Pet softcap keeps Magician 2x mastery from exploding past intended raid-tank levels; start at 2.5x and tune per class scalar.
+- Pet softcap/final cap comes from the shared pet model and must account for owner stats, CHA, pet gear, and class scalar together.
 - Damage reduction applies multiplicatively and is capped, so STA/WIS/CHA stacking cannot reach near-zero damage.
 - Shared resist penetration cap (CHA+DEX) prevents 200+ penetration from deleting raid resists; set NPC flag for penetration immunity on specific encounters.
 - Charm permanence is gated by a rule and threshold; default off to avoid trivializing content.
@@ -91,13 +92,13 @@
 
 ## Testing Matrix
 - **Loot:** 0/200/500/1000 CHA kills on a boss with known rare rate; log effective rare % vs target.
-- **Pets:** Compare pet HP/DPS at 0/300/600/1000 CHA for Magician, Beastlord, Necro; confirm softcap behavior.
+- **Pets:** Use `PET_SCALING.md` validation: compare pet HP/DPS at 0/300/600/1000 CHA while also testing owner stat transfer and pet gear weight independently; confirm final softcap/hardcap behavior.
 - **Mitigation:** Measure incoming DPS on a tank at 70 with 0 vs 1000 CHA while stacking STA/WIS to ensure total reduction stays within expected band (~30-50%).  
 - **Resists:** Land-rate tests on high-resist NPCs with DEX-only vs CHA-only vs both; confirm shared cap.  
 - **Charm:** Duration/break-rate at 200/500/800 CHA; ensure floor and optional perma toggle function.  
 - **Crits:** DPS parsing with CHA-only crit bonus to ensure it is additive and not overshadowing DEX overflow.
 
 ## Deliverables
-- New constants and rule toggle in `combat_balance_config.h` + ruletypes entry.
+- Runtime keys + fallback constants + rule toggle in ruletypes.
 - Implementation hooks in loot, pet calc, mitigation, resist checks, crit aggregation, charm/song logic.
 - Debug/telemetry for tuning and a short doc update in `CHA.md` once values are finalized.

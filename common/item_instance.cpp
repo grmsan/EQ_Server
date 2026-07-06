@@ -274,6 +274,20 @@ bool EQ::ItemInstance::IsEquipable(int16 slot_id) const
 		return false;
 	}
 
+	if (slot_id == EQ::invslot::slotPowerSource) {
+		for (int16 equip_slot = EQ::invslot::EQUIPMENT_BEGIN; equip_slot <= EQ::invslot::EQUIPMENT_END; ++equip_slot) {
+			if (equip_slot == EQ::invslot::slotPowerSource) {
+				continue;
+			}
+
+			if ((m_item->Slots & (1 << equip_slot)) != 0) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	return ((m_item->Slots & (1 << slot_id)) != 0);
 }
 
@@ -934,6 +948,19 @@ EQ::ItemInstance* EQ::ItemInstance::Clone() const
 bool EQ::ItemInstance::IsSlotAllowed(int16 slot_id) const {
 	if (!m_item) { return false; }
 	else if (InventoryProfile::SupportsContainers(slot_id)) { return true; }
+	else if (slot_id == EQ::invslot::slotPowerSource) {
+		for (int16 equip_slot = EQ::invslot::EQUIPMENT_BEGIN; equip_slot <= EQ::invslot::EQUIPMENT_END; ++equip_slot) {
+			if (equip_slot == EQ::invslot::slotPowerSource) {
+				continue;
+			}
+
+			if ((m_item->Slots & (1 << equip_slot)) != 0) {
+				return true;
+			}
+		}
+
+		return false;
+	}
 	else if (m_item->Slots & (1 << slot_id)) { return true; }
 	else if (slot_id > invslot::EQUIPMENT_END) { return true; } // why do we call 'InventoryProfile::SupportsContainers' with this here?
 	else { return false; }

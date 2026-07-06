@@ -1,13 +1,15 @@
 # Agility (AGI) Implementation Plan
 
+> Current architecture: keep legacy AGI behavior unless `Combat:UseNewAgiFormulas` is enabled. Tuning should be hotfixable through `zone/combat_balance.ini`; `zone/combat_balance_config.h` should hold fallback defaults only.
+
 ## Vision (aligns with AGI.md + OVERVIEW.md)
 - AGI is the Stat of Velocity: faster actions (swing/cast/move) and harder to hit.
 - Curve shape: asymptotic/diminishing returns (big early wins, tapering at the top).
 - Applies to both melee and casters (swing speed, avoidance, run speed, cast/GCD speed).
 - Class weighting for avoidance so light fighters feel it most; casters get a light benefit.
 
-## Target Formulas (tunable knobs)
-Use CombatBalance constants (add new ones there) and allow Rule toggle `Combat:UseNewAgiFormulas`.
+## Target Formula Shapes (runtime-tunable knobs)
+Use CombatBalance runtime accessors with fallback constants and allow Rule toggle `Combat:UseNewAgiFormulas`.
 
 - **Haste from AGI (swing speed)**  
   `haste_pct = HASTE_CAP * AGI / (AGI + HASTE_DIV)` (default cap 100%, div ~400).  
@@ -30,7 +32,7 @@ Use CombatBalance constants (add new ones there) and allow Rule toggle `Combat:U
   `cast_multiplier = floor + (1 - floor) * (CAST_DIV / (AGI + CAST_DIV))`  
   So cast_time = base_cast * cast_multiplier (and GCD similarly), never below the floor; high AGI can push long casts (9s) close to ~1s without going under the floor.
 
-## Tuning constants to add (combat_balance_config.h)
+## Runtime/Fallback Knobs
 - HASTE: `AGI_HASTE_DIVISOR`, `AGI_HASTE_CAP`
 - AVOID: `AGI_AVOID_DIVISOR`, `AGI_AVOID_CAP`, class multipliers, `AGI_AVOID_SOFTCAP`
 - RUN: `AGI_RUN_DIVISOR`, `AGI_RUN_CAP`
@@ -39,8 +41,8 @@ Use CombatBalance constants (add new ones there) and allow Rule toggle `Combat:U
 
 ## Implementation Steps
 1) **Rules/config**  
-   - Add RuleB `Combat:UseNewAgiFormulas` (default true for testing).  
-   - Add AGI constants in `zone/combat_balance_config.h`.
+   - Add/confirm RuleB `Combat:UseNewAgiFormulas` with legacy-safe default unless intentionally enabled for a test shard.
+   - Add AGI fallback constants in `zone/combat_balance_config.h` and runtime keys in `zone/combat_balance.ini`.
 
 2) **Swing speed / haste**  
    - In attack speed calc (e.g., `Mob::GetHaste()` / swing delay path in `attack.cpp`), add AGI haste term when rule is on; clamp to cap and combine with item/spell haste respecting overall haste caps.

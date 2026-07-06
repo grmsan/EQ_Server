@@ -1,5 +1,7 @@
 # Dexterity (DEX) - Design Document
 
+> This document defines DEX's gameplay role and mechanic shapes. Exact crit, overflow, proc, bow, twincast, penetration, pet-scalar, and cap values should be hotfixable through `zone/combat_balance.ini`; compiled constants are fallback defaults.
+
 ## Core Philosophy
 Dexterity represents hand-eye coordination, fine motor skills, and lethal accuracy. In a Solo Server environment, Dexterity is the **Stat of Precision**. It determines not just *if* you hit, but *how effectively* you hit. It transforms standard attacks into critical strikes and single procs into cascades of magical effects.
 

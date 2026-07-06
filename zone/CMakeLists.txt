@@ -22,6 +22,7 @@ SET(zone_sources
     client_mods.cpp
     client_packet.cpp
     client_process.cpp
+    combat_balance_runtime.cpp
     combat_record.cpp
     corpse.cpp
     ../common/data_bucket.cpp

@@ -2986,6 +2986,20 @@ static void BuildMulticlassAbbrevList(uint16_t mask, char* out, size_t out_size)
 	}
 }
 
+static void BuildInventoryClassText(uint16_t mask, char* out, size_t out_size)
+{
+	if (!out || out_size == 0) {
+		return;
+	}
+
+	out[0] = '\0';
+	if (mask == 0) {
+		return;
+	}
+
+	BuildMulticlassAbbrevList(mask, out, out_size);
+}
+
 static uint8_t GetLocalDisplayedClassId()
 {
 	PCHARINFO2 ci2 = nullptr;
@@ -3023,6 +3037,85 @@ static void SetWindowTextIfChanged(CXWnd* wnd, const char* text)
 	wnd->SetWindowTextA(desired);
 }
 
+static bool ItemHasNonPowerSourceEquipSlot(DWORD equip_slots)
+{
+	constexpr DWORD kClientPowerSourceSlot = 21;
+	constexpr DWORD kClientLastWearableSlot = 22;
+
+	for (DWORD slot_id = 0; slot_id <= kClientLastWearableSlot; ++slot_id) {
+		if (slot_id == kClientPowerSourceSlot) {
+			continue;
+		}
+
+		if ((equip_slots & (1u << slot_id)) != 0) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+static void PatchPowerSourceEquipSlotOnItem(PCONTENTS contents, DWORD& patched_count)
+{
+	if (!contents) {
+		return;
+	}
+
+	constexpr DWORD kClientPowerSourceSlot = 21;
+	constexpr DWORD kClientPowerSourceBit = (1u << kClientPowerSourceSlot);
+	constexpr DWORD kMaxContainerSlots = 0x14;
+
+	PITEMINFO item = nullptr;
+	__try {
+		item = GetItemFromContents(contents);
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		item = nullptr;
+	}
+
+	if (item) {
+		if ((item->EquipSlots & kClientPowerSourceBit) == 0 && ItemHasNonPowerSourceEquipSlot(item->EquipSlots)) {
+			item->EquipSlots |= kClientPowerSourceBit;
+			++patched_count;
+		}
+
+		if (contents->pContentsArray && item->Slots > 0) {
+			const DWORD child_count = (item->Slots < kMaxContainerSlots) ? item->Slots : kMaxContainerSlots;
+			for (DWORD i = 0; i < child_count; ++i) {
+				PatchPowerSourceEquipSlotOnItem(contents->pContentsArray->Contents[i], patched_count);
+			}
+		}
+	}
+}
+
+void UpdateClientPowerSourceEquipMasks()
+{
+	PCHARINFO2 ci2 = nullptr;
+	__try {
+		ci2 = GetCharInfo2();
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER) {
+		ci2 = nullptr;
+	}
+
+	if (!ci2 || !ci2->pInventoryArray) {
+		return;
+	}
+
+	DWORD patched_count = 0;
+	for (DWORD slot_id = 0; slot_id < NUM_INV_SLOTS; ++slot_id) {
+		PatchPowerSourceEquipSlotOnItem(ci2->pInventoryArray->InventoryArray[slot_id], patched_count);
+	}
+
+	PatchPowerSourceEquipSlotOnItem(ci2->pInventoryArray->Inventory.Cursor, patched_count);
+
+	static DWORD s_last_logged_patch_count = 0;
+	if (isDebugLoggingEnabled && patched_count > 0 && patched_count != s_last_logged_patch_count) {
+		s_last_logged_patch_count = patched_count;
+		LogDebug("CLIENT_UI power source equip mask patched count=%lu", (unsigned long)patched_count);
+	}
+}
+
 void UpdateInventoryMulticlassLabels()
 {
 	if (!isMulticlassClassNameOverrideEnabled || !ppInventoryWnd || !pInventoryWnd) {
@@ -3040,22 +3133,21 @@ void UpdateInventoryMulticlassLabels()
 	}
 
 	char class_text[64] = { 0 };
-	char class_abbr[64] = { 0 };
 	char inventory_abbr[64] = { 0 };
-	const int class_count = CountBits16(mask);
-
-	if (class_count > 1) {
-		BuildMulticlassAbbrevList(mask, class_abbr, sizeof(class_abbr));
-		memcpy(class_text, class_abbr, sizeof(class_text) - 1);
+	if (CountBits16(mask) > 1) {
+		BuildInventoryClassText(mask, class_text, sizeof(class_text));
 	} else {
 		const uint8_t class_id = GetLocalDisplayedClassId();
 		if (!class_id || class_id > 16) {
 			return;
 		}
 
-		BuildMulticlassAbbrevList(static_cast<uint16_t>(1u << (class_id - 1)), class_abbr, sizeof(class_abbr));
-		memcpy(class_text, class_abbr, sizeof(class_text) - 1);
-		memcpy(inventory_abbr, class_abbr, sizeof(inventory_abbr) - 1);
+		const uint16_t single_class_mask = static_cast<uint16_t>(1u << (class_id - 1));
+		BuildInventoryClassText(single_class_mask, class_text, sizeof(class_text));
+	}
+
+	if (!class_text[0]) {
+		return;
 	}
 
 	if (class_text[0]) {

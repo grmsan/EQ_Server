@@ -1,5 +1,7 @@
 # Wisdom (WIS) - Design Document
 
+> This document defines WIS's gameplay role and mechanic shapes. Exact spell-mitigation, heal, rune, CC-resist, mana-pool, class-hook, curve, and cap values should be hotfixable through `zone/combat_balance.ini`; compiled constants are fallback defaults.
+
 ## Core Philosophy
 Wisdom represents intuition, willpower, and connection to the divine. In a Solo Server environment, Wisdom is the **Stat of Warding**. While Stamina protects the body from physical trauma, Wisdom protects the soul from magical annihilation and enhances the power of restoration.
 

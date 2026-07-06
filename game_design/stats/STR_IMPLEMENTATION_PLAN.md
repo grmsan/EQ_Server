@@ -1,8 +1,10 @@
 # STR Attribute Implementation Plan
 
-> **⚙️ BALANCE CONFIGURATION**: All tunable values are centralized in `zone/combat_balance_config.h`.
+> **Balance configuration:** Keep legacy STR behavior unless `Combat:UseNewStrDamageFormula` is enabled. Tuning should be hotfixable through `zone/combat_balance.ini`; `zone/combat_balance_config.h` should hold fallback defaults only.
+> Some examples below preserve earlier design numbers for context; exact values are not canonical and should be tuned through runtime config.
 > **📋 DESIGN DOCUMENT**: See `game_design/stats/STR.md` for design philosophy and formulas.
 > **🏗️ ARCHITECTURE**: Option B (Additive Base Damage) - see section below for full rationale.
+> **PET SCALING UPDATE**: Older examples in this file mention STR-specific pet inheritance. New implementation should route pet STR contribution through `game_design/stats/PET_SCALING.md` instead of adding standalone `PET_STR_INHERITANCE` behavior.
 
 ## Executive Summary
 This document outlines the implementation approach for the Strength-based damage scaling system. The goal is to **enhance** the current weapon damage system with STR-based scaling that works for all classes, while keeping delay-based bonuses for weapon balance.
@@ -15,7 +17,7 @@ This document outlines the implementation approach for the Strength-based damage
 - ✅ Predictable, linear math - STR adds to base, mods multiply the whole thing
 - ✅ Clear separation: weapon identity (delay) + stat scaling (STR) + modifiers (%)
 - ✅ Safer interaction with large percent buffs (no multiplicative explosions)
-- ✅ Easy to tune via centralized config constants
+- ✅ Easy to tune via runtime config with fallback constants
 - ✅ Simple mental model for players and developers
 
 ---
@@ -71,7 +73,7 @@ Players can easily understand: "I upgraded from 300 STR to 400 STR, so my base d
 #### 3. Better Support for Class-Specific Features
 
 The broader STR system includes:
-- Pet inheritance (50% of owner STR)
+- Pet physical contribution through the shared pet-scaling model
 - Spell interrupt resistance (per-hit % chance: `5% - STR/100 - Channeling/50 + LevelDiff*1.5%`)
 - Stun resistance (two-layer: frontal `min(STR/10, 100%)`, regular `100*(1-e^(-STR/2000))`)
 - Monk weight limits (`STR * 10`)
@@ -114,18 +116,18 @@ The design targets three goals:
 - **Config**: Leave STR scaling strong; adjust disc/buff values if needed
 
 **Risk 3: Offhand and pets**
-- Problem: Dual-wield or pets getting full STR bonus may overperform
-- **Mitigation**: `OFFHAND_STR_PENALTY = 0.5f` (offhand gets 50%), `PET_STR_DAMAGE_SCALAR = 1.0f` (tunable separately from inheritance)
-- **Config**: Easy to adjust if testing shows imbalance
+- Problem: Dual-wield getting full STR bonus may overperform; pets can also overperform if STR transfer, CHA multiplier, and pet gear stack without shared caps.
+- **Mitigation**: `OFFHAND_STR_PENALTY = 0.5f` for offhand. Pet STR contribution should use `PET_OWNER_STR_TRANSFER`, global pet transfer scalar, CHA multiplier, pet gear weight, and final pet caps from `PET_SCALING.md`.
+- **Config**: Tune pet transfer globally instead of adding a STR-only pet inheritance path.
 
 ---
 
 ## Tuning Knobs Reference
 
-All constants live in `zone/combat_balance_config.h`. Here's a quick guide to what each does:
+All tuning knobs should have runtime keys with fallback constants. Here's a quick guide to what each does:
 
 ### Core Scaling
-- **`STR_LEVEL_DIVISOR`** (40.0f): PRIMARY TUNING KNOB - raise to reduce all STR damage, lower to increase
+- **`STR_LEVEL_DIVISOR`**: PRIMARY TUNING KNOB - raise to reduce all STR damage, lower to increase
 - **`STR_MIN_LEVEL_MULTIPLIER`** (0.05f): Minimum effectiveness at low levels (prevents zero damage)
 
 ### Optional Advanced Tuning
@@ -138,7 +140,7 @@ All constants live in `zone/combat_balance_config.h`. Here's a quick guide to wh
 
 ### Hand/Pet/NPC Penalties
 - **`OFFHAND_STR_PENALTY`** (0.5f): Offhand gets 50% of STR bonus
-- **`PET_STR_DAMAGE_SCALAR`** (1.0f): Multiply pet STR damage (independent from inheritance)
+- **Pet STR transfer**: use shared pet-scaling keys from `PET_SCALING.md`, especially `PET_OWNER_STR_TRANSFER` and final pet caps.
 - **`NPC_STR_DAMAGE_SCALAR`** (0.0f): NPCs don't get STR scaling (player power fantasy)
 
 ### Weapon Delay Bonuses
@@ -468,8 +470,10 @@ int Mob::GetBackstabDamage(Mob *target)
 
 ---
 
-### Pet STR Inheritance
-**Design**: Pets inherit 50% of owner's STR
+### Pet STR Contribution
+**Design**: STR feeds the shared pet-scaling model in `PET_SCALING.md`.
+
+Older notes in this section used a direct `PET_STR_INHERITANCE = 0.5f` model. Do not implement that as a standalone STR path. STR should contribute through `PET_OWNER_STR_TRANSFER`, the global pet transfer scalar, pet gear weight, CHA pet multiplier, class scalar, and final pet caps.
 
 #### Current System
 ```cpp
@@ -481,61 +485,30 @@ if (IsOfClientBotMerc()) {
 
 #### Implementation Options
 
-**Option 1: Modify Pet::CalcBonuses()**
+**Selected direction: Shared pet-scaling helper**
 ```cpp
-// zone/pets.cpp or zone/npc.cpp
-void Pet::CalcBonuses()
-{
-    NPC::CalcBonuses(); // Call base class
+// Shape only. Exact API belongs with PET_SCALING.md implementation.
+PetScalingInput input;
+input.owner_str = owner ? owner->GetSTR() : 0;
+input.pet_gear_stats = GetPetGearStatContribution();
+input.owner_cha = owner ? owner->GetCHA() : 0;
+input.pet_class_scalar = GetPetClassScalar();
 
-    // Inherit 50% owner STR
-    Mob* owner = GetOwner();
-    if (owner) {
-        int owner_str = owner->GetSTR();
-        int inherited_str = owner_str / 2;
-
-        // Add to pet's STR (via itembonuses)
-        itembonuses.STR += inherited_str;
-    }
-}
+PetScalingResult result = CombatBalance::ComputePetScaling(input);
 ```
 
-**Option 2: New GetPetSTRBonusFromOwner() Function** ⭐ SELECTED
+Validation:
+
 ```cpp
-// zone/mob.h
-class Mob {
-    int GetPetSTRBonusFromOwner(); // Add alongside GetPetATKBonusFromOwner()
-};
-
-// zone/mob.cpp (implementation with centralized config)
-int Mob::GetPetSTRBonusFromOwner()
-{
-    if (!HasOwner()) return 0;
-
-    Mob* owner = GetOwner();
-    if (!owner) return 0;
-
-    // Only if pets are allowed to use STR scaling
-    if (!CombatBalance::PETS_USE_STR_SCALING) return 0;
-
-    // Inherit owner's STR at configured percentage
-    int owner_str = owner->GetSTR();
-    return static_cast<int>(owner_str * CombatBalance::PET_STR_INHERITANCE);
-}
-
-// Use in GetSTR() or GetStrengthDamageBonus()
-int Mob::GetSTR()
-{
-    int base_str = STR + itembonuses.STR + spellbonuses.STR + aabonuses.STR;
-
-    // Pets inherit owner STR
-    if (IsPet()) {
-        base_str += GetPetSTRBonusFromOwner();
-    }
-
-    return base_str;
-}
+// Example validation intent:
+// 1. Set PET_OWNER_STR_TRANSFER very high in combat_balance.ini.
+// 2. Run #combatbalance reload.
+// 3. Verify pet physical output changes.
+// 4. Restore safe values and verify rollback.
 ```
+
+Avoid adding a deprecated STR-only helper. In particular, do not add a function that directly returns `owner STR * fixed inheritance rate`; that bypasses pet gear, CHA, class scalars, and final pet caps.
+
 
 ---
 
@@ -578,7 +551,7 @@ if (CombatBalance::ENABLE_STR_INTERRUPT_RESISTANCE && IsOfClientBot() && attacke
 }
 ```
 
-**Configuration** (`zone/combat_balance_config.h`):
+**Runtime/fallback configuration**:
 ```cpp
 static constexpr bool ENABLE_STR_INTERRUPT_RESISTANCE = true;
 static constexpr float INTERRUPT_BASE_CHANCE_PER_HIT = 5.0f;
@@ -650,7 +623,7 @@ int32 Client::GetStunResist() const
 }
 ```
 
-**Configuration** (`zone/combat_balance_config.h`):
+**Runtime/fallback configuration**:
 ```cpp
 static constexpr bool ENABLE_STR_STUN_RESIST = true;
 static constexpr float STR_FRONTAL_STUN_RESIST_DIVISOR = 10.0f;
@@ -743,9 +716,11 @@ bool Mob::CheckSongInterruptImmunity(int damage)
    - Verify formula: `(Weapon + STR_Bonus) * BS_Mult`
    - Test at multiple levels
 
-6. **Pet STR Inheritance**
-   - Check pet GetSTR() returns owner_str / 2
-   - Verify pet damage scales correctly
+6. **Pet STR Contribution**
+   - Set `PET_OWNER_STR_TRANSFER` high in `combat_balance.ini`
+   - Run `#combatbalance reload`
+   - Verify pet physical output changes through the shared pet-scaling helper
+   - Verify pet gear and CHA multiplier remain separately tunable
 
 7. **Spell Interrupt Resistance**
    - Cast spells while taking damage from mobs at various levels
@@ -786,7 +761,7 @@ bool Mob::CheckSongInterruptImmunity(int damage)
 ### **Option B + Pet Inheritance Option 2 + Centralized Config**
 
 **Rationale**:
-1. **Centralized Balance**: All tuning knobs in one place (`combat_balance_config.h`)
+1. **Runtime Balance**: tuning knobs are reloadable through `combat_balance.ini`, with fallback defaults in `combat_balance_config.h`
 2. **Clean Code Structure**: Separate `GetStrengthDamageBonus()` function is self-documenting
 3. **Hybrid System**: Keep weapon delay bonuses + add STR scaling (both matter)
 4. **Player-Only Scaling**: NPCs don't get STR bonuses (player power fantasy)
@@ -796,7 +771,7 @@ bool Mob::CheckSongInterruptImmunity(int damage)
 ### Implementation Timeline
 
 **Week 1: Core Damage System + Balance Config**
-- ✅ Create `zone/combat_balance_config.h` with all tunable constants
+- ✅ Create `zone/combat_balance_config.h` with fallback constants and add runtime keys
 - Create `GetStrengthDamageBonus()` function (uses config constants)
 - Modify `GetWeaponDamageBonus()` to work for all classes (remove warrior 28+ restriction)
 - Modify `Attack()` to apply both STR + weapon bonuses
@@ -834,7 +809,7 @@ bool Mob::CheckSongInterruptImmunity(int damage)
 - STR provides level-scaled damage growth (1 → 70 progression)
 - Weapon delay provides weapon choice depth (slow weapons hit harder)
 - Together they create interesting itemization (high STR + slow weapon = best)
-- Easy to tune independently via `combat_balance_config.h`
+- Easy to tune independently via `combat_balance.ini`
 
 ### Player-Only Power Scaling
 **Decision**: ✅ NPCs don't get STR bonuses (`NPCS_USE_STR_SCALING = false`)
@@ -845,14 +820,14 @@ bool Mob::CheckSongInterruptImmunity(int damage)
 - Easier to balance (control NPC damage via stats, not formulas)
 - Charmed NPCs already powerful (don't need STR scaling on top)
 
-### Pet Inheritance at 50%
-**Decision**: ✅ Keep 50% (`PET_STR_INHERITANCE = 0.5f`)
+### Pet STR Transfer
+**Decision**: Use shared pet-scaling controls from `PET_SCALING.md`.
 
 **Reasoning**:
-- Prevents pets from being stronger than players
-- Makes STR valuable for summoners without overshadowing INT/WIS
-- Follows precedent from AC/ATK pet bonuses
-- Tunable if pets feel weak/strong
+- Prevents STR from creating a separate pet scaling path.
+- Lets CHA remain the main pet-power multiplier.
+- Lets pet gear remain independently valuable.
+- Lets final pet caps account for all pet power channels together.
 
 ### STR Damage Affected by AC
 **Decision**: ✅ Normal AC mitigation (`STR_DAMAGE_AFFECTED_BY_AC = true`)
@@ -877,12 +852,12 @@ bool Mob::CheckSongInterruptImmunity(int damage)
 
 ## Centralized Balance Configuration
 
-**All tunable constants live in `zone/combat_balance_config.h`:**
+**Fallback constants live in `zone/combat_balance_config.h`; runtime overrides live in `zone/combat_balance.ini`:**
 
 ```cpp
 namespace CombatBalance {
     // STR Scaling
-    constexpr float STR_LEVEL_DIVISOR = 40.0f;         // Level/40 multiplier
+    constexpr float STR_LEVEL_DIVISOR = 60.0f;         // fallback; runtime config owns tuning
     constexpr float STR_MIN_LEVEL_MULTIPLIER = 0.05f;  // Min 5% effectiveness
     constexpr float OFFHAND_STR_PENALTY = 0.5f;        // Offhand gets 50%
 
@@ -891,8 +866,11 @@ namespace CombatBalance {
     constexpr float DELAY_BONUS_DIVISOR_1H = 3.0f;     // 1H scaling
     constexpr float DELAY_BONUS_DIVISOR_2H = 2.5f;     // 2H scaling (better)
 
-    // Pet Inheritance
-    constexpr float PET_STR_INHERITANCE = 0.5f;        // Pets get 50% owner STR
+    // Pet STR contribution uses shared PET_SCALING.md controls:
+    // PET_OWNER_STR_TRANSFER, PET_OWNER_TRANSFER_GLOBAL_SCALAR,
+    // PET_GEAR_STAT_WEIGHT, PET_CHA_MULTIPLIER_*, PET_CLASS_SCALAR_*,
+    // PET_OUTPUT_SOFTCAP_START, PET_OUTPUT_SOFTCAP_POWER,
+    // PET_OUTPUT_HARDCAP_VALUE.
 
     // Class Features
     constexpr float TANK_INTERRUPT_DIVISOR = 4.0f;     // STR/4 for channeling
@@ -948,7 +926,7 @@ namespace CombatBalance {
 **Final Approach**: **Option B + Centralized Config + Hybrid Bonus System** ✅
 
 This provides:
-- 🎛️ **Easy Tuning**: All balance knobs in `zone/combat_balance_config.h`
+- 🎛️ **Easy Tuning**: balance knobs hot-reload from `zone/combat_balance.ini`
 - 📝 **Self-Documenting**: Constants explain their purpose and rationale
 - 🔄 **Hybrid Bonuses**: STR scaling + weapon delay bonuses (both matter)
 - 👥 **Player-Focused**: Only players/pets get new scaling (NPC balance preserved)
@@ -968,7 +946,7 @@ This provides:
 **Key Benefits of Centralized Config**:
 - Adjust `STR_LEVEL_DIVISOR` if damage too high → change one number, affects entire system
 - Adjust `OFFHAND_STR_PENALTY` if dual-wield too strong → instant rebalance
-- Adjust `PET_STR_INHERITANCE` if pets too weak/strong → one constant change
+- Adjust shared pet-scaling keys if pets are too weak/strong: owner transfer rates, CHA multiplier, pet gear weight, class scalar, and final caps.
 - All changes documented with rationale → future devs understand "why"
 - Version control tracks balance history → see what was changed and when
 

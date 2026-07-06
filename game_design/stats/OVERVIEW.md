@@ -1,5 +1,39 @@
 # EQ Server Stat System: Analysis & Redesign Proposal
 
+## Related Implementation Plans
+
+- Combat balance hot reload and runtime curve controls: [COMBAT_BALANCE_HOT_RELOAD_PLAN.md](COMBAT_BALANCE_HOT_RELOAD_PLAN.md)
+- Current implementation and hotfix coverage tracker: [STAT_IMPLEMENTATION_TRACKER.md](STAT_IMPLEMENTATION_TRACKER.md)
+- Shared owner-to-pet stat transfer and CHA pet-power model: [PET_SCALING.md](PET_SCALING.md)
+
+## Current Direction
+
+The stat docs define each stat's gameplay role and the systems it should influence. Exact effectiveness, divisors, curves, caps, race-vs-item weights, and softcap behavior should be hotfixable through `zone/combat_balance.ini` and reloadable in-game with the combat balance GM command.
+
+Compiled constants in `zone/combat_balance_config.h` are fallback defaults, not the preferred tuning workflow once the hot-reload layer is implemented.
+
+Legacy formulas must remain available behind their existing rule gates. New stat systems only run when their `UseNew*` rule is enabled, and runtime overrides only affect those new formula paths.
+
+## Stat Role Summary
+
+| Stat | Player-Facing Role | Primary Systems |
+| :--- | :--- | :--- |
+| STR | Physical force and casting stability | melee base damage, weapon-delay synergy, interrupt resistance, stun resistance, pet STR inheritance |
+| STA | Sustainability | HP pool, HP/mana/endurance regen, AC/STA mitigation, poison/disease/breath endurance |
+| DEX | Precision | melee/spell crits, crit overflow, proc chains, bow force, twincast, resist penetration |
+| AGI | Velocity | haste, avoidance, run speed, cast/GCD speed |
+| INT | Brilliance/offense | spell damage, cooldown reduction, mana efficiency, mana pool with WIS, lifetap/DoT/pet-offense hooks |
+| WIS | Warding/restoration | spell mitigation, heal/rune strength, crowd-control resistance, mana pool with INT, priest class hooks |
+| CHA | Influence | rare loot, pet power, enemy damage reduction, resist penetration, opportunity crits, charm/CC reliability, bard song power |
+
+## Shared Pet Scaling Direction
+
+Pet scaling should be implemented as a shared subsystem instead of separate STR/DEX/INT/CHA pet rules. Owner stats can transfer to pets at small hotfixable rates, pet gear should remain its own contribution channel, and CHA should act as the primary pet-power multiplier/class amplifier. See [PET_SCALING.md](PET_SCALING.md).
+
+## Tuning Principle
+
+Race should shape flavor, not loot responsiveness. Base/racial stats and item stats should be treated as separate contribution channels where possible. Starting stat values around 60-150 should create modest identity differences; gear-driven stat increases should be the primary source of long-term power growth.
+
 ## 1. Current System Analysis
 Based on the source code analysis of `zone/client_mods.cpp` and `zone/client.cpp`, the current system uses a mix of hard caps, diminishing returns, and formulas that often minimize the impact of high stats.
 
@@ -46,14 +80,9 @@ To achieve "drastic improvement" and "meaningful upgrades," we propose a system 
 
 **Proposed (Additive Base Damage):**
 *   **Architecture:** STR bonus is added to base damage alongside weapon delay bonus, then all percent modifiers scale the total.
-*   **Formula:** `StrengthDamageBonus = STR * (Level / STR_LEVEL_DIVISOR)` where `STR_LEVEL_DIVISOR = 40.0f`
+*   **Formula Shape:** `StrengthDamageBonus = effective_STR * level_curve`
 *   **Total Base Damage:** `BaseDamage = WeaponDamage + DelayBonus + StrengthBonus`
-*   **Impact:**
-    *   **Level 1, 100 STR:** 5 bonus damage (100 * 0.025, or min 0.05 floor)
-    *   **Level 10, 100 STR:** 25 bonus damage (100 * 0.25)
-    *   **Level 60, 100 STR:** 150 bonus damage (100 * 1.5)
-    *   **Level 60, 500 STR:** 750 bonus damage (500 * 1.5)
-    *   *Result:* Strength becomes a primary driver of damage at high levels. The large base damage (weapon + delay + STR) then multiplies through existing crit/disc/buff systems for massive end-game DPS.
+*   **Impact:** Strength becomes a primary driver of physical damage once the new STR rule is enabled. Runtime config controls the level curve, race/item contribution weights, floors, ramp, and caps.
 
 **Why Additive vs Percent Modifier?**
 - **Predictable Math:** STR is a flat bonus added to base; percent mods multiply the whole thing. No unexpected multiplicative explosions.
@@ -61,42 +90,30 @@ To achieve "drastic improvement" and "meaningful upgrades," we propose a system 
 - **Safer Scaling:** Large percent buffs (100% melee disc) scale the whole base, but STR itself doesn't multiply with other percent effects.
 - **Weapon Identity Preserved:** Delay bonuses keep weapon choice meaningful alongside STR scaling.
 
-**Tuning Strategy (see `zone/combat_balance_config.h`):**
-1. Start with linear formula using `STR_LEVEL_DIVISOR` and `STR_MIN_LEVEL_MULTIPLIER`
+**Tuning Strategy (see `zone/combat_balance.ini`):**
+1. Start with a conservative level curve and minimum multiplier.
 2. Test at levels 1, 10, 50, 70 with low/mid/high STR values
-3. If top-end feels explosive, raise `STR_LEVEL_DIVISOR` (gentler scaling)
-4. If racial gaps at level 1 feel too large, enable `ENABLE_RACIAL_STR_COMPRESSION`
-5. Only add diminishing returns (`ENABLE_STR_DIMINISHING_RETURNS`) if linear tuning isn't enough
+3. If top-end feels explosive, lower the high-stat slope or tighten the softcap.
+4. If racial gaps at level 1 feel too large, reduce base/racial contribution weight and preserve item contribution.
+5. Use final-output softcaps/hardcaps to protect encounter difficulty.
 
 #### 2. Super Stamina (HP)
 **Current:** Diminishing returns after 255.
 **Proposed:**
-*   **Formula:** `BaseHP = Level * ClassFactor + (STA * Level * ClassFactor / 10)`
-*   **Impact:**
-    *   We remove the `/ 1000` divisor and use a smaller one (e.g., `/ 10`) or a direct multiplier to make STA huge.
-    *   *Example:* `HP += STA * Level`.
-    *   **Level 60, 100 STA:** +6,000 HP.
-    *   **Level 60, 200 STA:** +12,000 HP.
-    *   *Result:* Tanks become actual raid bosses.
+*   **Formula Shape:** `BaseHP = base_component + effective_STA * level_curve * class_multiplier`
+*   **Impact:** STA becomes the primary durability and sustain stat. Runtime config controls class multipliers, divisors, regen, mitigation limits, and safety caps.
 
 #### 3. Power Mana (INT/WIS)
 **Current:** Complex formula with drop-offs after 200.
 **Proposed:**
-*   **Formula:** `MaxMana = (INT_or_WIS * Level * ClassMultiplier)`
-*   **Impact:**
-    *   **Level 60, 200 INT:** 12,000 Mana (assuming multiplier ~1).
-    *   **Level 60, 300 INT:** 18,000 Mana.
-    *   *Result:* Casters never run out of mana if they invest heavily in stats.
+*   **Formula Shape:** `MaxMana = effective_(INT + WIS) * level_curve * class_multiplier`
+*   **Impact:** INT/WIS become the long-term mana scaling stats, with exact strength and caps controlled by runtime config.
 
 #### 4. Heroic Dexterity (Crit/Proc)
 **Current:** DEX affects Bard songs and weapon procs slightly.
 **Proposed:**
-*   **Formula:** `CritChance += (DEX * Level) / 2000`
-*   **Impact:**
-    *   **Level 1, 100 STR:** Negligible crit.
-    *   **Level 60, 255 DEX:** ~7.6% Crit Chance.
-    *   **Level 60, 500 DEX:** ~15% Crit Chance.
-    *   *Result:* High level rogues/rangers with god-tier gear become crit machines.
+*   **Formula Shape:** `CritChance += effective_DEX * level_curve`
+*   **Impact:** DEX drives crit reliability, proc activity, bow force, twincast, and penetration. Runtime config controls floor, ramp, overflow, and hard caps.
 
 ---
 

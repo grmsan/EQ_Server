@@ -1,6 +1,6 @@
 # Strength (STR) - Design Document
 
-> **⚙️ BALANCE CONFIGURATION**: All tunable values for this system are centralized in `zone/combat_balance_config.h`.
+> **Balance configuration:** This document defines STR's gameplay role and formula shape. Exact divisors, weights, floors, curves, caps, and race-vs-item contribution behavior should be hotfixable through `zone/combat_balance.ini`; `zone/combat_balance_config.h` provides fallback defaults.
 > **📊 IMPLEMENTATION**: Technical details in `game_design/STR_IMPLEMENTATION_PLAN.md`.
 
 ## Core Philosophy
@@ -14,17 +14,22 @@ Strength is the measure of physical force and stability. In our Solo Server envi
 
 To achieve the target DPS curve (5 DPS at Level 1 -> 100,000 DPS at Level 70), a linear "1 STR = 1 Damage" is insufficient. We implement a **Level-Scaled Multiplier**.
 
-### The Formula
+### The Formula Shape
 ```cpp
-StrengthDamageBonus = Strength * (Level / STR_LEVEL_DIVISOR);
-// Where STR_LEVEL_DIVISOR = 40.0f (from combat_balance_config.h)
-// Minimum Multiplier: STR_MIN_LEVEL_MULTIPLIER = 0.05f
+StrengthDamageBonus = EffectiveStrength * LevelCurve;
+// EffectiveStrength should be built from contribution channels:
+// base/racial STR, item STR, spell STR, and AA STR.
+// Pet STR contribution should feed the shared pet-scaling model in PET_SCALING.md.
 ```
 
-**Tunable Constants** (see `zone/combat_balance_config.h`):
-- `STR_LEVEL_DIVISOR = 40.0f` - Controls level-based scaling (higher = less damage at low levels)
-- `STR_MIN_LEVEL_MULTIPLIER = 0.05f` - Minimum effectiveness (prevents zero damage)
-- `OFFHAND_STR_PENALTY = 0.5f` - Offhand gets 50% STR damage (balances dual-wield)
+**Tunable knobs** (see `zone/combat_balance.ini`):
+- level curve and minimum multiplier
+- base/racial contribution weight
+- item contribution weight and minimum item-impact floor
+- spell/AA contribution weights
+- offhand scalar
+- shared pet-scaling transfer keys from `PET_SCALING.md`, when STR affects pets
+- final-output softcap/hardcap
 
 ### Weapon Delay Bonuses
 
@@ -45,7 +50,7 @@ StrengthDamageBonus = Strength * (Level / STR_LEVEL_DIVISOR);
 *Note: This progression targets martial classes (Warrior, Rogue, Monk, Berserker, Ranger). Casters and Summoners achieve similar DPS targets via Spells and Pets (INT/WIS/CHA scaling), with Strength providing supplemental physical damage or utility.*
 
 *Assumptions: Standard Weapon (Dly 30), Standard Haste/Double Attack progression.*
-*Formula: `STR * (Level / 40)`, minimum multiplier 0.05*
+*Formula examples below are illustrative. Current tuning should come from `combat_balance.ini`.*
 
 #### Level 1: The Rat Slayer
 *   **Target:** ~5 DPS
@@ -116,11 +121,11 @@ StrengthDamageBonus = Strength * (Level / STR_LEVEL_DIVISOR);
 
 ### C. The Summoners (Magician, Necromancer, Beastlord)
 *   **Feature: "Sympathetic Might"**
-    *   **Mechanic:** Pets inherit owner's Strength at `PET_STR_INHERITANCE` rate (currently **50%**).
+    *   **Mechanic:** STR should transfer to pets through the shared pet-scaling model in `PET_SCALING.md`, using `PET_OWNER_STR_TRANSFER` and the global pet transfer scalar.
     *   **Scenario:** You find a Ring of the Giant (+50 STR).
-    *   **Benefit:** Your Pet gains +25 STR (50% of 50). At Level 70 (x7 multiplier), that is **+175 Base Damage** per swing for the pet.
-    *   *Result:* STR is a top-tier DPS stat for Summoners.
-    *   **Tunable**: Adjust `PET_STR_INHERITANCE` in `combat_balance_config.h` if pets are too strong/weak.
+    *   **Benefit:** A configured portion of that STR can improve your pet's physical output, then CHA/class multipliers and pet output caps decide the final value.
+    *   *Result:* STR remains useful to summoners without creating a separate STR-only pet inheritance formula.
+    *   **Tunable:** Adjust pet transfer, CHA multiplier, pet gear weight, and final caps in `combat_balance.ini`.
 
 ### D. The Priests (Cleric, Druid, Shaman)
 *   **Feature: "The Battle Priest"**
@@ -175,10 +180,10 @@ This gear curve aligns perfectly with the `STR * (Level/10)` formula to produce 
 
 ## 4. System Applicability
 
-**Who Gets STR Scaling?** (Controlled by `combat_balance_config.h`)
+**Who Gets STR Scaling?** (Controlled by rules and runtime config)
 
 ✅ **Players**: All player characters get full STR scaling (`IsClient()`)
-✅ **Player Pets**: Inherit owner STR at `PET_STR_INHERITANCE` rate (currently 50%)
+✅ **Player Pets**: Can receive STR contribution through the shared pet-scaling model in `PET_SCALING.md`
 ❌ **NPCs**: Do NOT get STR scaling (`NPCS_USE_STR_SCALING = false`)
 ❌ **Charmed NPCs**: Do NOT get STR scaling (`CHARMED_NPCS_USE_STR_SCALING = false`)
 

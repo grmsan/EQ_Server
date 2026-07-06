@@ -137,7 +137,7 @@ namespace CombatBalance {
 	 *    - Exponent < 1.0: STR grows slower at high levels (sqrt-style deceleration)
 	 * 3. Use STR_MIN_LEVEL_MULTIPLIER to set floor for level 1
 	 */
-	constexpr float STR_LEVEL_DIVISOR = 40.0f;
+	constexpr float STR_LEVEL_DIVISOR = 60.0f;
 
 	/**
 	 * @brief Exponent for level scaling in STR damage formula

@@ -1,6 +1,6 @@
 # STA Attribute Implementation Plan
 
-> **⚙️ BALANCE CONFIGURATION**: All tunable values will be centralized in `zone/combat_balance_config.h`.
+> **Balance configuration:** Keep legacy STA behavior unless `Combat:UseNewStaminaFormula` is enabled. Tuning should be hotfixable through `zone/combat_balance.ini`; `zone/combat_balance_config.h` should hold fallback defaults only.
 > **📋 DESIGN DOCUMENT**: See `game_design/stats/STA.md` for design philosophy and formulas.
 > **🏗️ ARCHITECTURE**: Multiple independent systems - HP scaling, regen engine, damage mitigation.
 
@@ -70,7 +70,7 @@ base_hp = BASE_HP_CONSTANT +
           (GetSTA() * GetLevel() * ClassMultiplier / STA_HP_DIVISOR);
 ```
 
-**Configuration** (`zone/combat_balance_config.h`):
+**Runtime/fallback configuration**:
 ```cpp
 namespace STA_HP {
     static constexpr int BASE_HP_CONSTANT = 5;
@@ -206,7 +206,7 @@ namespace STA_HP {
 - ✅ **Linear scaling commitment** - predictable growth at all levels
 
 **Implementation Plan**:
-1. Add `ENABLE_STA_HP_SCALING` flag to `combat_balance_config.h`
+1. Add fallback `ENABLE_STA_HP_SCALING` flag and runtime override key.
 2. Create helper function `GetSTAHPMultiplier()` to return class multiplier
 3. Modify `Client::CalcBaseHP()` to check flag and use new formula
 4. Test at levels 1, 10, 30, 50, 70 with low/mid/high STA values
@@ -601,7 +601,7 @@ namespace STA_ENVIRONMENT {
 ### Phase 1: Core HP Scaling (Highest Priority)
 **Goal**: Get massive HP pools working
 
-1. ✅ **Add configuration** to `zone/combat_balance_config.h`
+1. ✅ **Add fallback configuration** to `zone/combat_balance_config.h` and runtime keys to `combat_balance.ini`
    ```cpp
    namespace STA_HP {
        static constexpr bool ENABLE_STA_HP_SCALING = true;
@@ -631,7 +631,7 @@ namespace STA_ENVIRONMENT {
 ### Phase 2: Regeneration Engine (High Priority)
 **Goal**: Self-sufficient healing and resource generation
 
-5. ✅ **Add regen configuration** to `combat_balance_config.h`
+5. ✅ **Add regen fallback configuration** and runtime override keys.
    ```cpp
    namespace STA_REGEN {
        static constexpr bool ENABLE_STA_HP_REGEN = true;
@@ -715,7 +715,7 @@ namespace STA_ENVIRONMENT {
 
 ## Configuration Summary
 
-**All values in `zone/combat_balance_config.h`**:
+**All values should have runtime keys with fallback defaults**:
 
 ```cpp
 namespace CombatBalance {

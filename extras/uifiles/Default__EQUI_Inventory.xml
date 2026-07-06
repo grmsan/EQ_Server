@@ -734,7 +734,7 @@
 		<AlignRight>false</AlignRight>
 	</Label>
 	<Label item="IW_Class">
-		<EQType>3</EQType>
+		<EQType>6666</EQType>
 		<RelativePosition>true</RelativePosition>
 		<Location>
 			<X>26</X>

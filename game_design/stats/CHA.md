@@ -1,5 +1,7 @@
 # Charisma (CHA) - Design Document
 
+> This document defines CHA's gameplay role and mechanic shapes. Exact loot, pet, mitigation, penetration, crit, charm/CC, bard song, curve, and cap values should be hotfixable through `zone/combat_balance.ini`; compiled constants are fallback defaults.
+
 ## Core Philosophy
 Charisma represents force of personality, physical attractiveness, and supernatural luck. In a Solo Server environment, Charisma is the **Stat of Influence**. It bends the world to your favor—enemies hesitate to strike, merchants offer their best wares, pets fight harder, and the very laws of probability shift in your direction.
 
@@ -25,9 +27,9 @@ On a Solo Server, getting the drop you need is paramount. Charisma directly infl
 Your force of will inspires (or terrifies) your minions into fighting beyond their normal limits.
 
 ### The Mechanic: Pet Stat Scaling
-*   **Formula:** `PetStatBonus% = Charisma / 10`.
+*   **Formula Shape:** Use the shared pet-scaling model in `PET_SCALING.md`. CHA feeds the pet-power multiplier/class amplifier, owner stats transfer at smaller configured rates, pet gear is weighted separately, and final pet softcaps/hardcaps protect encounter balance.
 *   **Impact:**
-    *   **1000 CHA:** Your pet gains **+100% HP** and **+100% Damage**.
+    *   High CHA should make pets clearly stronger, especially for pet classes.
     *   *Solo Reality:* A Magician's Earth Pet becomes a Raid Tank. A Necromancer's Rogue Pet becomes a DPS machine.
     *   *Note:* This makes CHA a primary stat for Pet Classes, competing with INT.
 
@@ -87,10 +89,10 @@ Enemies caught staring or hesitating leave openings.
 
 #### Class Masteries (CHA)
 *   **Magician - "Master Summoner":**
-    *   **Double Scaling:** Magicians receive **2.0x** the benefit from Charisma for Pet Stats.
-    *   *Impact:* At 1000 CHA, a Magician pet has **+200% HP/Damage** (Triple stats). It is effectively a Raid Boss.
+    *   **Pet Specialist Scalar:** Magicians can receive a higher class scalar in the shared pet model.
+    *   *Impact:* At high CHA, a Magician pet can become a premier tank/DPS companion, but final pet caps still apply.
 *   **Beastlord - "Primal Bond":**
-    *   **Stat Sync:** The Warder inherits the Beastlord's **Procs** and **Crit Chance** based on CHA.
+    *   **Stat Sync:** The Warder can inherit owner offensive stats through the shared pet model, with CHA amplifying the result.
 *   **Necromancer - "Undead Horde":**
     *   **Quantity:** (If possible) CHA allows for the summoning of a temporary secondary pet (Swarm Pet) that lasts longer.
 
@@ -100,8 +102,8 @@ Enemies caught staring or hesitating leave openings.
     *   **Permanent Charm:** At high CHA thresholds (e.g., 500+), Charm spells become permanent (until the pet dies or is released).
     *   **Unbreakable Will:** Charm break chance is reduced to near 0%.
     *   **Soul Link:** The Enchanter transfers a portion of their own stats (STA/INT/AC) to the Charmed Pet based on CHA.
-        *   *Formula:* `StatTransfer% = Charisma / 20`.
-        *   *Impact:* At 1000 CHA, your Charmed Pet gains **50% of your stats** on top of its own.
+        *   *Formula Shape:* Charmed pets should use a separate policy in `PET_SCALING.md` because NPC base stats can already be high.
+        *   *Impact:* At high CHA, a charmed pet can become much stronger, but charm floors, pet caps, and opt-in policy should prevent runaway NPC pets.
     *   **Result:** An Enchanter doesn't just borrow a pet; they forge a demigod from a random NPC.
 
 ### D. The Solo Farmer

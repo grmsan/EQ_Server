@@ -1,5 +1,7 @@
 # Intelligence (INT) & Wisdom (WIS)
 
+> This document describes shared INT/WIS responsibilities. Exact values, curves, caps, and contribution weights should be hotfixable through `zone/combat_balance.ini`; compiled constants are fallback defaults.
+
 ## Current Implementation
 
 ### 1. Mana Pool
@@ -27,21 +29,20 @@ High INT/WIS increases the chance to skill up in Tradeskills and Spells.
 ## Proposed Redesign
 
 ### Goal
-Make INT/WIS the "Infinite Power" stats.
+Make INT/WIS the long-term mana and spell-scaling stats while keeping base behavior available through legacy rule gates.
 
 ### 1. Power Mana
-**New Formula:**
+**Formula Shape:**
 ```cpp
-// Linear Scaling
-MaxMana = (Stat * Level * ClassMultiplier);
+MaxMana = Effective(INT + WIS) * LevelCurve * ClassMultiplier;
 ```
-*   **Change:** Remove the diminishing returns.
-*   **Impact:**
-    *   **Level 60, 300 INT:** Massive mana pool compared to 200 INT.
+*   **Change:** New formula path removes old diminishing returns when enabled.
+*   **Tuning:** Runtime config controls class weights, ramp, caps, and base-vs-item contribution behavior.
 
 ### 2. Spell Damage (INT) / Healing (WIS)
 **New Feature:**
 Add direct Spell Power / Heal Power based on stats.
-*   **INT Formula:** `SpellDmg += INT / 10`
-*   **WIS Formula:** `HealAmt += WIS / 10`
+*   **INT:** Scales offensive spell bonus/effectiveness.
+*   **WIS:** Scales healing, warding, and defensive spell value.
+*   **Current in-flight implementation:** INT/WIS can scale the extra `SpellDmg`/`HealAmt` bonus portion without changing base spell values directly.
 *   **Why:** Stats should make your spells stronger, not just let you cast more of them.

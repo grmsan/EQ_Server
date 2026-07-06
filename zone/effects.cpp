@@ -32,6 +32,7 @@
 #include "zonedb.h"
 #include "position.h"
 #include "combat_balance_config.h"
+#include <cmath>
 
 // Local helpers for new DEX formulas (mirrors attack.cpp helpers)
 static float DexCritChanceNew(const Mob* mob) {
@@ -82,6 +83,124 @@ static bool MeetsSpellLevelForBonusDamage(const Mob* mob, uint16 spell_id) {
 	// Non-multiclass: use original single-class check
 	int spell_level = spells[spell_id].classes[(mob->GetClass() % 17) - 1];
 	return spell_level >= threshold;
+}
+
+static double Clamp01(double v)
+{
+	return std::max(0.0, std::min(1.0, v));
+}
+
+static double GetIntWisExtraSpellBaseWeight(int64 base_spell_value)
+{
+	if (!RuleB(Spells, IntWisScaleExtraSpellAmtByBase)) {
+		return 1.0;
+	}
+
+	const int min_base = RuleI(Spells, IntWisExtraSpellBonusMinBase);
+	const int max_base = RuleI(Spells, IntWisExtraSpellBonusMaxBase);
+	const double exponent = std::max(0.01, static_cast<double>(RuleR(Spells, IntWisExtraSpellBonusBaseExponent)));
+	const double abs_base = static_cast<double>(std::abs(base_spell_value));
+
+	if (max_base <= min_base) {
+		return abs_base >= static_cast<double>(max_base) ? 1.0 : 0.0;
+	}
+
+	double t = (abs_base - static_cast<double>(min_base)) / static_cast<double>(max_base - min_base);
+	t = Clamp01(t);
+	return std::pow(t, exponent);
+}
+
+static double GetIntWisExtraSpellPotency(const Mob* caster, bool is_heal)
+{
+	if (!caster) {
+		return 0.0;
+	}
+
+	const double primary = is_heal ? static_cast<double>(caster->GetWIS()) : static_cast<double>(caster->GetINT());
+	const double secondary = is_heal ? static_cast<double>(caster->GetINT()) : static_cast<double>(caster->GetWIS());
+	const double secondary_scalar = is_heal
+		? static_cast<double>(RuleR(Spells, IntWisHealingSecondaryIntScalar))
+		: static_cast<double>(RuleR(Spells, IntWisDamageSecondaryWisScalar));
+	const double stat_score = std::max(0.0, primary + (secondary * secondary_scalar));
+	const double divisor = std::max(1.0, static_cast<double>(RuleR(Spells, IntWisExtraSpellBonusStatDivisor)));
+	const double exponent = std::max(0.01, static_cast<double>(RuleR(Spells, IntWisExtraSpellBonusStatExponent)));
+
+	return std::pow(stat_score / divisor, exponent);
+}
+
+static int64 GetScaledExtraSpellAmt(Mob* caster, uint16 spell_id, int64 extra_spell_amt, int64 base_spell_value, bool is_heal)
+{
+	if (!caster) {
+		return 0;
+	}
+
+	const int64 base_extra = caster->GetExtraSpellAmt(spell_id, extra_spell_amt, base_spell_value);
+	if (base_extra <= 0) {
+		LogSpellsDetail(
+			"INTWIS_EXTRA_SKIP [{}] caster [{}] spell [{}:{}] reason [base_extra<=0] base_value [{}] raw_extra_input [{}] base_extra [{}]",
+			is_heal ? "HEAL" : "DMG",
+			caster->GetName(),
+			spell_id,
+			(IsValidSpell(spell_id) ? spells[spell_id].name : "unknown"),
+			base_spell_value,
+			extra_spell_amt,
+			base_extra
+		);
+		return base_extra;
+	}
+
+	if (!RuleB(Spells, EnableIntWisWeightedExtraSpellBonus)) {
+		LogSpellsDetail(
+			"INTWIS_EXTRA_SKIP [{}] caster [{}] spell [{}:{}] reason [rule_disabled] base_value [{}] base_extra [{}]",
+			is_heal ? "HEAL" : "DMG",
+			caster->GetName(),
+			spell_id,
+			(IsValidSpell(spell_id) ? spells[spell_id].name : "unknown"),
+			base_spell_value,
+			base_extra
+		);
+		return base_extra;
+	}
+
+	const double potency = GetIntWisExtraSpellPotency(caster, is_heal);
+	if (potency <= 0.0) {
+		LogSpellsDetail(
+			"INTWIS_EXTRA_SKIP [{}] caster [{}] spell [{}:{}] reason [potency<=0] int [{}] wis [{}] base_value [{}] base_extra [{}]",
+			is_heal ? "HEAL" : "DMG",
+			caster->GetName(),
+			spell_id,
+			(IsValidSpell(spell_id) ? spells[spell_id].name : "unknown"),
+			caster->GetINT(),
+			caster->GetWIS(),
+			base_spell_value,
+			base_extra
+		);
+		return base_extra;
+	}
+
+	const double base_weight = GetIntWisExtraSpellBaseWeight(base_spell_value);
+	double total_multiplier = 1.0 + (potency * base_weight);
+	const double mult_cap = std::max(1.0, static_cast<double>(RuleR(Spells, IntWisExtraSpellBonusMultiplierCap)));
+	total_multiplier = std::min(total_multiplier, mult_cap);
+	const int64 scaled_extra = static_cast<int64>(std::llround(static_cast<double>(base_extra) * total_multiplier));
+
+	LogSpellsDetail(
+		"INTWIS_EXTRA [{}] caster [{}] spell [{}:{}] base_value [{}] raw_extra [{}] scaled_extra [{}] int [{}] wis [{}] potency [{:.4f}] base_weight [{:.4f}] mult [{:.4f}]",
+		is_heal ? "HEAL" : "DMG",
+		(caster ? caster->GetName() : "unknown"),
+		spell_id,
+		(IsValidSpell(spell_id) ? spells[spell_id].name : "unknown"),
+		base_spell_value,
+		base_extra,
+		scaled_extra,
+		(caster ? caster->GetINT() : 0),
+		(caster ? caster->GetWIS() : 0),
+		potency,
+		base_weight,
+		total_multiplier
+	);
+
+	return scaled_extra;
 }
 
 float Mob::GetActSpellRange(uint16 spell_id, float range)
@@ -209,10 +328,10 @@ int64 Mob::GetActSpellDamage(uint16 spell_id, int64 value, Mob* target) {
 			}
 
 			if (RuleB(Spells, IgnoreSpellDmgLvlRestriction) && !spells[spell_id].no_heal_damage_item_mod && itembonuses.SpellDmg) {
-				value -= GetExtraSpellAmt(spell_id, itembonuses.SpellDmg, base_value) * ratio / 100;
+				value -= GetScaledExtraSpellAmt(this, spell_id, itembonuses.SpellDmg, base_value, false) * ratio / 100;
 
 			} else if (!spells[spell_id].no_heal_damage_item_mod && itembonuses.SpellDmg && MeetsSpellLevelForBonusDamage(this, spell_id)) {
-				value -= GetExtraSpellAmt(spell_id, itembonuses.SpellDmg, base_value) * ratio / 100;
+				value -= GetScaledExtraSpellAmt(this, spell_id, itembonuses.SpellDmg, base_value, false) * ratio / 100;
 			}
 
 			// legacy manaburn can crit, but is still held to the same cap
@@ -260,14 +379,14 @@ int64 Mob::GetActSpellDamage(uint16 spell_id, int64 value, Mob* target) {
 	}
 
 	if (RuleB(Spells, IgnoreSpellDmgLvlRestriction) && !spells[spell_id].no_heal_damage_item_mod && itembonuses.SpellDmg)
-		value -= GetExtraSpellAmt(spell_id, itembonuses.SpellDmg, base_value);
+		value -= GetScaledExtraSpellAmt(this, spell_id, itembonuses.SpellDmg, base_value, false);
 
 	else if (
 		!spells[spell_id].no_heal_damage_item_mod &&
 		GetSpellDmg() &&
 		MeetsSpellLevelForBonusDamage(this, spell_id)
 	) {
-		value -= GetExtraSpellAmt(spell_id, GetSpellDmg(), base_value);
+		value -= GetScaledExtraSpellAmt(this, spell_id, GetSpellDmg(), base_value, false);
 	}
 
 	// Apply Manaburn Damage Cap
@@ -309,7 +428,7 @@ int64 Mob::GetActReflectedSpellDamage(uint16 spell_id, int64 value, int effectiv
 	}
 
 	if (!spells[spell_id].no_heal_damage_item_mod && itembonuses.SpellDmg) {
-		value -= GetExtraSpellAmt(spell_id, itembonuses.SpellDmg, base_spell_dmg);
+		value -= GetScaledExtraSpellAmt(this, spell_id, itembonuses.SpellDmg, base_spell_dmg, false);
 	}
 
 	return value;
@@ -371,14 +490,14 @@ int64 Mob::GetActDoTDamage(uint16 spell_id, int64 value, Mob* target, bool from_
 				!spells[spell_id].no_heal_damage_item_mod &&
 				GetSpellDmg()
 			) {
-				extra_dmg += GetExtraSpellAmt(spell_id, GetSpellDmg(), base_value)*ratio/100;
+				extra_dmg += GetScaledExtraSpellAmt(this, spell_id, GetSpellDmg(), base_value, false)*ratio/100;
 			}
 			else if (
 				!spells[spell_id].no_heal_damage_item_mod &&
 				GetSpellDmg() &&
 				MeetsSpellLevelForBonusDamage(this, spell_id)
 			) {
-				extra_dmg += GetExtraSpellAmt(spell_id, GetSpellDmg(), base_value)*ratio/100;
+				extra_dmg += GetScaledExtraSpellAmt(this, spell_id, GetSpellDmg(), base_value, false)*ratio/100;
 			}
 		}
 
@@ -417,14 +536,14 @@ int64 Mob::GetActDoTDamage(uint16 spell_id, int64 value, Mob* target, bool from_
 				!spells[spell_id].no_heal_damage_item_mod &&
 				GetSpellDmg()
 			) {
-				extra_dmg += GetExtraSpellAmt(spell_id, GetSpellDmg(), base_value);
+				extra_dmg += GetScaledExtraSpellAmt(this, spell_id, GetSpellDmg(), base_value, false);
 			}
 			else if (
 				!spells[spell_id].no_heal_damage_item_mod &&
 				GetSpellDmg() &&
 				MeetsSpellLevelForBonusDamage(this, spell_id)
 			) {
-				extra_dmg += GetExtraSpellAmt(spell_id, GetSpellDmg(), base_value);
+				extra_dmg += GetScaledExtraSpellAmt(this, spell_id, GetSpellDmg(), base_value, false);
 			}
 		}
 
@@ -589,14 +708,14 @@ int64 Mob::GetActSpellHealing(uint16 spell_id, int64 value, Mob* target, bool fr
 			!spells[spell_id].no_heal_damage_item_mod &&
 			GetHealAmt()
 		) {
-			value += GetExtraSpellAmt(spell_id, GetHealAmt(), base_value); //Item Heal Amt Add before critical
+			value += GetScaledExtraSpellAmt(this, spell_id, GetHealAmt(), base_value, true); //Item Heal Amt Add before critical
 		}
 		else if (
 			!spells[spell_id].no_heal_damage_item_mod &&
 			GetHealAmt() &&
 			MeetsSpellLevelForBonusDamage(this, spell_id)
 		) {
-			value += GetExtraSpellAmt(spell_id, GetHealAmt(), base_value); //Item Heal Amt Add before critical
+			value += GetScaledExtraSpellAmt(this, spell_id, GetHealAmt(), base_value, true); //Item Heal Amt Add before critical
 		}
 
 		if (target) {
@@ -643,14 +762,14 @@ int64 Mob::GetActSpellHealing(uint16 spell_id, int64 value, Mob* target, bool fr
 				!spells[spell_id].no_heal_damage_item_mod &&
 				GetHealAmt()
 			) {
-				extra_heal += GetExtraSpellAmt(spell_id, GetHealAmt(), base_value);
+				extra_heal += GetScaledExtraSpellAmt(this, spell_id, GetHealAmt(), base_value, true);
 			}
 			else if (
 				!spells[spell_id].no_heal_damage_item_mod &&
 				GetHealAmt() &&
 				MeetsSpellLevelForBonusDamage(this, spell_id)
 			) {
-				extra_heal += GetExtraSpellAmt(spell_id, GetHealAmt(), base_value);
+				extra_heal += GetScaledExtraSpellAmt(this, spell_id, GetHealAmt(), base_value, true);
 			}
 		}
 

@@ -1,5 +1,7 @@
 # Stamina (STA) - Design Document
 
+> This document defines STA's gameplay role and mechanic shapes. Exact HP, regen, mitigation, class multiplier, environmental resistance, ramp, and cap values should be hotfixable through `zone/combat_balance.ini`; compiled constants are fallback defaults.
+
 ## Core Philosophy
 Stamina represents the body's energy reserves, resilience, and capacity to endure hardship. In a Solo Server environment, Stamina is the **Stat of Sustainability**. It determines not just how much damage you can take (HP), but how long you can keep fighting (Regen/Endurance) before collapsing.
 

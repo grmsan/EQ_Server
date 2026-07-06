@@ -36,6 +36,7 @@ Use this section when acting as project owner or manager.
 | [PROJECT_MANAGEMENT.md](PROJECT_MANAGEMENT.md) | Operating model, priority definitions, update ritual, manager review cadence |
 | [PROJECT_WORKSTREAMS.md](PROJECT_WORKSTREAMS.md) | Executive priority board, active packets, dependencies, decisions |
 | [AGENT_HANDOFF.md](AGENT_HANDOFF.md) | Instructions and templates for assigning work to agents |
+| [game_design/stats/COMBAT_BALANCE_HOT_RELOAD_PLAN.md](game_design/stats/COMBAT_BALANCE_HOT_RELOAD_PLAN.md) | Runtime combat-balance hot reload plan, rollback toggle, and curve-control implementation checklist |
 
 ### Decisions Needed
 

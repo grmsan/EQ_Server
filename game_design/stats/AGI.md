@@ -1,5 +1,7 @@
 # Agility (AGI) - Design Document
 
+> This document defines AGI's gameplay role and curve shapes. Exact haste, avoidance, run-speed, cast-speed, class multipliers, floors, and caps should be hotfixable through `zone/combat_balance.ini`; compiled constants are fallback defaults.
+
 ## Core Philosophy
 Agility represents speed, reflexes, and fluidity of motion. In a Solo Server environment, Agility is the **Stat of Velocity**. It determines how fast you do everything (Move, Attack, Cast) and how hard it is for enemies to land a clean hit on you.
 

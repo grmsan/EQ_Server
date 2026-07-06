@@ -1,5 +1,7 @@
 # Intelligence (INT) - Design Document
 
+> This document defines INT's gameplay role and mechanic shapes. Exact spell-power, cooldown, mana-efficiency, mana-pool, lifetap, DoT, pet-share, curve, and cap values should be hotfixable through `zone/combat_balance.ini`; compiled constants are fallback defaults.
+
 ## Core Philosophy
 Intelligence represents raw mental acuity, memory, and the ability to manipulate the fabric of reality. In a Solo Server environment, Intelligence is the **Stat of Brilliance**. It is the offensive engine for spellcasters and the efficiency engine for everyone else. While Wisdom protects, Intelligence destroys.
 

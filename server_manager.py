@@ -21,7 +21,8 @@ class ServerManagerApp(tk.Tk):
 
         self.title("EQEmu Server Manager")
         self.geometry("1100x850")
-        self.portrait_breakpoint = 1300
+        # Keep 1440px-wide portrait monitors in the stacked layout.
+        self.portrait_breakpoint = 1500
         self._early_logs = []
         self._file_write_lock = threading.Lock()
         self._settings_save_job = None

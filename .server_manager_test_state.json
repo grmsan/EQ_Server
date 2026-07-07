@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-07-06 10:35:52",
+  "updated_at": "2026-07-07 13:51:03",
   "tests": {
     "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\mechanics\\test_tracker.md::MECH-01": {
       "status": "Not Run",
@@ -79,72 +79,72 @@
     "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\multiclass\\test_tracker.md::AUTO-01": {
       "status": "Not Run",
       "notes": "[FEEDBACK 2026-05-03]: Right now when i cast Burnout IV the game automatically targets my pet. I want to keep my current target but the spell should automatically land on my pet regardless of target. (I'm just using burnout IV for this example but I imagine this is true for maybe any pet spell.\n\n[CODE-VERIFIED 2026-06-21]: Test harness fully implemented in zone/gm_commands/test.cpp. Tests 1-15 are purely server-side (rule checks, bucket consistency, HasClass API, spell timer transforms, guild query shape, AA gates, proc preconditions, pet bag DB coverage). Tests 16-20 are DLL round-trip probes requiring EQ Core DLL client. BuildPackSmoke = tests 1-10; BuildPackCombat = tests 6,12,13,14,15; #test 16-20 dispatches probe+callback sequence. Pet auto-targeting (ST_Pet shortcut) is existing server design \u2014 spell lands on pet regardless of UI target; the feedback is a design/UX decision, not a code defect. Ready to run.",
-      "updated_at": "2026-07-06 10:35:52"
+      "updated_at": "2026-07-07 13:51:03"
     },
     "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\multiclass\\test_tracker.md::CORE-01": {
       "status": "Not Run",
       "notes": "[CODE-VERIFIED 2026-06-21]: `AddExtraClass`/`RemoveExtraClass` implemented in `zone/client.cpp`. `GetClassesBits()` reads canonical `GestaltClasses` bucket, falls back to base class bit. `SendEdgeStats()` called on every mutation to sync DLL. Guild member update fired on add/remove. `#addclass` and `#removeclass` commands exist. Automated tests 3\u20138 cover bucket/profile/API consistency. Ready for manual validation.",
-      "updated_at": "2026-07-06 10:35:52"
+      "updated_at": "2026-07-07 13:51:03"
     },
     "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\multiclass\\test_tracker.md::CAST-01": {
       "status": "Not Run",
       "notes": "[CODE-VERIFIED 2026-06-21]: `Client::CheckFizzle` calls `GetBestSpellLevelForMulticlass(spell_id, GetClassesBits(), ...)`. Spell scribe validates `HasClass(class_id)` in `client_process.cpp`. Mana UI driven by DLL via `SendEdgeStats` (EdgeStatLabel key 200 = classes bitmask). AA purchase normalized bitmask vs `GetClassesBits()` in `aa.cpp`. Item click/equip use `GetClassesBitmask()` in `effects.cpp`; `SwapItem` passes `GetClassesBits()` through equip validation. Ready for manual validation.",
-      "updated_at": "2026-07-06 10:35:52"
+      "updated_at": "2026-07-07 13:51:03"
     },
     "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\multiclass\\test_tracker.md::CAST-02": {
       "status": "Not Run",
       "notes": "[CODE-VERIFIED 2026-06-21]: `HasClass(Class::Bard)` used in `spells.cpp` for pulse, cast-while-moving, and cast-while-attacking. Bard pulse hook confirmed in `spell_effects.cpp`. Group/implied target transforms covered by automated test 10 (`#test 10`). Targeting friendly/hostile rules in place. Ready for manual validation.",
-      "updated_at": "2026-07-06 10:35:52"
+      "updated_at": "2026-07-07 13:51:03"
     },
     "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\multiclass\\test_tracker.md::COMBAT-01": {
       "status": "Not Run",
       "notes": "[CODE-VERIFIED 2026-06-21]: `attack.cpp` extensively uses `HasClass()` for all combat class gates (Monk/Beastlord fists, Rogue backstab, Ranger archery, Berserker frenzy, Bard cast-while-attacking, damage caps). `DoDamageCaps` uses `GetClassesBits()`. 2H/bow proc preconditions covered by automated test 13 (`#test 13`). Ready for manual validation.",
-      "updated_at": "2026-07-06 10:35:52"
+      "updated_at": "2026-07-07 13:51:03"
     },
     "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\multiclass\\test_tracker.md::PET-01": {
       "status": "Not Run",
       "notes": "[CODE-VERIFIED 2026-06-21]: `DoPetBagResync` called on pet summon (`pets.cpp`), zone-in packet (`client_packet.cpp`), item move (`inventory.cpp`), and charm break (`spell_effects.cpp`). `GetActivePetBag`/`GetActivePetBagSlot` implemented. Charmed inventory tracked via entity variable `\"is_charmed\"` with restore on charm break. Pet bag rule+DB coverage confirmed by automated test 14 (`#test 14`). Ready for manual validation.",
-      "updated_at": "2026-07-06 10:35:52"
+      "updated_at": "2026-07-07 13:51:03"
     },
     "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\multiclass\\test_tracker.md::SKILL-01": {
       "status": "Not Run",
       "notes": "[CODE-VERIFIED 2026-06-21]: `MaxSkill()`/`GetRawSkillCap()` use `HasClass()` in `client_mods.cpp`. Trainer packet handler uses `HasClass(trains_class)` in `client_process.cpp`. `UseDiscipline()` in `effects.cpp` iterates `GetClassesBits()` to find lowest valid level. Disc timer families are per-spell (`spell.timer_id`), so different class discs use distinct timers. Ready for manual validation.",
-      "updated_at": "2026-07-06 10:35:52"
+      "updated_at": "2026-07-07 13:51:03"
     },
     "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\multiclass\\test_tracker.md::ITEM-01": {
       "status": "Not Run",
       "notes": "[CODE-VERIFIED 2026-06-21]: `SwapItem` in `inventory.cpp` passes `GetClassesBits()` through entire equip validation path. Item click and equip-cast in `effects.cpp` use `GetClassesBitmask()` against `item->Classes`. Merchant list in `client_process.cpp` filters via `(ml.classes_required & classes_bits)`. Auto-equip uses `IsEquipable(GetBaseRace(), GetClassesBits())`. Guild banker equip check uses same. Ready for manual validation.",
-      "updated_at": "2026-07-06 10:35:52"
+      "updated_at": "2026-07-07 13:51:03"
     },
     "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\multiclass\\test_tracker.md::AA-01": {
       "status": "Not Run",
       "notes": "[CODE-VERIFIED 2026-06-21]: AA purchase checks `(aa_classes_normalized & GetClassesBits())` in `aa.cpp`. Display via `SendAlternateAdvancementTable()`. Passive effects gated on `GetClassesBits()`. Mnemonic Retention gate covered by automated test 12. Fury of Magic pure-caster gate covered by automated test 15 (`#test 12,15`). Ready for manual validation.",
-      "updated_at": "2026-07-06 10:35:52"
+      "updated_at": "2026-07-07 13:51:03"
     },
     "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\multiclass\\test_tracker.md::ENT-01": {
       "status": "Blocked",
       "notes": "[CODE-VERIFIED 2026-06-21]: `RemoveExtraClass` clears invalid memorized spell gems (`UnmemInvalidSpellsForCurrentClasses`), interrupts invalid casts, rebuilds AA table (`SendAlternateAdvancementTable`), and resyncs HP/mana/end/EdgeStats. Soft-lock behavior for AAs is present (AA remains in table; `CanUseAlternateAdvancementRank` returns false without the class). BLOCKED: Design decision on removed-class AA policy (soft-lock vs refund/reset) is not finalized \u2014 see IMPLEMENTATION_PLAN.md E-02. Cannot validate ENT-01 step 4 until policy is decided and documented.\n  Next: Decide E-02 policy; update IMPLEMENTATION_PLAN.md; then validate.",
-      "updated_at": "2026-07-06 10:35:52"
+      "updated_at": "2026-07-07 13:51:03"
     },
     "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\multiclass\\test_tracker.md::PROG-01": {
       "status": "Not Run",
       "notes": "[CODE-VERIFIED 2026-06-21]: `exp.cpp` uses `HasClass(Class::Warrior)` and `HasClass(Class::Rogue)` for hybrid XP bonuses. THJ-style `MaxExpLevel` clamp restored (IMPLEMENTATION_PLAN Phase 7). `CalcBonuses()` called on every class mutation to prevent passive stat drift. Level-cap and XP-cap path verified in implementation. Ready for manual validation.",
-      "updated_at": "2026-07-06 10:35:52"
+      "updated_at": "2026-07-07 13:51:03"
     },
     "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\multiclass\\test_tracker.md::WORLD-01": {
       "status": "Blocked",
       "notes": "[CODE-VERIFIED 2026-06-21]: `quests/bazaar/Emissary_of_the_Guilds.lua` uses `AddExtraClass` \u2713. Lua/Perl `AddExtraClass`/`RemoveExtraClass`/`HasClass` APIs all exposed. Guild projection DB query shape verified by automated test 11. BLOCKED: No `Vision_of_Ayonae` or equivalent class-removal NPC script found under `quests/` \u2014 step 2 (class removal NPC path) is unimplemented. Class-gated title scripts not yet found.\n  Next: Implement Vision_of_Ayonae (or equivalent) class-removal NPC script; add at least one class-gated title check script.",
-      "updated_at": "2026-07-06 10:35:52"
+      "updated_at": "2026-07-07 13:51:03"
     },
     "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\multiclass\\test_tracker.md::UI-01": {
       "status": "Not Run",
       "notes": "[CODE-VERIFIED 2026-06-21]: `world/clientlist.cpp` reads `GestaltClasses` bucket for `/who` output. `#multiclassdiag` command exists (`zone/gm_commands/multiclassdiag.cpp`). DLL handles class-name overrides for char select and `/who` labels. Inventory `IW_Class`/`IW_ClassAbbr` rewritten via DLL. All server-side paths verified. Ready for manual validation (requires EQ Core DLL loaded).",
-      "updated_at": "2026-07-06 10:35:52"
+      "updated_at": "2026-07-07 13:51:03"
     },
     "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\multiclass\\test_tracker.md::AA-02": {
       "status": "Not Run",
       "notes": "[CODE-VERIFIED 2026-06-21]: `LoadDynamicAATimers`/`SaveDynamicAATimers` persist via `DynamicAATimers` bucket. `GetDynamicAATimer`/`SetDynamicAATimer` assign stable IDs at activation time. `UseDynamicAATimers` rule gates entire path. Timer ID reuse logic uses existing cache before allocating new. Rule verified by automated test 2 (`#test 2`). Ready for manual validation.",
-      "updated_at": "2026-07-06 10:35:52"
+      "updated_at": "2026-07-07 13:51:03"
     },
     "c:\\users\\marsh\\onedrive\\documents\\github\\eq_server\\game_design\\operations\\work_tracker.md::O-01": {
       "status": "Not Run",

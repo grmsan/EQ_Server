@@ -6,6 +6,7 @@
 
 #include "MQ2Main.h"
 #include <map>
+#include <stdint.h>
 
 // Ensure we have a C-style declaration matching the exported helper in MQ2Main.cpp
 extern "C" void __cdecl MQ2_ProtectPage(uintptr_t addr);
@@ -16,6 +17,10 @@ extern bool isMQ2LabelsInitLoggingEnabled;
 extern bool isMQ2LabelsPerSidlLoggingEnabled;
 extern bool isMQ2LabelsWriteUILoggingEnabled;
 extern bool isMQ2LabelsWriteWatchEnabled;
+
+extern "C" uint32_t __cdecl EQCore_GetEffectiveUsableClassesMask();
+extern uint64_t g_edgeStatValue[];
+extern uint8_t g_edgeStatHas[];
 
 typedef string(*pEqTypesFunc)();
 
@@ -43,6 +48,117 @@ extern struct ServerProfileCache {
 } g_serverProfile;
 
 map<DWORD, pEqTypesFunc> eqTypesMap;
+
+static DWORD CapStat(DWORD value, DWORD cap)
+{
+	return (value > cap) ? cap : value;
+}
+
+static void BuildClassAbbrevList(uint32_t mask, char* out, size_t out_size)
+{
+	if (!out || out_size == 0) {
+		return;
+	}
+	out[0] = '\0';
+
+	static const char* kClass3[16] = {
+		"WAR", "CLR", "PAL", "RNG", "SHD", "DRU", "MNK", "BRD",
+		"ROG", "SHM", "NEC", "WIZ", "MAG", "ENC", "BST", "BER"
+	};
+
+	size_t used = 0;
+	for (int i = 0; i < 16; ++i) {
+		if ((mask & (1u << i)) == 0) {
+			continue;
+		}
+
+		const char* token = kClass3[i];
+		if (used != 0) {
+			if (used + 1 >= out_size) {
+				break;
+			}
+			out[used++] = '/';
+			out[used] = '\0';
+		}
+
+		const size_t token_len = strlen(token);
+		if (used + token_len >= out_size) {
+			break;
+		}
+		memcpy(out + used, token, token_len);
+		used += token_len;
+		out[used] = '\0';
+	}
+}
+
+
+static bool GetEdgeStatLabel(DWORD key, std::string& value)
+{
+	if (key >= 8192 || !g_edgeStatHas[key]) {
+		return false;
+	}
+	value = std::to_string(static_cast<unsigned long long>(g_edgeStatValue[key]));
+	return true;
+}
+
+static bool ResolveTHJInventoryLabel(DWORD sidl, std::string& value)
+{
+	PCHARINFO ci = GetCharInfo();
+	if (!ci) {
+		return false;
+	}
+
+	if ((sidl >= 251 && sidl <= 286) || (sidl >= 6667 && sidl <= 6678) || (sidl >= 6703 && sidl <= 6706)) {
+		if (GetEdgeStatLabel(sidl, value)) {
+			return true;
+		}
+	}
+
+	switch (sidl) {
+	case 3:
+	case 6666:
+	{
+		char classText[64] = {0};
+		uint32_t mask = EQCore_GetEffectiveUsableClassesMask() & 0xFFFFu;
+		if (mask == 0) {
+			if (PCHARINFO2 ci2 = GetCharInfo2()) {
+				if (ci2->Class >= 1 && ci2->Class <= 16) {
+					mask = (1u << (ci2->Class - 1));
+				}
+			}
+		}
+		BuildClassAbbrevList(mask, classText, sizeof(classText));
+		if (classText[0] == '\0') {
+			return false;
+		}
+		value = classText;
+		return true;
+	}
+	case 6667:
+		value = std::to_string(CapStat(ci->AvoidanceBonus, ci->AvoidanceCap));
+		return true;
+	case 6668:
+		value = std::to_string(CapStat(ci->DamageShieldMitigationBonus, ci->DamageShieldMitigationCap));
+		return true;
+	case 6669:
+		value = std::to_string(ci->AttackBonus);
+		return true;
+	case 6671:
+	case 6672:
+	case 6673:
+	case 6674:
+	case 6675:
+	case 6676:
+	case 6677:
+	case 6678:
+		value = "0";
+		return true;
+	default:
+		break;
+	}
+
+	return false;
+}
 
 // CSidlManager::CreateLabel 0x5F2470
 
@@ -170,6 +286,10 @@ public:
 				}
 				s_seenDraw = true;
 			}
+			if (ResolveTHJInventoryLabel(sidl, eqtypesString)) {
+				Found = TRUE;
+			}
+
 		    switch (sidl) {
 		    case 5:  case 6:  case 7:  case 8:  case 9:  case 10: case 11:
 			case 17: case 18:

@@ -711,11 +711,11 @@
 		<EQType>3</EQType>
 		<RelativePosition>true</RelativePosition>
 		<Location>
-			<X>30</X>
+			<X>2</X>
 			<Y>16</Y>
 		</Location>
 		<Size>
-			<CX>90</CX>
+			<CX>118</CX>
 			<CY>100</CY>
 		</Size>
 		<Text>60 Shadow Knight</Text>
@@ -3209,7 +3209,6 @@
 		<Pieces>IW_Level</Pieces>
 		<Pieces>IW_LevelLabel</Pieces>
 		<Pieces>IW_Class</Pieces>
-		<Pieces>IW_ClassAbbr</Pieces>
 		<Pieces>IW_Deity</Pieces>
 		<!--<Pieces>IW_DeityLabel</Pieces>-->
 		<Pieces>IW_HP</Pieces>

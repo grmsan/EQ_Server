@@ -70,3 +70,17 @@ For implementation or validation work, include:
 - Blockers or decisions needed.
 - Suggested next packet or next concrete follow-up when useful.
 
+
+## File editing rules for Codex on Windows
+
+When editing files, avoid using shell quoting as the transport for file contents.
+
+Preferred order:
+
+1. Use apply_patch for small and medium edits.
+2. For large or generated file content, create a temporary Python script using pathlib to write the file.
+3. For repeated mechanical edits, use a small temporary Python script.
+4. Do not use PowerShell Set-Content, Add-Content, echo, here-strings, Out-File, or long inline quoted commands to write files unless the user explicitly requests it.
+5. After editing, show git diff or summarize the exact files changed.
+6. Run the smallest relevant validation command.
+7. If apply_patch fails on Windows, do not keep retrying with fragile PowerShell quoting. Fall back to a temporary Python script.

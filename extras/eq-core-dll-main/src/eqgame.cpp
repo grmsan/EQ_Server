@@ -883,7 +883,7 @@ static int packetCount = 0;
 
 // EdgeStatLabel (opcode 0x1338) key/value stat cache
 // NOTE: non-static so PowerSlotWnd.cpp (and future SIDL windows) can read the cache.
-constexpr uint32_t kEdgeStatMaxKey = 4096;
+constexpr uint32_t kEdgeStatMaxKey = 8192;
 uint64_t g_edgeStatValue[kEdgeStatMaxKey]{};
 uint8_t  g_edgeStatHas[kEdgeStatMaxKey]{};
 
@@ -907,6 +907,11 @@ static uint32_t GetEffectiveUsableClassesMask()
 	}
 	// Last-resort fallback: char-select multiclass mask observed from Deity override.
 	return (g_charselectUsableClassesMask & 0xFFFF);
+}
+
+extern "C" uint32_t __cdecl EQCore_GetEffectiveUsableClassesMask()
+{
+	return GetEffectiveUsableClassesMask();
 }
 
 // Merchant UI helper state for multiclass spell display/filtering.

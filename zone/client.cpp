@@ -13786,19 +13786,23 @@ uint32 Client::GetClassesBits() const
 	}
 
 	// THJ parity: if profile already has multiclass bits loaded, prefer that as authoritative runtime state.
-	if (m_pp.classes != 0) {
-		const uint32 bits = static_cast<uint32>(m_pp.classes) & 0xFFFF;
-		m_classes_bits_cache = bits;
-		return bits;
-	}
-
 	if (m_classes_bits_cache) {
 		return m_classes_bits_cache & 0xFFFF;
 	}
 
 	const uint32 bits = LoadPersistedClassesBits();
-	m_classes_bits_cache = bits;
-	return bits;
+	if (bits != 0) {
+		m_classes_bits_cache = bits;
+		return bits;
+	}
+
+	if (m_pp.classes != 0) {
+		const uint32 profile_bits = static_cast<uint32>(m_pp.classes) & 0xFFFF;
+		m_classes_bits_cache = profile_bits;
+		return profile_bits;
+	}
+
+	return base_bit;
 }
 
 uint32 Client::LoadPersistedClassesBits() const
@@ -14560,9 +14564,84 @@ void Client::SendEdgeStats()
 		{ kWIS,     static_cast<uint64>(GetWIS()) },
 		{ kCHA,     static_cast<uint64>(GetCHA()) },
 		// Send multiclass class bitmask explicitly for client DLL parity checks.
-		{ kClassesBitmask, static_cast<uint64>(GetClassesBits() & 0xFFFF) }
+		{ kClassesBitmask, static_cast<uint64>(GetClassesBitmask() & 0xFFFF) }
 	};
 
+
+	constexpr uint32 kInvMitigation          = 6668;
+	constexpr uint32 kInvAvoidanceClass      = 6667;
+	constexpr uint32 kInvWornATK             = 6669;
+	constexpr uint32 kInvSpellCritRate       = 6671;
+	constexpr uint32 kInvSpellCritRatio      = 6672;
+	constexpr uint32 kInvHealCritRate        = 6673;
+	constexpr uint32 kInvHoTCritRate         = 6674;
+	constexpr uint32 kInvDoTCritRate         = 6675;
+	constexpr uint32 kInvDoTCritRatio        = 6676;
+	constexpr uint32 kInvMeleeCritRate       = 6677;
+	constexpr uint32 kInvPhysicalCritRatio   = 6678;
+	constexpr uint32 kInvMaxClairvoyance     = 6703;
+	constexpr uint32 kInvMaxHealAmount       = 6704;
+	constexpr uint32 kInvMaxSpellDamage      = 6705;
+	constexpr uint32 kInvMaxWornATK          = 6706;
+
+	auto edge_value = [](int64 value) -> uint64 {
+		return static_cast<uint64>(value < 0 ? 0 : value);
+	};
+
+	const auto item_bonus = GetItemBonuses();
+	const auto spell_bonus = GetSpellBonuses();
+	const auto aa_bonus = GetAABonuses();
+	constexpr int kAllSkills = EQ::skills::HIGHEST_SKILL + 1;
+
+	pairs.push_back({ 251, edge_value(GetHeroicSTR() - spell_bonus.HeroicSTR) });
+	pairs.push_back({ 252, edge_value(GetHeroicSTA() - spell_bonus.HeroicSTA) });
+	pairs.push_back({ 253, edge_value(GetHeroicDEX() - spell_bonus.HeroicDEX) });
+	pairs.push_back({ 254, edge_value(GetHeroicAGI() - spell_bonus.HeroicAGI) });
+	pairs.push_back({ 255, edge_value(GetHeroicWIS() - spell_bonus.HeroicWIS) });
+	pairs.push_back({ 256, edge_value(GetHeroicINT() - spell_bonus.HeroicINT) });
+	pairs.push_back({ 257, edge_value(GetHeroicCHA() - spell_bonus.HeroicCHA) });
+	pairs.push_back({ 260, edge_value(GetHeroicFR() - spell_bonus.HeroicFR) });
+	pairs.push_back({ 261, edge_value(GetHeroicCR() - spell_bonus.HeroicCR) });
+	pairs.push_back({ 262, edge_value(GetHeroicMR() - spell_bonus.HeroicMR) });
+	pairs.push_back({ 264, edge_value(GetMaxSTR()) });
+	pairs.push_back({ 265, edge_value(GetMaxSTA()) });
+	pairs.push_back({ 266, edge_value(GetMaxDEX()) });
+	pairs.push_back({ 267, edge_value(GetMaxAGI()) });
+	pairs.push_back({ 268, edge_value(GetMaxWIS()) });
+	pairs.push_back({ 269, edge_value(GetMaxINT()) });
+	pairs.push_back({ 270, edge_value(GetMaxCHA()) });
+	pairs.push_back({ 271, edge_value(GetMaxPR()) });
+	pairs.push_back({ 272, edge_value(GetMaxDR()) });
+	pairs.push_back({ 273, edge_value(GetMaxFR()) });
+	pairs.push_back({ 274, edge_value(GetMaxCR()) });
+	pairs.push_back({ 275, edge_value(GetMaxMR()) });
+	pairs.push_back({ 276, edge_value(GetMaxCorrup()) });
+	pairs.push_back({ 277, edge_value(RuleI(Character, ItemSpellShieldingCap)) });
+	pairs.push_back({ 278, edge_value(RuleI(Character, ItemCombatEffectsCap)) });
+	pairs.push_back({ 279, edge_value(RuleI(Character, ItemShieldingCap)) });
+	pairs.push_back({ 280, edge_value(RuleI(Character, ItemDamageShieldCap)) });
+	pairs.push_back({ 281, edge_value(RuleI(Character, ItemDoTShieldingCap)) });
+	pairs.push_back({ 282, edge_value(RuleI(Character, ItemDSMitigationCap)) });
+	pairs.push_back({ 283, edge_value(RuleI(Character, ItemAvoidanceCap)) });
+	pairs.push_back({ 284, edge_value(RuleI(Character, ItemAccuracyCap)) });
+	pairs.push_back({ 285, edge_value(RuleI(Character, ItemStunResistCap)) });
+	pairs.push_back({ 286, edge_value(RuleI(Character, ItemStrikethroughCap)) });
+
+	pairs.push_back({ kInvMitigation, edge_value(GetDisplayAC()) });
+	pairs.push_back({ kInvAvoidanceClass, edge_value(GetAvoidance() - spell_bonus.AvoidMeleeChance) });
+	pairs.push_back({ kInvWornATK, edge_value(GetTotalATK() - spell_bonus.ATK) });
+	pairs.push_back({ kInvSpellCritRate, edge_value(item_bonus.CriticalSpellChance + spell_bonus.CriticalSpellChance + aa_bonus.CriticalSpellChance) });
+	pairs.push_back({ kInvSpellCritRatio, edge_value(item_bonus.SpellCritDmgIncrease + spell_bonus.SpellCritDmgIncrease + aa_bonus.SpellCritDmgIncrease + std::max({ item_bonus.SpellCritDmgIncNoStack, spell_bonus.SpellCritDmgIncNoStack, aa_bonus.SpellCritDmgIncNoStack })) });
+	pairs.push_back({ kInvHealCritRate, edge_value(item_bonus.CriticalHealChance + spell_bonus.CriticalHealChance + aa_bonus.CriticalHealChance) });
+	pairs.push_back({ kInvHoTCritRate, edge_value(item_bonus.CriticalHealOverTime + spell_bonus.CriticalHealOverTime + aa_bonus.CriticalHealOverTime) });
+	pairs.push_back({ kInvDoTCritRate, edge_value(item_bonus.CriticalDoTChance + spell_bonus.CriticalDoTChance + aa_bonus.CriticalDoTChance) });
+	pairs.push_back({ kInvDoTCritRatio, edge_value(item_bonus.DotCritDmgIncrease + spell_bonus.DotCritDmgIncrease + aa_bonus.DotCritDmgIncrease) });
+	pairs.push_back({ kInvMeleeCritRate, edge_value(item_bonus.CriticalHitChance[kAllSkills] + spell_bonus.CriticalHitChance[kAllSkills] + aa_bonus.CriticalHitChance[kAllSkills]) });
+	pairs.push_back({ kInvPhysicalCritRatio, edge_value(item_bonus.CritDmgMod[kAllSkills] + spell_bonus.CritDmgMod[kAllSkills] + aa_bonus.CritDmgMod[kAllSkills] + std::max({ item_bonus.CritDmgModNoStack[kAllSkills], spell_bonus.CritDmgModNoStack[kAllSkills], aa_bonus.CritDmgModNoStack[kAllSkills] })) });
+	pairs.push_back({ kInvMaxClairvoyance, edge_value(RuleI(Character, ItemClairvoyanceCap)) });
+	pairs.push_back({ kInvMaxHealAmount, edge_value(RuleI(Character, ItemHealAmtCap)) });
+	pairs.push_back({ kInvMaxSpellDamage, edge_value(RuleI(Character, ItemSpellDmgCap)) });
+	pairs.push_back({ kInvMaxWornATK, edge_value(RuleI(Character, ItemATKCap) + item_bonus.ItemATKCap + spell_bonus.ItemATKCap + aa_bonus.ItemATKCap) });
 	// ---- Power Slot progression data (keys 300-343) ----
 	// Sends current Power Source slot item tier + XP for the DLL's PowerSlotWnd POC.
 	constexpr uint32 kPSSlotCount   = 300;

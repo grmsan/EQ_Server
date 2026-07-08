@@ -1,6 +1,7 @@
 # Object files
 *.o
 *.obj
+*.iobj
 
 # Libraries
 *.lib
@@ -84,6 +85,11 @@ extras/eq-core-dll-main/msbuild_output.log
 /shared/
 /export/
 /__pycache__
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
 /.server_manager_test_state.json
 extras/eq-core-dll-main/msbuild_output.log
 /.tokensave
+.tokensave/

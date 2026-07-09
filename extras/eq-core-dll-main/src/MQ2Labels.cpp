@@ -17,6 +17,8 @@ extern bool isMQ2LabelsInitLoggingEnabled;
 extern bool isMQ2LabelsPerSidlLoggingEnabled;
 extern bool isMQ2LabelsWriteUILoggingEnabled;
 extern bool isMQ2LabelsWriteWatchEnabled;
+extern void LogDebug(const char* format, ...);
+extern void LogDebugOnce(const char* key, const char* format, ...);
 
 extern "C" uint32_t __cdecl EQCore_GetEffectiveUsableClassesMask();
 extern uint64_t g_edgeStatValue[];
@@ -281,7 +283,7 @@ public:
 			if (!s_seenDraw && isDebugLoggingEnabled && isMQ2LabelsInitLoggingEnabled) {
 				FILE* f = nullptr;
 				if (fopen_s(&f, "dinput8_debug.log", "a") == 0 && f) {
-					fprintf(f, "MQ2Labels: Draw_Detour hit, first SidlPiece=%lu\n", sidl);
+					LogDebugOnce("mq2labels_first_draw_piece", "MQ2Labels: Draw_Detour hit, first SidlPiece=%lu", sidl);
 					fclose(f);
 				}
 				s_seenDraw = true;
@@ -301,7 +303,7 @@ public:
 				if (!s_loggedFirstDraw && isDebugLoggingEnabled && isMQ2LabelsInitLoggingEnabled) {
 					FILE* f2 = nullptr;
 					if (fopen_s(&f2, "dinput8_debug.log", "a") == 0 && f2) {
-						fprintf(f2, "MQ2Labels: Draw_Detour first hit sidl=%lu\n", sidl);
+						LogDebugOnce("mq2labels_first_draw", "MQ2Labels: Draw_Detour first hit sidl=%lu", sidl);
 						fclose(f2);
 					}
 					s_loggedFirstDraw = true;
@@ -385,7 +387,7 @@ public:
 					if (isDebugLoggingEnabled && isMQ2LabelsPerSidlLoggingEnabled && sidl < 256 && s_logValueCount[sidl] < 3) {
 						FILE* f = nullptr;
 						if (fopen_s(&f, "dinput8_debug.log", "a") == 0 && f) {
-							fprintf(f, "MQ2Labels: sidl=%lu direct=%lld chosen=%lld (server_hp_cache=%d/%d)\n", sidl, direct_val, direct_val, g_serverCurHP, g_serverMaxHP);
+							LogDebug("MQ2Labels: sidl=%lu direct=%lld chosen=%lld (server_hp_cache=%d/%d)", sidl, direct_val, direct_val, g_serverCurHP, g_serverMaxHP);
 							fclose(f);
 						}
 						s_logValueCount[sidl]++;
@@ -402,7 +404,7 @@ public:
 				if (!s_fileLogged && isDebugLoggingEnabled && isMQ2LabelsInitLoggingEnabled) {
 					FILE* f = nullptr;
 					if (fopen_s(&f, "dinput8_debug.log", "a") == 0 && f) {
-						fprintf(f, "MQ2Labels: legacy EQType override active (first occurrence sidl=%lu)\n", sidl);
+						LogDebugOnce("mq2labels_legacy_override", "MQ2Labels: legacy EQType override active (first occurrence sidl=%lu)", sidl);
 						fclose(f);
 						s_fileLogged = true;
 					}
@@ -414,7 +416,7 @@ public:
 					if (s_logMissCount < 10) {
 						FILE* f = nullptr;
 						if (fopen_s(&f, "dinput8_debug.log", "a") == 0 && f) {
-							fprintf(f, "MQ2Labels: Draw_Detour sidl=%lu not replaced (Buffer='%s')\n", sidl, Buffer);
+							LogDebug("MQ2Labels: Draw_Detour sidl=%lu not replaced (Buffer='%s')", sidl, Buffer);
 							fclose(f);
 						}
 						++s_logMissCount;
@@ -479,7 +481,7 @@ public:
 					if (want_write_ui_log) {
 						FILE* lf2 = nullptr;
 						if (fopen_s(&lf2, "dinput8_debug.log", "a") == 0 && lf2) {
-							fprintf(lf2, "MQ2Labels: Requested Protect (queued) for ci_addr=%p\n", ci_addr);
+							LogDebug("MQ2Labels: Requested Protect (queued) for ci_addr=%p", ci_addr);
 							fclose(lf2);
 						}
 					}

@@ -11,6 +11,8 @@
 // Psapi provides EnumProcessModules/GetModuleInformation
 #pragma comment(lib, "psapi.lib")
 
+extern void LogDebug(const char* format, ...);
+
 static std::vector<uintptr_t> g_protectedPages_prot;
 static SIZE_T g_pageSize_prot = 0;
 static PVOID g_vectoredHandler_prot = NULL;
@@ -28,19 +30,15 @@ extern "C" __declspec(dllexport) void __cdecl MQ2_ProtectPage(uintptr_t addr)
     for (auto p : g_protectedPages_prot) if (p == pageBase) return;
     g_protectedPages_prot.push_back(pageBase);
 
-    FILE* lf = nullptr;
-    if (fopen_s(&lf, "dinput8_debug.log", "a") == 0 && lf) {
-        if (!g_vectoredHandler_prot) {
-            fprintf(lf, "MQ2Protect: queued page %p (addr %p) - VEH not installed\n", (void*)pageBase, (void*)addr);
+    if (!g_vectoredHandler_prot) {
+        LogDebug("MQ2Protect: queued page %p (addr %p) - VEH not installed", (void*)pageBase, (void*)addr);
+    } else {
+        DWORD old = 0;
+        if (VirtualProtect((LPVOID)pageBase, g_pageSize_prot, PAGE_READONLY, &old)) {
+            LogDebug("MQ2Protect: protected page %p (addr %p)", (void*)pageBase, (void*)addr);
         } else {
-            DWORD old = 0;
-            if (VirtualProtect((LPVOID)pageBase, g_pageSize_prot, PAGE_READONLY, &old)) {
-                fprintf(lf, "MQ2Protect: protected page %p (addr %p)\n", (void*)pageBase, (void*)addr);
-            } else {
-                fprintf(lf, "MQ2Protect: failed to protect page %p (addr %p) err=%u\n", (void*)pageBase, (void*)addr, GetLastError());
-            }
+            LogDebug("MQ2Protect: failed to protect page %p (addr %p) err=%u", (void*)pageBase, (void*)addr, GetLastError());
         }
-        fclose(lf);
     }
     // Ensure VEH installed and apply queued protections
     if (!g_vectoredHandler_prot) {
@@ -71,26 +69,21 @@ static LONG WINAPI VehHandler(PEXCEPTION_POINTERS ExceptionInfo)
 #else
             ip = (void*)ExceptionInfo->ContextRecord->Eip;
 #endif
-            FILE* lf = nullptr;
-            if (fopen_s(&lf, "dinput8_debug.log", "a") == 0 && lf) {
-                fprintf(lf, "WRITE_WATCH_FAULT ip=%p target=%p\n", ip, (void*)target);
-                // Try to resolve module name
-                HMODULE hMods[1024]; DWORD cbNeeded;
-                if (EnumProcessModules(GetCurrentProcess(), hMods, sizeof(hMods), &cbNeeded)) {
-                    for (unsigned int i=0; i < (cbNeeded/sizeof(HMODULE)); ++i) {
-                        MODULEINFO mi; if (GetModuleInformation(GetCurrentProcess(), hMods[i], &mi, sizeof(mi))) {
-                            uintptr_t base = (uintptr_t)mi.lpBaseOfDll;
-                            if ((uintptr_t)ip >= base && (uintptr_t)ip < base + mi.SizeOfImage) {
-                                CHAR modName[MAX_PATH];
-                                if (GetModuleFileNameA(hMods[i], modName, MAX_PATH)) {
-                                    fprintf(lf, "  module=%s base=%p\n", modName, (void*)base);
-                                }
-                                break;
+            LogDebug("WRITE_WATCH_FAULT ip=%p target=%p", ip, (void*)target);
+            HMODULE hMods[1024]; DWORD cbNeeded;
+            if (EnumProcessModules(GetCurrentProcess(), hMods, sizeof(hMods), &cbNeeded)) {
+                for (unsigned int i = 0; i < (cbNeeded / sizeof(HMODULE)); ++i) {
+                    MODULEINFO mi; if (GetModuleInformation(GetCurrentProcess(), hMods[i], &mi, sizeof(mi))) {
+                        uintptr_t base = (uintptr_t)mi.lpBaseOfDll;
+                        if ((uintptr_t)ip >= base && (uintptr_t)ip < base + mi.SizeOfImage) {
+                            CHAR modName[MAX_PATH];
+                            if (GetModuleFileNameA(hMods[i], modName, MAX_PATH)) {
+                                LogDebug("WRITE_WATCH_FAULT module=%s base=%p", modName, (void*)base);
                             }
+                            break;
                         }
                     }
                 }
-                fclose(lf);
             }
             DWORD old = 0;
             VirtualProtect((LPVOID)page, g_pageSize_prot, PAGE_READWRITE, &old);

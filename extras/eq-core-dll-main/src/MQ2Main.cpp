@@ -28,6 +28,8 @@ GNU General Public License for more details.
 
 #pragma comment(lib, "dbghelp.lib")
 
+extern void LogDebug(const char* format, ...);
+
 #ifdef EQLIB_EXPORTS
 #pragma message("EQLIB_EXPORTS")
 #else
@@ -52,19 +54,15 @@ extern "C" __declspec(dllexport) void __cdecl MQ2_ProtectPage(uintptr_t addr)
     for (auto p : g_protectedPages) if (p == pageBase) return;
     // If the VEH handler isn't installed yet, queue the pageBase and log a queued state.
     g_protectedPages.push_back(pageBase);
-    FILE* lf = nullptr;
-    if (fopen_s(&lf, "dinput8_debug.log", "a") == 0 && lf) {
-        if (!g_vectoredHandler) {
-            fprintf(lf, "MQ2Main: MQ2_ProtectPage queued page %p (addr %p) - VEH not ready\n", (void*)pageBase, (void*)addr);
+    if (!g_vectoredHandler) {
+        LogDebug("MQ2Main: MQ2_ProtectPage queued page %p (addr %p) - VEH not ready", (void*)pageBase, (void*)addr);
+    } else {
+        DWORD old = 0;
+        if (VirtualProtect((LPVOID)pageBase, g_pageSize, PAGE_READONLY, &old)) {
+            LogDebug("MQ2Main: MQ2_ProtectPage protected page %p (addr %p)", (void*)pageBase, (void*)addr);
         } else {
-            DWORD old = 0;
-            if (VirtualProtect((LPVOID)pageBase, g_pageSize, PAGE_READONLY, &old)) {
-                fprintf(lf, "MQ2Main: MQ2_ProtectPage protected page %p (addr %p)\n", (void*)pageBase, (void*)addr);
-            } else {
-                fprintf(lf, "MQ2Main: MQ2_ProtectPage failed to protect page %p (addr %p)\n", (void*)pageBase, (void*)addr);
-            }
+            LogDebug("MQ2Main: MQ2_ProtectPage failed to protect page %p (addr %p)", (void*)pageBase, (void*)addr);
         }
-        fclose(lf);
     }
 }
 
@@ -507,7 +505,7 @@ DWORD WINAPI MQ2Start(LPVOID lpParameter)
         if (fopen_s(&lf, "dinput8_debug.log", "a") == 0 && lf) {
             char tb[32];
             strftime(tb, sizeof(tb), "%Y%m%d_%H%M%S", localtime(&now));
-            fprintf(lf, "%s MQ2Main: WRITE_WATCH_FAULT ip=%p target=%p tid=%u\n", tb, (void*)faultIp, (void*)targetAddr, tid);
+            LogDebug("MQ2Main: WRITE_WATCH_FAULT ip=%p target=%p tid=%u", (void*)faultIp, (void*)targetAddr, tid);
 
             // Resolve module for fault IP
             HMODULE hm = NULL;

@@ -30,6 +30,7 @@
 #include <chrono>
 #include <limits.h>
 #include <intrin.h>
+#include <string>
 
 #include "core_init.h"
 #include <ctime>
@@ -38,6 +39,138 @@
 
 static const char* kDebugLogLocalPath = "dinput8_debug.log";
 static const char* kDebugLogRepoPath = "C:\\Users\\marsh\\OneDrive\\Documents\\GitHub\\EQ_Server\\logs\\dinput8_debug.log";
+
+enum DebugLogMode {
+	DebugLogMode_Normal = 0,
+	DebugLogMode_Once = 1,
+	DebugLogMode_Disabled = 2
+};
+
+struct DebugLogPolicy {
+	DWORD dedupe_window_ms;
+	bool emit_summary;
+	DebugLogMode mode;
+};
+
+struct DebugLogEntry {
+	DWORD last_emit_tick;
+	unsigned int suppressed_count;
+	bool emitted_once;
+};
+
+static CRITICAL_SECTION g_debug_log_cs;
+static volatile LONG g_debug_log_cs_initialized = 0;
+static std::map<std::string, DebugLogEntry> g_debug_log_entries;
+
+static bool DebugLogStartsWith(const char* text, const char* prefix)
+{
+	return text && prefix && strncmp(text, prefix, strlen(prefix)) == 0;
+}
+
+static void EnsureDebugLogState()
+{
+	if (InterlockedCompareExchange(&g_debug_log_cs_initialized, 1, 0) == 0) {
+		InitializeCriticalSection(&g_debug_log_cs);
+	}
+}
+
+static std::string ExtractDebugToken(const char* line, const char* token)
+{
+	if (!line || !token) {
+		return std::string();
+	}
+
+	const char* start = strstr(line, token);
+	if (!start) {
+		return std::string();
+	}
+
+	const char* end = strchr(start, 32);
+	if (!end) {
+		return std::string(start);
+	}
+
+	return std::string(start, static_cast<size_t>(end - start));
+}
+
+static std::string CanonicalizeDebugLine(const char* line)
+{
+	if (!line) {
+		return std::string();
+	}
+
+	if (DebugLogStartsWith(line, "[USABLE_CLASSES]")) {
+		std::string key("[USABLE_CLASSES]");
+		const char* tokens[] = { "ctx=", "native=", "base_mask=", "mask=", "mode=", "returning=" };
+		for (size_t i = 0; i < sizeof(tokens) / sizeof(tokens[0]); ++i) {
+			const std::string value = ExtractDebugToken(line, tokens[i]);
+			if (!value.empty()) {
+				key += " ";
+				key += value;
+			}
+		}
+		if (strstr(line, "(first occurrence)")) {
+			key += " first";
+		}
+		return key;
+	}
+
+	if (DebugLogStartsWith(line, "MQ2Main: MQ2_ProtectPage queued page " ) ||
+		DebugLogStartsWith(line, "MQ2Main: MQ2_ProtectPage protected page " ) ||
+		DebugLogStartsWith(line, "MQ2Main: Protected page " ) ||
+		DebugLogStartsWith(line, "MQ2Protect: queued page " ) ||
+		DebugLogStartsWith(line, "MQ2Protect: protected page " ) ||
+		DebugLogStartsWith(line, "MQ2Labels: Requested Protect (queued)")) {
+		const char* end = strstr(line, " page " );
+		if (end) {
+			return std::string(line, static_cast<size_t>(end - line));
+		}
+		return std::string(line);
+	}
+
+	return std::string(line);
+}
+
+static DebugLogPolicy GetDebugLogPolicy(const char* line)
+{
+	DebugLogPolicy policy = { 2000, true, DebugLogMode_Normal };
+	if (!line || !line[0]) {
+		return policy;
+	}
+
+	if (strcmp(line, "DirectInput8Create called") == 0 ||
+		strcmp(line, "DirectInput8Create: genericQueryInterface disabled") == 0) {
+		policy.mode = DebugLogMode_Disabled;
+		policy.emit_summary = false;
+		policy.dedupe_window_ms = 0;
+		return policy;
+	}
+
+	if (strcmp(line, "Crash diagnostics installed (VEH)") == 0 ||
+		strcmp(line, "InitHooksOnce: starting") == 0 ||
+		strcmp(line, "InitHooksOnce: finished") == 0) {
+		policy.mode = DebugLogMode_Once;
+		policy.emit_summary = false;
+		policy.dedupe_window_ms = 0;
+		return policy;
+	}
+
+	if (DebugLogStartsWith(line, "[USABLE_CLASSES]")) {
+		policy.dedupe_window_ms = 15000;
+		return policy;
+	}
+
+	if (DebugLogStartsWith(line, "MQ2Main: MQ2_ProtectPage " ) ||
+		DebugLogStartsWith(line, "MQ2Main: Protected page " ) ||
+		DebugLogStartsWith(line, "MQ2Protect: queued page " ) ||
+		DebugLogStartsWith(line, "MQ2Protect: protected page " ) ||
+		DebugLogStartsWith(line, "MQ2Labels: Requested Protect (queued)")) {
+		policy.dedupe_window_ms = 60000;
+		return policy;
+	}
+
+	return policy;
+}
 
 static void WriteDebugLineToFile(const char* file_path, const char* line)
 {
@@ -54,15 +187,62 @@ static void WriteDebugLineToFile(const char* file_path, const char* line)
 	}
 }
 
-static void WriteDebugLineBoth(const char* line)
+static void WriteDebugLineBothRaw(const char* line)
 {
-	// Mirror logs to both client working-dir and repo logs path so diagnostics are visible in either workflow.
 	WriteDebugLineToFile(kDebugLogLocalPath, line);
 	CreateDirectoryA("C:\\Users\\marsh\\OneDrive\\Documents\\GitHub\\EQ_Server\\logs", nullptr);
 	WriteDebugLineToFile(kDebugLogRepoPath, line);
 }
 
-void LogDebug(const char* format, ...) {
+static void WriteDebugLineBoth(const char* line)
+{
+	if (!line || !line[0]) {
+		return;
+	}
+
+	const DebugLogPolicy policy = GetDebugLogPolicy(line);
+	if (policy.mode == DebugLogMode_Disabled) {
+		return;
+	}
+
+	EnsureDebugLogState();
+
+	std::string summary;
+	bool should_emit_line = true;
+	const std::string key = CanonicalizeDebugLine(line);
+	const DWORD now = GetTickCount();
+
+	EnterCriticalSection(&g_debug_log_cs);
+	DebugLogEntry& entry = g_debug_log_entries[key];
+
+	if (policy.mode == DebugLogMode_Once && entry.emitted_once) {
+		should_emit_line = false;
+	} else if (entry.last_emit_tick != 0 && policy.dedupe_window_ms > 0 && (now - entry.last_emit_tick) < policy.dedupe_window_ms) {
+		++entry.suppressed_count;
+		should_emit_line = false;
+	} else {
+		if (policy.emit_summary && entry.suppressed_count > 0) {
+			char buffer[512] = { 0 };
+			snprintf(buffer, sizeof(buffer), "[LOG_SUPPRESSED] count=%u key=%s", entry.suppressed_count, key.c_str());
+			summary = buffer;
+		}
+		entry.last_emit_tick = now;
+		entry.suppressed_count = 0;
+		entry.emitted_once = true;
+	}
+	LeaveCriticalSection(&g_debug_log_cs);
+
+	if (!should_emit_line) {
+		return;
+	}
+	if (!summary.empty()) {
+		WriteDebugLineBothRaw(summary.c_str());
+	}
+	WriteDebugLineBothRaw(line);
+}
+
+void LogDebug(const char* format, ...)
+{
 	if (!isDebugLoggingEnabled) {
 		return;
 	}
@@ -72,6 +252,21 @@ void LogDebug(const char* format, ...) {
 	vsnprintf(msg, sizeof(msg), format, args);
 	va_end(args);
 	WriteDebugLineBoth(msg);
+}
+
+void LogDebugOnce(const char* key, const char* format, ...)
+{
+	if (!isDebugLoggingEnabled || !key || !key[0]) {
+		return;
+	}
+	char msg[4096] = { 0 };
+	va_list args;
+	va_start(args, format);
+	vsnprintf(msg, sizeof(msg), format, args);
+	va_end(args);
+	char tagged[4096] = { 0 };
+	snprintf(tagged, sizeof(tagged), "[ONCE:%s] %s", key, msg);
+	WriteDebugLineBoth(tagged);
 }
 
 enum HookTag : LONG {
@@ -1500,11 +1695,7 @@ static bool ShouldLogSpellLevelNeeded()
 
 static void LogPacket(const char* tag, unsigned opcode, size_t size)
 {
-    FILE* f = nullptr;
-    if (fopen_s(&f, "dinput8_debug.log", "a") == 0 && f) {
-		fprintf(f, "%s opcode=0x%04x size=%zu\n", tag, opcode & 0xFFFF, size);
-        fclose(f);
-    }
+	LogDebug("%s opcode=0x%04x size=%zu", tag, opcode & 0xFFFF, size);
 }
 
 // prev_max: the previous cached max value for this stat (or -1 if unknown)
@@ -1520,13 +1711,10 @@ static void LogPacketDetail(const char* tag, unsigned opcode, size_t size, uint3
 	if ((is_mana || is_end) && prev_max != -1 && prev_max == max) {
 		return; // no meaningful max change, skip noisy logging
 	}
-	if (fopen_s(&f, "dinput8_debug.log", "a") == 0 && f) {
-		if (src && src[0]) {
-			fprintf(f, "%s opcode=0x%04x size=%zu cur=%u max=%d spawn=%u src=%s\n", tag, opcode & 0xFFFF, size, cur, max, spawn, src);
-		} else {
-			fprintf(f, "%s opcode=0x%04x size=%zu cur=%u max=%d spawn=%u\n", tag, opcode & 0xFFFF, size, cur, max, spawn);
-		}
-		fclose(f);
+	if (src && src[0]) {
+		LogDebug("%s opcode=0x%04x size=%zu cur=%u max=%d spawn=%u src=%s", tag, opcode & 0xFFFF, size, cur, max, spawn, src);
+	} else {
+		LogDebug("%s opcode=0x%04x size=%zu cur=%u max=%d spawn=%u", tag, opcode & 0xFFFF, size, cur, max, spawn);
 	}
 }
 
@@ -2507,12 +2695,12 @@ int __fastcall EQCharacter_GetUsableClasses_Detour(void* This, void* edx, int a1
 			} else {
 				const LONG suppressed = InterlockedExchange(&s_usable_classes_verbose_suppressed, 0);
 				if (suppressed > 0 && s_has_last_usable_classes_verbose) {
-					LogDebug("[USABLE_CLASSES] suppressed=%ld repeats for RVA=0x%08X ctx=%s returning=%d",
-						suppressed, s_last_usable_classes_rva, GetUsableClassesContextName(s_last_usable_classes_rva), s_last_usable_classes_return);
+					LogDebug("[USABLE_CLASSES] suppressed=%ld repeats ctx=%s returning=%d",
+						suppressed, GetUsableClassesContextName(s_last_usable_classes_rva), s_last_usable_classes_return);
 				}
 
-				LogDebug("[USABLE_CLASSES] RVA=0x%08X ctx=%s a1=%d a2=%u native=%d base_mask=0x%04X mask=0x%04X force_native=%d apply_multi=%d returning=%d",
-					ret_rva, GetUsableClassesContextName(ret_rva), a1, a2, nativeVal, baseClassMask & 0xFFFFu, effectiveMask, forceNative ? 1 : 0, shouldApplyMulticlassOverride ? 1 : 0, returnVal);
+				LogDebug("[USABLE_CLASSES] ctx=%s native=%d base_mask=0x%04X mask=0x%04X mode=%s returning=%d",
+					GetUsableClassesContextName(ret_rva), nativeVal, baseClassMask & 0xFFFFu, effectiveMask, forceNative ? "native" : (shouldApplyMulticlassOverride ? "multiclass" : "native_result"), returnVal);
 
 				s_last_usable_classes_rva = ret_rva;
 				s_last_usable_classes_a1 = a1;
@@ -2528,8 +2716,8 @@ int __fastcall EQCharacter_GetUsableClasses_Detour(void* This, void* edx, int a1
 			// QUIET MODE: Only log first occurrence per unique (RVA, native, mask) combo
 			uint64_t combo = ((uint64_t)ret_rva << 32) | ((uint64_t)(nativeVal & 0xFFFF) << 16) | (effectiveMask & 0xFFFF);
 			if (s_logged_usable_classes_combos.find(combo) == s_logged_usable_classes_combos.end()) {
-				LogDebug("[USABLE_CLASSES] RVA=0x%08X native=%d base_mask=0x%04X mask=0x%04X force_native=%d apply_multi=%d returning=%d (first occurrence)",
-					ret_rva, nativeVal, baseClassMask & 0xFFFFu, effectiveMask, forceNative ? 1 : 0, shouldApplyMulticlassOverride ? 1 : 0, returnVal);
+				LogDebug("[USABLE_CLASSES] ctx=%s native=%d base_mask=0x%04X mask=0x%04X mode=%s returning=%d (first occurrence)",
+					GetUsableClassesContextName(ret_rva), nativeVal, baseClassMask & 0xFFFFu, effectiveMask, forceNative ? "native" : (shouldApplyMulticlassOverride ? "multiclass" : "native_result"), returnVal);
 				s_logged_usable_classes_combos.insert(combo);
 			}
 		}

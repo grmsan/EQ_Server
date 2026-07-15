@@ -15,6 +15,19 @@ sub EVENT_SIGNAL {
     }
 }
 
+sub ensure_bazaar_intro_task {
+    if (!$client->IsTaskCompleted(600100) && !$client->IsTaskActive(600100)) {
+        $client->AssignTask(600100);
+    }
+}
+
+sub schedule_bazaar_intro_task {
+    if (!$client->IsTaskCompleted(600100) && !$client->IsTaskActive(600100)) {
+        quest::stoptimer("bazaar_intro_task");
+        quest::settimer("bazaar_intro_task", 3);
+    }
+}
+
 sub EVENT_ENTERZONE {
     my $default_size = $client->GetDefaultRaceSize();
     $client->ChangeSize($default_size);
@@ -26,11 +39,7 @@ sub EVENT_ENTERZONE {
 		$client->MovePC(151, 185, -835, 4, 390); # Bazaar Safe Location.
     }
 
-    if (!$client->IsTaskCompleted(3) && !$client->IsTaskActive(3)) {
-        $client->AssignTask(3);
-    } elsif ($client->IsTaskCompleted(3) && (!$client->IsTaskCompleted(4) && !$client->IsTaskActive(4))) {
-        $client->AssignTask(4);
-    }
+    schedule_bazaar_intro_task();
 
     my $entity_list = plugin::val('$entity_list');
     my @npcs = $entity_list->GetNPCList();
@@ -106,6 +115,8 @@ sub EVENT_CONNECT {
         $client->Message(263, "You find a small note in your pocket.");
 		$client->SetBucket('FirstLogin', 1);
 
+        schedule_bazaar_intro_task();
+
         my $name = $client->GetCleanName();
         my $full_class_name = plugin::GetPrettyClassString($client);
 
@@ -114,11 +125,7 @@ sub EVENT_CONNECT {
     }
 
     if (plugin::MultiClassingEnabled()) {
-        if (!$client->IsTaskCompleted(3) && !$client->IsTaskActive(3)) {
-            $client->AssignTask(3);
-        } elsif ($client->IsTaskCompleted(3) && (!$client->IsTaskCompleted(4) && !$client->IsTaskActive(4))) {
-            $client->AssignTask(4);
-        }
+        schedule_bazaar_intro_task();
 
         plugin::dispatch_popup("welcome");
     }
@@ -132,6 +139,14 @@ sub EVENT_CONNECT {
 sub EVENT_DISCONNECT {
     # Removes invulnerability effects when disconnecting from the server.
     $client->BuffFadeByEffect(40);
+}
+
+sub EVENT_TIMER {
+    if ($timer eq "bazaar_intro_task") {
+        quest::stoptimer("bazaar_intro_task");
+        ensure_bazaar_intro_task();
+        return;
+    }
 }
 
 sub EVENT_POPUPRESPONSE {
@@ -157,9 +172,6 @@ sub EVENT_POPUPRESPONSE {
 }
 
 sub EVENT_TASK_COMPLETE {
-    if ($task_id == 3 && !$client->IsTaskCompleted(4)) {
-        $client->AssignTask(4);
-    }
 }
 
 sub EVENT_LEVEL_UP {

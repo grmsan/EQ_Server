@@ -1062,10 +1062,13 @@ void Client::SendAlternateAdvancementRank(int aa_id, int level) {
 	auto outapp = new EQApplicationPacket(OP_SendAATable, size);
 	AARankInfo_Struct *aai = (AARankInfo_Struct*)outapp->pBuffer;
 
-	// THJServer parity: AA classes are left-shifted by 1 from DB.
-	// 0xFFFFFFF (28 bits) covers all classes.
+	// Support both normal EQEmu AA class masks and the shifted THJ variant.
+	// This keeps AA visibility stable even if the DB content or imported data set changes.
 	if (RuleB(Custom, MulticlassingEnabled)) {
-		const uint32 aa_classes_normalized = ability->classes >> 1;
+		uint32 aa_classes_normalized = ability->classes;
+		if ((aa_classes_normalized & GetClassesBits()) == 0) {
+			aa_classes_normalized = ability->classes >> 1;
+		}
 
 		// If check passes, send "All Classes" mask
 		if (aa_classes_normalized & GetClassesBits()) {
@@ -2003,38 +2006,41 @@ bool Mob::CanUseAlternateAdvancementRank(AA::Rank *rank)
 	}
 
 	const auto a = rank->base_ability;
-
 	if (!a) {
 		return false;
 	}
 
-	// THJServer parity: AA classes are left-shifted by 1 from DB.
-	// When multiclassing, right-shift and compare against GetClassesBits().
-	// When not multiclassing, use original single-class check.
+	// Support both normal EQEmu AA class masks and the shifted THJ variant.
+	// For multiclassing, accept whichever format actually matches the character bitmask.
 	if (RuleB(Custom, MulticlassingEnabled)) {
 		if (rank->base_ability->first_rank_id == aaMnemonicRetention) {
 			return true;
 		}
 
-		// Restrict Fury of Magic rank 6+ to pure casters
+		// Restrict Fury of Magic rank 6+ to pure INT casters.
 		if (rank->base_ability->first_rank_id == aaFuryofMagic && rank->id > 772 && rank->id <= 4751) {
 			return (GetClassesBits() & 15906);
 		}
 
 		if (IsClient()) {
-			const uint32 aa_classes_normalized = a->classes >> 1;
+			uint32 aa_classes_normalized = a->classes;
+			if ((aa_classes_normalized & CastToClient()->GetClassesBits()) == 0) {
+				aa_classes_normalized = a->classes >> 1;
+			}
+
 			if (!(aa_classes_normalized & CastToClient()->GetClassesBits())) {
 				return false;
 			}
 		}
-		// NPCs/Bots: fall through to other checks (they don't multiclass)
-	} else {
+		// NPCs/Bots fall through to the remaining checks.
+	}
+	else {
 		if (!(a->classes & (1 << GetClass()))) {
 			return false;
 		}
 	}
 
-	// Passive and Active Shroud AAs, skip for now
+	// Passive and Active Shroud AAs are not currently supported.
 	if (
 		a->category == AACategory::ShroudPassive ||
 		a->category == AACategory::ShroudActive
@@ -2042,16 +2048,14 @@ bool Mob::CanUseAlternateAdvancementRank(AA::Rank *rank)
 		return false;
 	}
 
-	//the one titanium hack i will allow
-	//just to make sure we dont crash the client with newer aas
-	//we'll exclude any expendable ones
+	// Older clients cannot safely handle expendable AAs.
 	if (IsClient() && CastToClient()->ClientVersionBit() & EQ::versions::maskTitaniumAndEarlier) {
 		if (a->charges > 0) {
 			return false;
 		}
 	}
 
-	const int  expansion        = RuleI(Expansion, CurrentExpansion);
+	const int expansion = RuleI(Expansion, CurrentExpansion);
 	const bool use_expansion_aa = RuleB(Expansion, UseCurrentExpansionAAOnly);
 	if (use_expansion_aa && expansion >= 0) {
 		if (rank->expansion > expansion) {

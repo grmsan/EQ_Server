@@ -89,6 +89,23 @@
 std::vector<RaceClassAllocation> character_create_allocations;
 std::vector<RaceClassCombos> character_create_race_class_combos;
 
+namespace {
+
+bool IsHardDisabledCharacterStartZone(uint32 zone_id)
+{
+	switch (zone_id) {
+	case 183: // EverQuest Tutorial
+	case 188: // Mines of Gloomingdeep
+	case 189: // Mines of Gloomingdeep
+	case Zones::CRESCENT: // Crescent Reach
+		return true;
+	default:
+		return false;
+	}
+}
+
+}
+
 extern uint32 numclients;
 extern volatile bool RunLoops;
 extern volatile bool UCSServerAvailable_;
@@ -705,7 +722,12 @@ bool Client::HandleGenerateRandomNamePacket(const EQApplicationPacket *app) {
 bool Client::HandleCharacterCreateRequestPacket(const EQApplicationPacket *app) {
 	// New OpCode in SoF
 	uint32 allocs = character_create_allocations.size();
-	uint32 combos = character_create_race_class_combos.size();
+	uint32 combos = 0;
+	for (const auto &combo : character_create_race_class_combos) {
+		if (!IsHardDisabledCharacterStartZone(combo.Zone)) {
+			++combos;
+		}
+	}
 	uint32 len = sizeof(RaceClassAllocation) * allocs;
 	len += sizeof(RaceClassCombos) * combos;
 	len += sizeof(uint8);
@@ -733,14 +755,18 @@ bool Client::HandleCharacterCreateRequestPacket(const EQApplicationPacket *app) 
 
 	*((uint32*)ptr) = combos;
 	ptr += sizeof(uint32);
-	for(int i = 0; i < combos; ++i) {
+	for (const auto &combo : character_create_race_class_combos) {
+		if (IsHardDisabledCharacterStartZone(combo.Zone)) {
+			continue;
+		}
+
 		RaceClassCombos *cmb = (RaceClassCombos*)ptr;
-		cmb->ExpansionRequired = character_create_race_class_combos[i].ExpansionRequired;
-		cmb->Race = character_create_race_class_combos[i].Race;
-		cmb->Class = character_create_race_class_combos[i].Class;
-		cmb->Deity = character_create_race_class_combos[i].Deity;
-		cmb->AllocationIndex = character_create_race_class_combos[i].AllocationIndex;
-		cmb->Zone = character_create_race_class_combos[i].Zone;
+		cmb->ExpansionRequired = combo.ExpansionRequired;
+		cmb->Race = combo.Race;
+		cmb->Class = combo.Class;
+		cmb->Deity = combo.Deity;
+		cmb->AllocationIndex = combo.AllocationIndex;
+		cmb->Zone = combo.Zone;
 		ptr += sizeof(RaceClassCombos);
 	}
 
@@ -1803,22 +1829,14 @@ bool Client::OPCharCreate(char *name, CharCreate_Struct *cc)
 	/* If server is PVP by default, make all character set to it. */
 	pp.pvp = database.GetServerType() == 1 ? 1 : 0;
 
-	/* If it is an SoF Client and the SoF Start Zone rule is set, send new chars there */
-	if (m_ClientVersionBit & EQ::versions::maskSoFAndLater) {
-		LogInfo("Found [SoFStartZoneID] rule setting [{}]", RuleI(World, SoFStartZoneID));
-		if (RuleI(World, SoFStartZoneID) > 0) {
-			pp.zone_id = RuleI(World, SoFStartZoneID);
-			cc->start_zone = pp.zone_id;
-		}
-	} else {
-		LogInfo("Found [TitaniumStartZoneID] rule setting [{}]", RuleI(World, TitaniumStartZoneID));
-		if (RuleI(World, TitaniumStartZoneID) > 0) { 	/* if there's a startzone variable put them in there */
-			pp.zone_id     = RuleI(World, TitaniumStartZoneID);
-			cc->start_zone = pp.zone_id;
-		}
-	}
 
-	/* use normal starting zone logic to either get defaults, or if startzone was set, load that from the db table.*/
+if (m_ClientVersionBit & EQ::versions::maskSoFAndLater) {
+    LogInfo("Found [SoFStartZoneID] rule setting [{}] - not forcing character creation start", RuleI(World, SoFStartZoneID));
+} else {
+    LogInfo("Found [TitaniumStartZoneID] rule setting [{}] - not forcing character creation start", RuleI(World, TitaniumStartZoneID));
+}
+
+/* Use the client-selected validated start zone and load its DB start location. */
 	const bool is_valid_start_zone = content_db.GetStartZone(&pp, cc, m_ClientVersionBit & EQ::versions::maskTitaniumAndEarlier);
 	if (!is_valid_start_zone){
 		return false;
@@ -1838,7 +1856,12 @@ bool Client::OPCharCreate(char *name, CharCreate_Struct *cc)
 		pp.binds[slot_id].heading = pp.heading;
 	}
 
-	/* Overrides if we have the tutorial flag set! */
+	if (cc->tutorial) {
+		LogInfo("Clearing tutorial flag for new character [{}] start zone [{}]", pp.name, cc->start_zone);
+		cc->tutorial = false;
+	}
+
+	/* Tutorial starts are hard-disabled; always keep the validated classic start zone. */
 	if (cc->tutorial && RuleB(World, EnableTutorialButton)) {
 		pp.zone_id = RuleI(World, TutorialZoneID);
 
@@ -1908,6 +1931,16 @@ bool CheckCharCreateInfoSoF(CharCreate_Struct *cc)
 {
 	if (!cc)
 		return false;
+
+	if (IsHardDisabledCharacterStartZone(cc->start_zone)) {
+		LogInfo("Rejected hard-disabled start selection zone [{}] tutorial [{}]", cc->start_zone, cc->tutorial);
+		return false;
+	}
+
+	if (cc->tutorial) {
+		LogInfo("Ignoring tutorial flag for valid classic start zone [{}]", cc->start_zone);
+		cc->tutorial = false;
+	}
 
 	LogInfo("Validating char creation info");
 
@@ -2007,6 +2040,15 @@ bool CheckCharCreateInfoSoF(CharCreate_Struct *cc)
 
 bool CheckCharCreateInfoTitanium(CharCreate_Struct *cc)
 {
+	if (!cc) {
+		return false;
+	}
+
+	if (cc->tutorial) {
+		LogInfo("Ignoring tutorial flag for Titanium client character creation");
+		cc->tutorial = false;
+	}
+
 	uint32 bSTR, bSTA, bAGI, bDEX, bWIS, bINT, bCHA, bTOTAL, cTOTAL, stat_points; //these are all uint32 in CharCreate_Struct, so we'll make them uint32 here to make the compiler shut up
 	int classtemp, racetemp;
 	int Charerrors = 0;

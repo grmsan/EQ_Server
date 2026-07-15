@@ -273,7 +273,7 @@ Run every active case in this tracker.
 5. Refresh guild roster/member display after class mutation.
 **Expected**: NPC scripts, quest gates, title checks, and guild projection use current owned class state rather than only base class.
 **Status**: [ ] Not Run  [ ] In Progress  [x] Blocked  [ ] Pass  [ ] Fail
-**Notes**: [CODE-VERIFIED 2026-06-21]: `quests/bazaar/Emissary_of_the_Guilds.lua` uses `AddExtraClass` ✓. Lua/Perl `AddExtraClass`/`RemoveExtraClass`/`HasClass` APIs all exposed. Guild projection DB query shape verified by automated test 11. BLOCKED: No `Vision_of_Ayonae` or equivalent class-removal NPC script found under `quests/` — step 2 (class removal NPC path) is unimplemented. Class-gated title scripts not yet found.
+**Notes**: [CODE-VERIFIED 2026-06-21]: `quests/bazaar/Emissary_of_the_Guilds.lua` uses `AddExtraClass` ✓. Lua/Perl `AddExtraClass`/`RemoveExtraClass`/`HasClass` APIs all exposed. Guild projection DB query shape verified by automated test 11. [CODE-VERIFIED 2026-07-12]: first-login onboarding now auto-assigns Bazaar intro task `600100` from `quests/global/global_player.pl`; `quests/global/player.pl` welcome whisper now directs players to the Bazaar Greeter and explains the Emissary-based class selection flow; Bazaar Greeter/Emissary dialogue now tells players to use the task journal and click chat links for their permanent extra classes. BLOCKED: No `Vision_of_Ayonae` or equivalent class-removal NPC script found under `quests/` — step 2 (class removal NPC path) is unimplemented. Class-gated title scripts not yet found.
   Next: Implement Vision_of_Ayonae (or equivalent) class-removal NPC script; add at least one class-gated title check script.
 
 ### [UI-01] Client Presentation And Diagnostics
